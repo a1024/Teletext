@@ -1,0 +1,229 @@
+#ifndef TT_H
+#define TT_H
+#ifdef _MSC_VER
+#include			<Windows.h>
+#endif
+#include			<GL/GL.h>
+#include			<GL/GLU.h>
+
+#define				SIZEOF(STATIC_ARRAY)	(sizeof(STATIC_ARRAY)/sizeof(*(STATIC_ARRAY)))
+
+#define				G_BUF_SIZE	4096
+const int			g_buf_size=G_BUF_SIZE;
+extern char			g_buf[G_BUF_SIZE];
+extern wchar_t		g_wbuf[G_BUF_SIZE];
+
+extern int			w, h;
+extern short		mx, my, dx, dy;
+extern int			*rgb, rgbn;
+extern char			keyboard[256];
+extern int			font_idx, font_size;
+
+//error handling
+bool 				log_error(const char *file, int line, const char *format, ...);
+#define				LOG_ERROR(format, ...)	log_error(file, __LINE__, format, __VA_ARGS__)
+
+//performance
+#if 1
+//[PROFILER SETTINGS]
+
+	#define PROF_INITIAL_STATE	true
+//	#define PROF_INITIAL_STATE	false
+
+//comment or uncomment
+//	#define PROFILER_CYCLES
+
+//select one or nothing (profiler on screen)
+//	#define PROFILER_TITLE
+//	#define PROFILER_CMD
+
+//comment or uncomment
+//	#define PROFILER_CLIPBOARD
+
+//select one
+#ifdef _MSC_VER
+	#define TIMING_USE_QueryPerformanceCounter
+//	#define	TIMING_USE_rdtsc
+//	#define TIMING_USE_GetProcessTimes	//~16ms resolution
+//	#define TIMING_USE_GetTickCount		//~16ms resolution
+//	#define TIMING_USE_timeGetTime		//~16ms resolution
+#elif defined __linux__
+	#define	TIMING_USE_clock_gettime
+//	#define	TIMING_USE_rdtsc
+#endif
+
+//END OF [PROFILER SETTINGS]
+double				time_sec();
+double				time_ms();
+double				elapsed_ms();//since last call
+double				elapsed_cycles();//since last call
+
+extern int			prof_on;
+void				prof_toggle();
+void				prof_start();
+void				prof_add(const char *label, int divisor=1);
+void				prof_sum(const char *label, int count);//add the sum of last 'count' steps
+void				prof_loop_start(const char **labels, int n);//describe the loop body parts in 'labels'
+void				prof_add_loop(int idx);//call on each part of loop body
+void				prof_print();
+#endif
+
+//system
+#ifdef _MSC_VER
+extern HDC			ghDC;
+extern bool			console_active;
+void				console_show();
+void				console_hide();
+void				console_pause();
+#elif defined __linux__
+#define				console_show()
+#define				console_hide()
+#define				console_pause()
+#endif
+void				messageboxw(const wchar_t *title, const wchar_t *format, ...);
+void				messageboxa(const char *title, const char *format, ...);
+void				copy_to_clipboard(const char *a, int size);
+void				get_window_title_w(wchar_t *str, int size);
+void				set_window_title_w(const wchar_t *str);
+void				set_window_title_a(const char *str);
+//bool				font_set(const wchar_t *name, int size);
+//void				font_use	();
+//void				font_drop	();
+//void				font_get_dimensions(short &x, short &y);
+int					GUINPrint(int x, int y, int w, int h, const char *a, ...);
+long				GUITPrint(int x, int y, const char *a, ...);
+void				GUIPrint(int x, int y, const char *a, ...);
+void				update_screen();
+
+//OpenGL
+#if 1
+enum				GL_State
+{
+	GL2_NOTHING,
+	GL2_LOADING_API, GL2_API_LOADED,
+	GL2_CREATING_CONTEXT, GL2_CONTEXT_CREATED,
+	GL2_COMPILING_SHADERS, GL2_SHADERS_COMPILED,
+	GL2_READY,
+};
+extern GL_State		GL2_state;
+extern const unsigned char *GLversion;
+extern int			glMajorVer, glMinorVer;
+#define				GL_FUNC_ADD				0x8006//GL/glew.h
+#define				GL_MIN					0x8007
+#define				GL_MAX					0x8008
+#define				GL_MAJOR_VERSION		0x821B
+#define				GL_MINOR_VERSION		0x821C
+#define				GL_TEXTURE0				0x84C0
+#define				GL_TEXTURE1				0x84C1
+#define				GL_TEXTURE2				0x84C2
+#define				GL_TEXTURE3				0x84C3
+#define				GL_TEXTURE4				0x84C4
+#define				GL_TEXTURE5				0x84C5
+#define				GL_TEXTURE6				0x84C6
+#define				GL_TEXTURE7				0x84C7
+#define				GL_TEXTURE8				0x84C8
+#define				GL_TEXTURE9				0x84C9
+#define				GL_TEXTURE10			0x84CA
+#define				GL_TEXTURE11			0x84CB
+#define				GL_TEXTURE12			0x84CC
+#define				GL_TEXTURE13			0x84CD
+#define				GL_TEXTURE14			0x84CE
+#define				GL_TEXTURE15			0x84CF
+#define				GL_TEXTURE_RECTANGLE	0x84F5
+#define				GL_PROGRAM_POINT_SIZE	0x8642
+#define				GL_BUFFER_SIZE			0x8764
+#define				GL_ARRAY_BUFFER			0x8892
+#define				GL_ELEMENT_ARRAY_BUFFER	0x8893
+#define				GL_STATIC_DRAW			0x88E4
+#define				GL_FRAGMENT_SHADER		0x8B30
+#define				GL_VERTEX_SHADER		0x8B31
+#define				GL_COMPILE_STATUS		0x8B81
+#define				GL_LINK_STATUS			0x8B82
+#define				GL_INFO_LOG_LENGTH		0x8B84
+#define				GL_DEBUG_OUTPUT			0x92E0//OpenGL 4.3+
+extern void			(__stdcall *glBlendEquation)(unsigned mode);
+//extern void		(__stdcall *glGenVertexArrays)(int n, unsigned *arrays);//OpenGL 3.0
+//extern void		(__stdcall *glDeleteVertexArrays)(int n, unsigned *arrays);//OpenGL 3.0
+extern void			(__stdcall *glBindVertexArray)(unsigned arr);//OpenGL 3.0
+extern void			(__stdcall *glGenBuffers)(int n, unsigned *buffers);
+extern void			(__stdcall *glBindBuffer)(unsigned target, unsigned buffer);
+extern void			(__stdcall *glBufferData)(unsigned target, int size, const void *data, unsigned usage);
+extern void			(__stdcall *glBufferSubData)(unsigned target, int offset, int size, const void *data);
+extern void			(__stdcall *glEnableVertexAttribArray)(unsigned index);
+extern void			(__stdcall *glVertexAttribPointer)(unsigned index, int size, unsigned type, unsigned char normalized, int stride, const void *pointer);
+extern void			(__stdcall *glDisableVertexAttribArray)(unsigned index);
+extern unsigned		(__stdcall *glCreateShader)(unsigned shaderType);
+extern void			(__stdcall *glShaderSource)(unsigned shader, int count, const char **string, const int *length);
+extern void			(__stdcall *glCompileShader)(unsigned shader);
+extern void			(__stdcall *glGetShaderiv)(unsigned shader, unsigned pname, int *params);
+extern void			(__stdcall *glGetShaderInfoLog)(unsigned shader, int maxLength, int *length, char *infoLog);
+extern unsigned		(__stdcall *glCreateProgram)();
+extern void			(__stdcall *glAttachShader)(unsigned program, unsigned shader);
+extern void			(__stdcall *glLinkProgram)(unsigned program);
+extern void			(__stdcall *glGetProgramiv)(unsigned program, unsigned pname, int *params);
+extern void			(__stdcall *glGetProgramInfoLog)(unsigned program, int maxLength, int *length, char *infoLog);
+extern void			(__stdcall *glDetachShader)(unsigned program, unsigned shader);
+extern void			(__stdcall *glDeleteShader)(unsigned shader);
+extern void			(__stdcall *glUseProgram)(unsigned program);
+extern int			(__stdcall *glGetAttribLocation)(unsigned program, const char *name);
+extern void			(__stdcall *glDeleteProgram)(unsigned program);
+extern void			(__stdcall *glDeleteBuffers)(int n, const unsigned *buffers);
+extern int			(__stdcall *glGetUniformLocation)(unsigned program, const char *name);
+extern void			(__stdcall *glUniformMatrix3fv)(int location, int count, unsigned char transpose, const float *value);
+extern void			(__stdcall *glUniformMatrix4fv)(int location, int count, unsigned char transpose, const float *value);
+extern void			(__stdcall *glGetBufferParameteriv)(unsigned target, unsigned value, int *data);
+extern void			(__stdcall *glActiveTexture)(unsigned texture);
+extern void			(__stdcall *glUniform1i)(int location, int v0);
+extern void			(__stdcall *glUniform2i)(int location, int v0, int v1);
+extern void			(__stdcall *glUniform1f)(int location, float v0);
+extern void			(__stdcall *glUniform2f)(int location, float v0, float v1);
+extern void			(__stdcall *glUniform3f)(int location, float v0, float v1, float v2);
+extern void			(__stdcall *glUniform3fv)(int location, int count, const float *value);
+extern void			(__stdcall *glUniform4f)(int location, float v0, float v1, float v2, float v3);
+void				load_OGL_API();
+
+extern unsigned		current_program;
+struct				ShaderVar2
+{
+	int *pvar;//initialize to -1
+	const char *name;
+};
+struct				ShaderProgram
+{
+	const char *name,//program name for error reporting
+		*vsrc, *fsrc;
+	ShaderVar2 *attributes, *uniforms;
+	int n_attr, n_unif;
+	unsigned program;//initialize to 0
+};
+void 				gl_check(const char *file, int line);
+#define				GL_CHECK()		gl_check(file, __LINE__)
+void				gl_error(const char *file, int line);
+#define				GL_ERROR()		gl_error(file, __LINE__)
+void				make_gl_program(ShaderProgram &p);
+void				setGLProgram(unsigned program);
+void				send_color(unsigned location, int color);
+void				send_color_rgb(unsigned location, int color);
+void				send_vec3(unsigned location, const float *v);
+void				send_texture_pot(unsigned gl_texture, int *rgb, int txw, int txh);
+void				select_texture(unsigned tx_id, int u_location);
+void				set_region_immediate(int x1, int x2, int y1, int y2);
+void				resize_gl();
+void				toNDC_nobias(float xs, float ys, float &xn, float &yn);
+void				toNDC(float xs, float ys, float &xn, float &yn);//2021-01-14 test: fill the screen with horizontal or vertical lines
+#endif
+
+//tt
+extern unsigned		font_txid;
+void				set_text_colors(int txt, int bk);
+int					print_line(short x, short y, const char *msg, int msg_length, short tab_origin, short zoom);
+int					print(short zoom, short tab_origin, short x, short y, const char *format, ...);
+
+void				wnd_on_create();
+bool				wnd_on_init();//return false for EXIT_FAILURE
+void				wnd_on_resize();
+void				wnd_on_render();
+void				wnd_on_input(HWND hWnd, int message, int wParam, int lParam);//TODO: cross-platform
+bool				wnd_on_quit();//return false to deny exit
+
+#endif
