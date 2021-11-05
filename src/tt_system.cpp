@@ -521,6 +521,29 @@ void				copy_to_clipboard(const char *a, int size)//size not including null term
 	SetClipboardData(CF_OEMTEXT, (void*)clipboard);
 	CloseClipboard();
 }
+bool				paste_from_clipboard(char *&str, int &len)
+{
+	OpenClipboard(ghWnd);
+	char *a=(char*)GetClipboardData(CF_OEMTEXT);
+	if(!a)
+	{
+		CloseClipboard();
+		messageboxa("Error", "Failed to paste from clipboard");
+		return false;
+	}
+	len=strlen(a);
+
+	str=new char[len];
+	int len2=0;
+	for(int k2=0;k2<len;++k2)
+	{
+		if(a[k2]!='\r')
+			str[len2]=a[k2], ++len2;
+	}
+
+	CloseClipboard();
+	return true;
+}
 void				get_window_title_w(wchar_t *str, int size)
 {
 	GetWindowTextW(ghWnd, str, size);
@@ -559,6 +582,94 @@ void				GUIPrint(int x, int y, const char *a, ...)
 	{
 		success=TextOutA(ghDC, x, y, g_buf, length);	SYS_ASSERT(success);
 	}
+}
+const wchar_t*		open_file_dialog()
+{
+	g_wbuf[0]=0;
+	OPENFILENAMEW ofn=
+	{
+		sizeof(OPENFILENAMEW),
+		ghWnd, ghInstance,
+		L"Text Filex (*.txt)\0*.TXT\0", 0, 0, 1,
+		g_wbuf, g_buf_size,
+		0, 0,//initial filename
+		0,
+		0,//dialog title
+		OFN_CREATEPROMPT|OFN_PATHMUSTEXIST,
+		0,//file offset
+		0,//extension offset
+		L"TXT",//default extension
+		0, 0,//data & hook
+		0,//template name
+		0,//reserved
+		0,//reserved
+		0,//flags ex
+	};
+	int success=GetOpenFileNameW(&ofn);
+	if(!success)
+		return 0;
+	memcpy(g_wbuf, ofn.lpstrFile, wcslen(ofn.lpstrFile)*sizeof(wchar_t));
+	return g_wbuf;
+}
+const wchar_t*		save_file_dialog()
+{
+	g_wbuf[0]=0;
+	OPENFILENAMEW ofn=
+	{
+		sizeof(OPENFILENAMEW),
+		ghWnd, ghInstance,
+		L"Text Filex (*.txt)\0*.TXT\0", 0, 0, 1,
+		g_wbuf, g_buf_size,
+		0, 0,//initial filename
+		0,
+		0,//dialog title
+		OFN_CREATEPROMPT|OFN_PATHMUSTEXIST,
+		0,//file offset
+		0,//extension offset
+		L"TXT",//default extension
+		0, 0,//data & hook
+		0,//template name
+		0,//reserved
+		0,//reserved
+		0,//flags ex
+	};
+	int success=GetSaveFileNameW(&ofn);
+	if(!success)
+		return 0;
+	memcpy(g_wbuf, ofn.lpstrFile, wcslen(ofn.lpstrFile)*sizeof(wchar_t));
+	return g_wbuf;
+}
+bool				open_text_file(const wchar_t *filename, std::string &str)
+{
+	FILE *file=nullptr;
+	int ret=_wfopen_s(&file, filename, L"r");
+	if(ret)
+	{
+		strerror_s(g_buf, g_buf_size, ret);
+		messageboxa("Error", "Cannot open \'%s\'.\n%s", filename, g_buf);
+		return false;
+	}
+	fseek(file, 0, SEEK_END);
+	int bytesize=ftell(file);
+	fseek(file, 0, SEEK_SET);
+	str.resize(bytesize);
+	fread(&str[0], 1, bytesize, file);
+	fclose(file);
+	str.resize(strlen(str.c_str()));//remove extra null terminators at the end
+	return true;
+}
+bool				save_text_file(const wchar_t *filename, std::string &str)
+{
+	FILE *file=nullptr;
+	int ret=_wfopen_s(&file, filename, L"w");
+	if(ret)
+	{
+		strerror_s(g_buf, g_buf_size, ret);
+		messageboxa("Error", "Cannot save \'%s\'.\n%s", filename, g_buf);
+		return false;
+	}
+	fwrite(str.c_str(), 1, str.size(), file);
+	fclose(file);
 }
 
 #if 0

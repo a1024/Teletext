@@ -7,6 +7,7 @@
 #include			<GL/GL.h>
 #include			<GL/GLU.h>
 #include			<math.h>
+#include			<string>
 
 #define				SIZEOF(STATIC_ARRAY)	(sizeof(STATIC_ARRAY)/sizeof(*(STATIC_ARRAY)))
 
@@ -118,6 +119,10 @@ void				console_pause();
 void				messageboxw(const wchar_t *title, const wchar_t *format, ...);
 void				messageboxa(const char *title, const char *format, ...);
 void				copy_to_clipboard(const char *a, int size);
+bool				paste_from_clipboard(char *&str, int &len);//filters out '\r', don't forget to delete[] str
+//#ifdef _MSC_VER
+//inline void		close_clipboard(){CloseClipboard();}
+//#endif
 void				get_window_title_w(wchar_t *str, int size);
 void				set_window_title_w(const wchar_t *str);
 void				set_window_title_a(const char *str);
@@ -128,6 +133,10 @@ void				set_window_title_a(const char *str);
 int					GUINPrint(int x, int y, int w, int h, const char *a, ...);
 long				GUITPrint(int x, int y, const char *a, ...);
 void				GUIPrint(int x, int y, const char *a, ...);
+const wchar_t*		open_file_dialog();
+const wchar_t*		save_file_dialog();
+bool				open_text_file(const wchar_t *filename, std::string &str);
+bool				save_text_file(const wchar_t *filename, std::string &str);
 void				update_screen();
 
 //OpenGL
