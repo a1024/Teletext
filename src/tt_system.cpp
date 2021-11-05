@@ -649,30 +649,36 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 
 	case WM_MOUSEMOVE:
 		mx=(short&)lParam, my=((short*)&lParam)[1];
-		wnd_on_input(hWnd, message, wParam, lParam);
+		if(wnd_on_input(hWnd, message, wParam, lParam))
+			InvalidateRect(hWnd, nullptr, 0);
 		break;
 
 	case WM_MOUSEWHEEL:
-		wnd_on_input(hWnd, message, wParam, lParam);
+		if(wnd_on_input(hWnd, message, wParam, lParam))
+			InvalidateRect(hWnd, nullptr, 0);
 		break;
 
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK:
-		wnd_on_input(hWnd, message, wParam, lParam);
+		if(wnd_on_input(hWnd, message, wParam, lParam))
+			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[VK_LBUTTON]=true;
 		break;
 	case WM_LBUTTONUP:
-		wnd_on_input(hWnd, message, wParam, lParam);
+		if(wnd_on_input(hWnd, message, wParam, lParam))
+			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[VK_LBUTTON]=false;
 		break;
 
 	case WM_RBUTTONDOWN:
 	case WM_RBUTTONDBLCLK:
-		wnd_on_input(hWnd, message, wParam, lParam);
+		if(wnd_on_input(hWnd, message, wParam, lParam))
+			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[VK_RBUTTON]=true;
 		break;
 	case WM_RBUTTONUP:
-		wnd_on_input(hWnd, message, wParam, lParam);
+		if(wnd_on_input(hWnd, message, wParam, lParam))
+			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[VK_RBUTTON]=false;
 		break;
 
@@ -683,12 +689,14 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 			if(wnd_on_quit())
 				PostQuitMessage(0);
 		}
-		wnd_on_input(hWnd, message, wParam, lParam);
+		if(wnd_on_input(hWnd, message, wParam, lParam))
+			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[wParam]=true;
 		break;
 	case WM_KEYUP:
 	case WM_SYSKEYUP:
-		wnd_on_input(hWnd, message, wParam, lParam);
+		if(wnd_on_input(hWnd, message, wParam, lParam))
+			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[wParam]=false;
 		break;
 
@@ -748,7 +756,8 @@ int					__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, ch
 
 		LoadIconA(nullptr, (char*)IDI_APPLICATION),//icon
 
-		LoadCursorA(nullptr, (char*)IDC_ARROW),//cursor
+		LoadCursorA(nullptr, (char*)IDC_IBEAM),//cursor
+		//LoadCursorA(nullptr, (char*)IDC_ARROW),
 
 		nullptr,//bk brush
 		0, "New format", 0

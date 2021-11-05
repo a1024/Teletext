@@ -1,3 +1,4 @@
+#pragma once
 #ifndef TT_H
 #define TT_H
 #ifdef _MSC_VER
@@ -5,6 +6,7 @@
 #endif
 #include			<GL/GL.h>
 #include			<GL/GLU.h>
+#include			<math.h>
 
 #define				SIZEOF(STATIC_ARRAY)	(sizeof(STATIC_ARRAY)/sizeof(*(STATIC_ARRAY)))
 
@@ -18,6 +20,39 @@ extern short		mx, my, dx, dy;
 extern int			*rgb, rgbn;
 extern char			keyboard[256];
 extern int			font_idx, font_size;
+
+//math
+inline int			floor_log2(unsigned n)
+{
+	int logn=0;
+	int sh=(((short*)&n)[1]!=0)<<4;	logn^=sh, n>>=sh;	//21.54
+		sh=(((char*)&n)[1]!=0)<<3;	logn^=sh, n>>=sh;
+		sh=((n&0x000000F0)!=0)<<2;	logn^=sh, n>>=sh;
+		sh=((n&0x0000000C)!=0)<<1;	logn^=sh, n>>=sh;
+		sh=((n&0x00000002)!=0);		logn^=sh;
+	return logn;
+}
+inline int			minimum(int a, int b){return (a+b-abs(a-b))>>1;}
+inline int			maximum(int a, int b){return (a+b+abs(a-b))>>1;}
+//inline float		maximum(float x, float y){return (x+y+abs(x-y))*0.5f;}
+inline char			maximum(char x1, char x2, char x3, char x4, char x5, char x6)
+{
+	int m1=(x1+x2+abs(x1-x2)), m2=(x3+x4+abs(x3-x4)), m3=(x5+x6+abs(x5-x6));
+	int m4=(m1+m2+abs(m1-m2)), m5=m3<<1;
+	return (m4+m5+abs(m4-m5))>>3;
+}
+inline int			clamp(int lo, int x, int hi)
+{
+	hi<<=1;
+	int temp=x+lo+abs(x-lo);
+	return (temp+hi-abs(temp-hi))>>2;
+}
+inline float		clamp(float lo, float x, float hi)
+{
+	hi+=hi;
+	float temp=x+lo+abs(x-lo);
+	return (temp+hi-abs(temp-hi))*0.25f;
+}
 
 //error handling
 bool 				log_error(const char *file, int line, const char *format, ...);
@@ -215,7 +250,19 @@ void				toNDC(float xs, float ys, float &xn, float &yn);//2021-01-14 test: fill 
 
 //tt
 extern unsigned		font_txid;
-void				set_text_colors(int txt, int bk);
+typedef unsigned long long u64;
+union				U64
+{
+	u64 data;
+	struct{unsigned lo, hi;};
+	U64(u64 data):data(data){}
+	U64(unsigned lo, unsigned hi):data(hi)
+	{
+		data<<=32;
+		data|=lo;
+	}
+};
+void				set_text_colors(U64 const &colors);
 int					print_line(short x, short y, const char *msg, int msg_length, short tab_origin, short zoom);
 int					print(short zoom, short tab_origin, short x, short y, const char *format, ...);
 
@@ -223,7 +270,7 @@ void				wnd_on_create();
 bool				wnd_on_init();//return false for EXIT_FAILURE
 void				wnd_on_resize();
 void				wnd_on_render();
-void				wnd_on_input(HWND hWnd, int message, int wParam, int lParam);//TODO: cross-platform
+bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam);//return true to redraw	TODO: cross-platform
 bool				wnd_on_quit();//return false to deny exit
 
 #endif

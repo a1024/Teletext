@@ -1,3 +1,4 @@
+#pragma once
 #ifndef				TT_GL2_VECTOR_H
 #define				TT_GL2_VECTOR_H
 #include			<string.h>
@@ -9,37 +10,6 @@ void 				gl_check(const char *file, int line);
 #define				GL_CHECK()		gl_check(file, __LINE__)
 void				gl_error(const char *file, int line);
 #define				GL_ERROR()		gl_error(file, __LINE__)
-
-inline int			floor_log2(unsigned n)
-{
-	int logn=0;
-	int sh=(((short*)&n)[1]!=0)<<4;	logn^=sh, n>>=sh;	//21.54
-		sh=(((char*)&n)[1]!=0)<<3;	logn^=sh, n>>=sh;
-		sh=((n&0x000000F0)!=0)<<2;	logn^=sh, n>>=sh;
-		sh=((n&0x0000000C)!=0)<<1;	logn^=sh, n>>=sh;
-		sh=((n&0x00000002)!=0);		logn^=sh;
-	return logn;
-}
-inline int			maximum(int x, int y){return (x+y+abs(x-y))>>1;}
-//inline float		maximum(float x, float y){return (x+y+abs(x-y))*0.5f;}
-inline char			maximum(char x1, char x2, char x3, char x4, char x5, char x6)
-{
-	int m1=(x1+x2+abs(x1-x2)), m2=(x3+x4+abs(x3-x4)), m3=(x5+x6+abs(x5-x6));
-	int m4=(m1+m2+abs(m1-m2)), m5=m3<<1;
-	return (m4+m5+abs(m4-m5))>>3;
-}
-inline int			clamp(int lo, int x, int hi)
-{
-	hi<<=1;
-	int temp=x+lo+abs(x-lo);
-	return (temp+hi-abs(temp-hi))>>2;
-}
-inline float		clamp(float lo, float x, float hi)
-{
-	hi+=hi;
-	float temp=x+lo+abs(x-lo);
-	return (temp+hi-abs(temp-hi))*0.25f;
-}
 
 extern const float	_pi, _2pi, pi_2, inv_2pi, sqrt2, torad, todeg, infinity, inv255, inv256, inv128;
 inline void			update_angle(float &angle, float &ca, float &sa)
