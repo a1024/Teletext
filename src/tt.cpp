@@ -18,7 +18,7 @@
 #include			<string.h>
 #include			<vector>
 #define				STB_IMAGE_IMPLEMENTATION
-#include			"stb_image.h"
+#include			"stb_image.h"//nothings.org/stb
 const char			file[]=__FILE__;
 char				g_buf[G_BUF_SIZE]={};
 wchar_t				g_wbuf[G_BUF_SIZE]={};
@@ -376,7 +376,7 @@ bool				vertical_mode=false;
 //	bool modified;
 //};
 //std::vector<TextFile> tabs;
-std::wstring		filename=L"Untitled";//
+std::wstring		filename;//
 std::string			text;//
 //std::string		text="Hello.\nSample Text.\nWhat\'s going on???\n";
 char				caps_lock=false;
@@ -519,7 +519,7 @@ void				hist_redo()//ctrl y
 	hist_cont=false;
 	cursor_teleport();
 }
-void				hist_dump()
+void				hist_clear()
 {
 	histpos=-1;
 	history.clear();
@@ -884,6 +884,7 @@ void				wnd_on_render()
 	}
 	int cpx=ccx*dxpx, cpy=ccy*dypx;
 	draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);
+	prof_add("text");
 
 	//draw possible scrollbars
 #if 1
@@ -910,6 +911,7 @@ void				wnd_on_render()
 			x2-=scrollbarwidth;
 		}
 	}
+	prof_add("scrollbars");
 #endif
 
 	//print(1, 0, 0, 0, "Hello. Sample Text. What\'s going on???");
@@ -1057,6 +1059,8 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 				{
 					//TODO: tabs
 					auto str=save_file_dialog();
+					keyboard[VK_CONTROL]=GetAsyncKeyState(VK_CONTROL);
+					keyboard['O']=GetAsyncKeyState('O');
 					if(str&&open_text_file(str, text))
 					{
 						filename=str;
@@ -1073,9 +1077,11 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 				cursor_teleport();
 				break;
 			case 'S'://save
-				if(keyboard[VK_SHIFT])
+				if(keyboard[VK_SHIFT]||!filename.size())
 				{
 					auto str=open_file_dialog();
+					keyboard[VK_CONTROL]=GetAsyncKeyState(VK_CONTROL);
+					keyboard['S']=GetAsyncKeyState('S');
 					if(str&&save_text_file(str, text))
 					{
 						filename=str;
@@ -1089,7 +1095,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 				}
 				break;
 			case 'D'://dump history
-				hist_dump();
+				hist_clear();
 				//histpos=-1, history.clear();
 				break;
 			case 'F':						return false;
@@ -1147,7 +1153,10 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 				}
 				break;
 			case 'B':						return false;
-			case 'N':						return false;
+			case 'N'://TODO: tabs
+				hist_clear();
+				text.clear();
+				return true;
 			case 'M':						return false;
 			case VK_OEM_COMMA:				return false;
 			case VK_OEM_PERIOD:				return false;

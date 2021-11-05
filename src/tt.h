@@ -137,6 +137,7 @@ const wchar_t*		open_file_dialog();
 const wchar_t*		save_file_dialog();
 bool				open_text_file(const wchar_t *filename, std::string &str);
 bool				save_text_file(const wchar_t *filename, std::string &str);
+int					ask_to_save();
 void				mouse_capture();
 void				mouse_release();
 void				update_screen();
@@ -273,6 +274,7 @@ union				U64
 		data|=lo;
 	}
 };
+extern std::wstring	filename;
 void				set_text_colors(U64 const &colors);
 int					print_line(short x, short y, const char *msg, int msg_length, short tab_origin, short zoom);
 int					print(short zoom, short tab_origin, short x, short y, const char *format, ...);

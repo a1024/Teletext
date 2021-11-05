@@ -673,6 +673,15 @@ bool				save_text_file(const wchar_t *filename, std::string &str)
 	fwrite(str.c_str(), 1, str.size(), file);
 	fclose(file);
 }
+int					ask_to_save()
+{
+	if(filename.size())
+		swprintf_s(g_wbuf, L"Save changes to %s?", filename.c_str());
+	else
+		swprintf_s(g_wbuf, L"Save changes to Untitled?");
+	int result=MessageBoxW(ghWnd, g_wbuf, L"Paint++", MB_YESNOCANCEL);
+	return result;
+}
 
 void				mouse_capture()
 {
