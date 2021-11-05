@@ -363,7 +363,9 @@ int					print(short zoom, short tab_origin, short x, short y, const char *format
 
 //U64				colors_text=0xFFABABABFF000000;//black on white
 U64					colors_text=0xFF000000FFABABAB;//dark mode
-U64					colors_selection=0xFFFF0000FF000000;
+U64					colors_selection=0xFFFF0000FFABABAB;
+int					color_cursorlinebk=0xFF202020;
+U64					colors_cursorline=(u64)color_cursorlinebk<<32|0xFFABABAB;
 short				font_zoom=1;//font pixel size
 int					ccx=0, ccy=0,//cursor coordinates in characters
 					wpx=0, wpy=0,//window position in pixels
@@ -531,7 +533,7 @@ void				text_replace(int i, int f, const char *a, int len)
 	history.resize(histpos+1);
 	history.push_back(History(M_ERASE_SELECTION, i, text.c_str()+i, f-i));
 
-	text.replace(text.begin()+i, text.end()+f, a, a+len);
+	text.replace(text.begin()+i, text.begin()+f, a, a+len);
 
 	history.push_back(History(M_INSERT, i, text.c_str()+i, len));
 	histpos+=2;
@@ -838,56 +840,75 @@ void				wnd_on_render()
 	//hscroll.decide_orwith(!hscroll.dwidth&&vscroll.dwidth&&xend>=w-scrollbarwidth);
 	//vscroll.decide_orwith(!vscroll.dwidth&&vscroll.dwidth&&yend>=h-74-scrollbarwidth);
 
-	int selstart, selend;
-	if(cursor<selcur)
-		selstart=cursor, selend=selcur;
-	else
-		selstart=selcur, selend=cursor;
+	int cpx=ccx*dxpx, cpy=ccy*dypx;
 	int y=0;
-	//nlines=1, text_width=0;
-	for(int start=0, line_start=0, x=0, k=0;;++k)
+	if(cursor==selcur)
 	{
-		if(k==selstart)
+		draw_rectangle(0, w, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
+		for(int start=0, line_start=0, lineno=0, x=0, k=0;;++k)
 		{
-			int ypos=y-wpy;
-			if(ypos>-dxpx&&ypos<h+dxpx)
-				x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
-			start=k;
-			set_text_colors(colors_selection);
-			//if(k==cursor)
-			//	ccx=x, ccy=nlines-1;
-		}
-		if(k==selend)
-		{
-			int ypos=y-wpy;
-			if(ypos>-dxpx&&ypos<h+dxpx)
-				x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
-			start=k;
-			set_text_colors(colors_text);
-			//if(k==cursor)
-			//	ccx=x, ccy=nlines-1;
-		}
-		if(k>=textlen||text[k]=='\n')
-		{
-			int ypos=y-wpy;
-			if(ypos>-dxpx&&ypos<h+dxpx)
-				x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
-			//if(text_width<x)
-			//	text_width=x;
-			y+=dypx;
-			if(k>=textlen)
-				break;
-			line_start=start=k+1;
-			//++nlines;
-			x=0;
+			if(k>=textlen||text[k]=='\n')
+			{
+				int ypos=y-wpy;
+				if(ypos>-dxpx&&ypos<h+dxpx)
+				{
+					if(lineno==ccy)
+						set_text_colors(colors_cursorline);
+					x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
+					if(lineno==ccy)
+						set_text_colors(colors_text);
+				}
+				y+=dypx;
+				if(k>=textlen)
+					break;
+				line_start=start=k+1;
+				x=0;
+				++lineno;
+			}
 		}
 	}
-	int cpx=ccx*dxpx, cpy=ccy*dypx;
-	draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);
+	else
+	{
+		int selstart, selend;
+		if(cursor<selcur)
+			selstart=cursor, selend=selcur;
+		else
+			selstart=selcur, selend=cursor;
+		for(int start=0, line_start=0, x=0, k=0;;++k)
+		{
+			if(k==selstart)
+			{
+				int ypos=y-wpy;
+				if(ypos>-dxpx&&ypos<h+dxpx)
+					x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
+				start=k;
+				set_text_colors(colors_selection);
+			}
+			if(k==selend)
+			{
+				int ypos=y-wpy;
+				if(ypos>-dxpx&&ypos<h+dxpx)
+					x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
+				start=k;
+				set_text_colors(colors_text);
+			}
+			if(k>=textlen||text[k]=='\n')
+			{
+				int ypos=y-wpy;
+				if(ypos>-dxpx&&ypos<h+dxpx)
+					x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
+				y+=dypx;
+				if(k>=textlen)
+					break;
+				line_start=start=k+1;
+				x=0;
+			}
+		}
+	}
+	draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
 	prof_add("text");
 
 	//draw possible scrollbars
-#if 1
 	{
 		int x1=0, x2=w, y1=0, y2=h;
 		if(hscroll.dwidth&&vscroll.dwidth)
@@ -912,7 +933,6 @@ void				wnd_on_render()
 		}
 	}
 	prof_add("scrollbars");
-#endif
 
 	//print(1, 0, 0, 0, "Hello. Sample Text. What\'s going on???");
 	//for(int k=0;k<1000;++k)
@@ -1457,7 +1477,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					start=selcur, end=cursor;
 				else
 					start=cursor, end=selcur;
-				text_erase(start, end);
+				text_replace(start, end, &character, 1);
 				cursor=selcur=start;
 			}
 			else
