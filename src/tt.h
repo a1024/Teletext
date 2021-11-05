@@ -23,6 +23,12 @@ extern char			keyboard[256];
 extern int			font_idx, font_size;
 
 //math
+inline int			mod(int x, int n)
+{
+	x%=n;
+	x+=n&-(x<0);
+	return x;
+}
 inline int			floor_log2(unsigned n)
 {
 	int logn=0;

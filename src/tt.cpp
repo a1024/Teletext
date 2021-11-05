@@ -317,7 +317,7 @@ int					print_line(short x, short y, const char *msg, int msg_length, short tab_
 	{
 		char c=msg[k];
 		if(c=='\t')
-			width=tab_width-(x+msg_width-tab_origin)%tab_width, c=' ';
+			width=tab_width-mod(x+msg_width-tab_origin, tab_width), c=' ';
 		else if(c>=32&&c<0xFF)
 			width=w2;
 		else
@@ -851,7 +851,7 @@ void				wnd_on_render()
 		{
 			int ypos=y-wpy;
 			if(ypos>-dxpx&&ypos<h+dxpx)
-				x+=print_line(x-wpx, ypos, arr+start, k-start, 0, font_zoom);
+				x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
 			start=k;
 			set_text_colors(colors_selection);
 			//if(k==cursor)
@@ -861,7 +861,7 @@ void				wnd_on_render()
 		{
 			int ypos=y-wpy;
 			if(ypos>-dxpx&&ypos<h+dxpx)
-				x+=print_line(x-wpx, ypos, arr+start, k-start, 0, font_zoom);
+				x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
 			start=k;
 			set_text_colors(colors_text);
 			//if(k==cursor)
@@ -871,7 +871,7 @@ void				wnd_on_render()
 		{
 			int ypos=y-wpy;
 			if(ypos>-dxpx&&ypos<h+dxpx)
-				x+=print_line(x-wpx, ypos, arr+start, k-start, 0, font_zoom);
+				x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
 			//if(text_width<x)
 			//	text_width=x;
 			y+=dypx;
