@@ -531,15 +531,16 @@ bool				paste_from_clipboard(char *&str, int &len)
 		messageboxa("Error", "Failed to paste from clipboard");
 		return false;
 	}
-	len=strlen(a);
+	int len0=strlen(a);
 
-	str=new char[len];
-	int len2=0;
-	for(int k2=0;k2<len;++k2)
+	str=new char[len0+1];
+	len=0;
+	for(int k2=0;k2<len0;++k2)
 	{
 		if(a[k2]!='\r')
-			str[len2]=a[k2], ++len2;
+			str[len]=a[k2], ++len;
 	}
+	str[len]='\0';
 
 	CloseClipboard();
 	return true;
@@ -583,6 +584,7 @@ void				GUIPrint(int x, int y, const char *a, ...)
 		success=TextOutA(ghDC, x, y, g_buf, length);	SYS_ASSERT(success);
 	}
 }
+
 const wchar_t*		open_file_dialog()
 {
 	g_wbuf[0]=0;
@@ -670,6 +672,15 @@ bool				save_text_file(const wchar_t *filename, std::string &str)
 	}
 	fwrite(str.c_str(), 1, str.size(), file);
 	fclose(file);
+}
+
+void				mouse_capture()
+{
+	SetCapture(ghWnd);
+}
+void				mouse_release()
+{
+	int success=ReleaseCapture();	SYS_ASSERT(success);
 }
 
 #if 0

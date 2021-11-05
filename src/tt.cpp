@@ -192,6 +192,30 @@ void				draw_line(float x1, float y1, float x2, float y2, int color)
 	glDisableVertexAttribArray(ns_2d::a_coords);GL_CHECK();
 }
 void				draw_line_i(short x1, short y1, short x2, short y2, int color){draw_line((float)x1, (float)y1, (float)x2, (float)y2, color);}
+void				draw_rectangle(float x1, float x2, float y1, float y2, int color)
+{
+	float X1, X2, Y1, Y2;
+	toNDC(x1, y1, X1, Y1);
+	toNDC(x2, y2, X2, Y2);
+	g_fbuf[0]=X1, g_fbuf[1]=Y1;
+	g_fbuf[2]=X2, g_fbuf[3]=Y1;
+	g_fbuf[4]=X2, g_fbuf[5]=Y2;
+	g_fbuf[6]=X1, g_fbuf[7]=Y2;
+	g_fbuf[8]=X1, g_fbuf[9]=Y1;
+	setGLProgram(shader_2d.program);			GL_CHECK();
+	send_color(ns_2d::u_color, color);			GL_CHECK();
+	glEnableVertexAttribArray(ns_2d::a_coords);	GL_CHECK();
+		
+	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);						GL_CHECK();
+	glBufferData(GL_ARRAY_BUFFER, 10<<2, g_fbuf, GL_STATIC_DRAW);		GL_CHECK();
+	glVertexAttribPointer(ns_2d::a_coords, 2, GL_FLOAT, GL_FALSE, 0, 0);GL_CHECK();
+
+//	glVertexAttribPointer(ns_2d::a_coords, 2, GL_FLOAT, GL_FALSE, 0, g_fbuf);	GL_CHECK();//use buffer
+	
+	glEnableVertexAttribArray(ns_2d::a_coords);	GL_CHECK();
+	glDrawArrays(GL_TRIANGLE_FAN, 0, 5);		GL_CHECK();
+	glDisableVertexAttribArray(ns_2d::a_coords);GL_CHECK();
+}
 
 struct				QuadCoords
 {
@@ -257,12 +281,14 @@ int					inv_calc_width(short x, short y, const char *msg, int msg_length, short 
 	}
 	return k;
 }
-void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int msg_length, short tab_origin_chars, int &cwidth, int &cheight)
+void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int msg_length, short tab_origin_chars, int kcursor, int &cwidth, int &cheight, int &cx, int &cy)
 {
 	cheight=1, cwidth=0;
-	int linelen=0;
-	for(int k=0;k<msg_length;++k)
+	int k=0, linelen=0;
+	for(;k<msg_length;++k)
 	{
+		if(k==kcursor)
+			cx=linelen, cy=cheight-1;
 		if(msg[k]=='\t')
 			linelen+=tab_count-(x_chars+linelen-tab_origin_chars)%tab_count;
 		else if(msg[k]=='\n')
@@ -276,6 +302,8 @@ void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int
 	}
 	if(cwidth<linelen)
 		cwidth=linelen;
+	if(k==kcursor)
+		cx=linelen, cy=cheight-1;
 }
 int					print_line(short x, short y, const char *msg, int msg_length, short tab_origin, short zoom)
 {
@@ -357,6 +385,8 @@ enum				DragType
 {
 	DRAG_NONE,
 	DRAG_SELECT,
+	DRAG_VSCROLL,
+	DRAG_HSCROLL,
 };
 DragType			drag;
 //void				insert(char c)
@@ -375,6 +405,7 @@ struct				Scrollbar
 		s0,		//initial scrollbar slider start
 		start,	//scrollbar slider start
 		size;	//scrollbar slider size
+	void click_on_slider(int mp){m_start=mp, s0=start;}
 	void decide(char condition){dwidth=scrollbarwidth&-condition;}//decide if the scrollbar will be drawn
 	void decide_orwith(char condition){dwidth|=scrollbarwidth&-condition;}
 	void leftbuttondown(int m){m_start=m, s0=start;}
@@ -622,16 +653,17 @@ char				group_char(char c)
 }
 void				cursor_at_mouse()
 {
+	int dypx=dy*font_zoom;
 	cursor=0;
 	//int wpy=wcy*font_zoom;
-	if((wpy+my)/dy>0)
+	if((wpy+my)/dypx>0)
 	{
-		for(int k=0, lineno=0;k<(int)text.size()-1;++k)
+		for(int k=0, lineno=0;k<(int)text.size();++k)
 		{
 			if(text[k]=='\n')
 			{
 				cursor=k+1, ++lineno;
-				if((wpy+my)/dy==lineno)
+				if((wpy+my)/dypx==lineno)
 					break;
 			}
 		}
@@ -650,6 +682,62 @@ void				cursor_at_mouse()
 	//cursor+=inv_calc_width(0, 0, text.c_str()+cursor, text.size()-cursor, 0, font_zoom, wcx*font_zoom+mx);//X no smooth scroll
 }
 
+//scrollbar functions
+const int			color_barbk=0x30F0F0F0, color_slider=0x50CDCDCD, color_button=0x50E5E5E5;//0x80DDDDDD
+void				scrollbar_slider(int &winpos_ip, int imsize_ip, int winsize, int barsize, double zoom, short &sliderstart, short &slidersize)
+{
+	double winsize_ip=winsize/zoom;
+	slidersize=int(barsize*winsize_ip/imsize_ip);
+	if(slidersize<scrollbarwidth)
+	{
+		slidersize=scrollbarwidth;
+		sliderstart=int((barsize-scrollbarwidth)*winpos_ip/(imsize_ip-winsize_ip));
+	}
+	else
+		sliderstart=barsize*winpos_ip/imsize_ip;
+	if(sliderstart>barsize-slidersize)
+	{
+		sliderstart=barsize-slidersize;
+		winpos_ip=int((imsize_ip+2-winsize_ip)*sliderstart/(barsize-slidersize));
+	}
+}
+void				scrollbar_scroll(int &winpos_ip, int imsize_ip, int winsize, int barsize, int slider0, int mp_slider0, int mp_slider, double zoom, short &sliderstart, short &slidersize)//_ip: in image pixels, mp_slider: mouse position starting from start of slider
+{
+	double winsize_ip=winsize/zoom, r=winsize_ip/imsize_ip;
+	slidersize=int(barsize*r);
+	bool minsize=slidersize<scrollbarwidth;
+	if(minsize)
+		slidersize=scrollbarwidth;
+	sliderstart=slider0+mp_slider-mp_slider0;
+	if(sliderstart<0)
+		sliderstart=0;
+	if(sliderstart>barsize-slidersize)
+		sliderstart=barsize-slidersize;
+	winpos_ip=int((imsize_ip+2-winsize_ip)*sliderstart/(barsize-slidersize));
+}
+void			draw_vscrollbar(int x, int sbwidth, int y1, int y2, int &winpos, int content_h, int vscroll_s0, int vscroll_my_start, double zoom, short &vscroll_start, short &vscroll_size, int dragtype)//vertical scrollbar
+{
+//	const int scrollbarwidth=17;
+	draw_rectangle(x, x+sbwidth, y1, y1+sbwidth, color_button);//up
+	draw_rectangle(x, x+sbwidth, y1+sbwidth, y2-sbwidth, color_barbk);//vertical
+	draw_rectangle(x, x+sbwidth, y2-sbwidth, y2, color_button);//down
+	int win_size=y2-y1, scroll_size=win_size-(sbwidth<<1);
+	if(drag==dragtype)
+		scrollbar_scroll(winpos, content_h, win_size, scroll_size, vscroll_s0, vscroll_my_start, my, zoom, vscroll_start, vscroll_size);
+	else
+		scrollbar_slider(winpos, content_h, win_size, scroll_size, zoom, vscroll_start, vscroll_size);
+	draw_rectangle(x, x+sbwidth, y1+sbwidth+vscroll_start, y1+sbwidth+vscroll_start+vscroll_size, color_slider);//vertical slider
+//	x2-=sbwidth;
+}
+
+inline void			lbutton_down_text()
+{
+	cursor_at_mouse();
+	if(!keyboard[VK_SHIFT])
+		selcur=cursor;
+	drag=DRAG_SELECT;
+}
+
 void				copy_to_clipboard(std::string const &str){copy_to_clipboard(str.c_str(), str.size());}
 void				buffer2clipboard(int *buffer, int bw, int bh)
 {
@@ -665,7 +753,6 @@ void				buffer2clipboard(int *buffer, int bw, int bh)
 	}
 	copy_to_clipboard(str);
 }
-
 void				wnd_on_create(){}
 bool				wnd_on_init()
 {
@@ -719,62 +806,111 @@ void				wnd_on_render()
 
 	glClear(GL_COLOR_BUFFER_BIT);
 	
-	calc_dimensions_chars(0, 0, text.c_str(), text.size(), 0, text_width, nlines);
-	hscroll.decide(text_width	*font_zoom>w);
-	vscroll.decide(nlines		*font_zoom>h);
-	if(wpx<0)
+	//calculate text dimensions & cursor coordinates
+	auto arr=text.c_str();
+	int textlen=text.size();
+	calc_dimensions_chars(0, 0, arr, textlen, 0, cursor, text_width, nlines, ccx, ccy);
+	int dxpx=dx*font_zoom, dypx=dy*font_zoom;
+	int iw=text_width*dxpx, ih=nlines*dypx;
+	
+	//decide if need scrollbars
+	hscroll.decide(iw+scrollbarwidth>w);
+	vscroll.decide(ih+scrollbarwidth>h);
+	if(hscroll.dwidth)
+	{
+		if(wpx<0)
+			wpx=0;
+		if(wpx>iw-dxpx)
+			wpx=iw-dxpx;
+	}
+	else
 		wpx=0;
-	if(wpy<0)
+	if(vscroll.dwidth)
+	{
+		if(wpy<0)
+			wpy=0;
+		if(wpy>ih-dypx)
+			wpy=ih-dypx;
+	}
+	else
 		wpy=0;
-	int xend=0+text_width*font_zoom-wpx, yend=0+nlines*font_zoom-wpy;
-	hscroll.decide_orwith(!hscroll.dwidth&&vscroll.dwidth&&xend>=w-scrollbarwidth);
-	vscroll.decide_orwith(!vscroll.dwidth&&vscroll.dwidth&&yend>=h-74-scrollbarwidth);
+	//int xend=0+iw-wpx, yend=0+ih-wpy;
+	//hscroll.decide_orwith(!hscroll.dwidth&&vscroll.dwidth&&xend>=w-scrollbarwidth);
+	//vscroll.decide_orwith(!vscroll.dwidth&&vscroll.dwidth&&yend>=h-74-scrollbarwidth);
 
 	int selstart, selend;
 	if(cursor<selcur)
 		selstart=cursor, selend=selcur;
 	else
 		selstart=selcur, selend=cursor;
-	int y=0, font_height=dy*font_zoom;
-	nlines=1, text_width=0;
+	int y=0;
+	//nlines=1, text_width=0;
 	for(int start=0, line_start=0, x=0, k=0;;++k)
 	{
 		if(k==selstart)
 		{
 			int ypos=y-wpy;
-			if(ypos>-dx&&ypos<h+dx)
-				x+=print_line(x-wpx, ypos, text.c_str()+start, k-start, 0, font_zoom);
-			set_text_colors(colors_selection);
+			if(ypos>-dxpx&&ypos<h+dxpx)
+				x+=print_line(x-wpx, ypos, arr+start, k-start, 0, font_zoom);
 			start=k;
-			if(k==cursor)
-				ccx=x, ccy=nlines-1;
+			set_text_colors(colors_selection);
+			//if(k==cursor)
+			//	ccx=x, ccy=nlines-1;
 		}
 		if(k==selend)
 		{
 			int ypos=y-wpy;
-			if(ypos>-dx&&ypos<h+dx)
-				x+=print_line(x-wpx, ypos, text.c_str()+start, k-start, 0, font_zoom);
-			set_text_colors(colors_text);
+			if(ypos>-dxpx&&ypos<h+dxpx)
+				x+=print_line(x-wpx, ypos, arr+start, k-start, 0, font_zoom);
 			start=k;
-			if(k==cursor)
-				ccx=x, ccy=nlines-1;
+			set_text_colors(colors_text);
+			//if(k==cursor)
+			//	ccx=x, ccy=nlines-1;
 		}
-		if(k>=(int)text.size()||text[k]=='\n')
+		if(k>=textlen||text[k]=='\n')
 		{
 			int ypos=y-wpy;
-			if(ypos>-dx&&ypos<h+dx)
-				x+=print_line(x-wpx, ypos, text.c_str()+start, k-start, 0, font_zoom);
-			if(text_width<x)
-				text_width=x;
-			y+=font_height;
-			if(k>=(int)text.size())
+			if(ypos>-dxpx&&ypos<h+dxpx)
+				x+=print_line(x-wpx, ypos, arr+start, k-start, 0, font_zoom);
+			//if(text_width<x)
+			//	text_width=x;
+			y+=dypx;
+			if(k>=textlen)
 				break;
 			line_start=start=k+1;
-			++nlines, x=0;
+			//++nlines;
+			x=0;
 		}
 	}
-	ccy*=dy*font_zoom;
-	draw_line_i(ccx, ccy, ccx, ccy+dy*font_zoom, 0xFFFFFFFF);
+	int cpx=ccx*dxpx, cpy=ccy*dypx;
+	draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);
+
+	//draw possible scrollbars
+#if 1
+	{
+		int x1=0, x2=w, y1=0, y2=h;
+		if(hscroll.dwidth&&vscroll.dwidth)
+			draw_rectangle(x2-scrollbarwidth, x2, y2-scrollbarwidth, y2, color_barbk);//corner square
+		if(hscroll.dwidth)
+		{
+			int vsbw=vscroll.dwidth;
+			draw_rectangle(x1+scrollbarwidth, x2-scrollbarwidth-vsbw, y2-scrollbarwidth, y2, color_barbk);//horizontal
+			draw_rectangle(x1, x1+scrollbarwidth, y2-scrollbarwidth, y2, color_button);//left
+			draw_rectangle(x2-scrollbarwidth-vsbw, x2-vsbw, y2-scrollbarwidth, y2, color_button);//right
+			if(drag==DRAG_HSCROLL)
+				scrollbar_scroll(wpx, iw, x2-x1-vsbw, x2-x1-(scrollbarwidth<<1)-vsbw, hscroll.s0, hscroll.m_start, mx, font_zoom, hscroll.start, hscroll.size);
+			else
+				scrollbar_slider(wpx, iw, x2-x1-vsbw, x2-x1-(scrollbarwidth<<1)-vsbw, font_zoom, hscroll.start, hscroll.size);
+			draw_rectangle(x1+scrollbarwidth+hscroll.start, x1+scrollbarwidth+hscroll.start+hscroll.size, y2-scrollbarwidth, y2, color_slider);//horizontal slider
+			y2-=scrollbarwidth;
+		}
+		if(vscroll.dwidth)
+		{
+			draw_vscrollbar(x2-scrollbarwidth, scrollbarwidth, y1, y2, wpy, ih, vscroll.s0, vscroll.m_start, font_zoom, vscroll.start, vscroll.size, DRAG_VSCROLL);
+			x2-=scrollbarwidth;
+		}
+	}
+#endif
 
 	//print(1, 0, 0, 0, "Hello. Sample Text. What\'s going on???");
 	//for(int k=0;k<1000;++k)
@@ -799,9 +935,13 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 	switch(message)
 	{
 	case WM_MOUSEMOVE:
-		if(drag==DRAG_SELECT)
+		switch(drag)
 		{
+		case DRAG_SELECT:
 			cursor_at_mouse();
+			return true;
+		case DRAG_VSCROLL:
+		case DRAG_HSCROLL:
 			return true;
 		}
 		return false;
@@ -831,13 +971,48 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK:
-		cursor_at_mouse();
-		if(!keyboard[VK_SHIFT])
-			selcur=cursor;
-		drag=DRAG_SELECT;
+		if(vscroll.dwidth)
+		{
+			if(hscroll.dwidth)	//both scrollbars present
+			{
+				if(mx<w-scrollbarwidth)
+				{
+					if(my<h-scrollbarwidth)
+						lbutton_down_text();
+					else
+						drag=DRAG_HSCROLL, hscroll.click_on_slider(mx);
+				}
+				else
+				{
+					if(my<h-scrollbarwidth)
+						drag=DRAG_VSCROLL, vscroll.click_on_slider(my);
+				}
+			}
+			else				//only vscroll present
+			{
+				if(mx<w-scrollbarwidth)
+					lbutton_down_text();
+				else
+					drag=DRAG_VSCROLL, vscroll.click_on_slider(my);
+			}
+		}
+		else
+		{
+			if(hscroll.dwidth)	//only hscroll present
+			{
+				if(my<h-scrollbarwidth)
+					lbutton_down_text();
+				else
+					drag=DRAG_HSCROLL, hscroll.click_on_slider(mx);
+			}
+			else				//no scrollbars
+				lbutton_down_text();
+		}
+		mouse_capture();
 		break;
 	case WM_LBUTTONUP:
 		drag=DRAG_NONE;
+		mouse_release();
 		break;
 
 	case WM_RBUTTONDOWN:
@@ -996,19 +1171,11 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 			case VK_DELETE:					return false;
 			case VK_BACK:					return false;
 			case VK_RETURN:					return false;
-			case VK_UP://TODO: scroll navigation
-				//if(th>bh)
-				//{
-				//	tpy=tpy-fontH<0?0:tpy-fontH;
-				//	return 1;
-				//}
+			case VK_UP://scroll navigation
+				wpy-=dy*font_zoom;
 				break;
 			case VK_DOWN:
-				//if(th>bh)
-				//{
-				//	tpy=tpy+fontH>th-bh?th-bh:tpy+fontH;
-				//	return 1;
-				//}
+				wpy+=dy*font_zoom;
 				break;
 			case VK_LEFT://skip word
 				if(cursor>0)

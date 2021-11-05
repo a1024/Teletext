@@ -137,6 +137,8 @@ const wchar_t*		open_file_dialog();
 const wchar_t*		save_file_dialog();
 bool				open_text_file(const wchar_t *filename, std::string &str);
 bool				save_text_file(const wchar_t *filename, std::string &str);
+void				mouse_capture();
+void				mouse_release();
 void				update_screen();
 
 //OpenGL
