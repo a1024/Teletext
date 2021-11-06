@@ -734,7 +734,7 @@ void				hist_undo()//ctrl z
 		}
 		break;
 	case ACTION_ERASE_RECT_SELECTION:
-		for(int k=0;k<(int)action.data.size();++k)
+		for(int k=action.data.size()-1;k>=0;--k)
 		{
 			auto &frag=action.data[k];
 			text.insert(text.begin()+frag.idx, frag.str.begin(), frag.str.end());
