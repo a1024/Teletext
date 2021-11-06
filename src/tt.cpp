@@ -374,7 +374,7 @@ int					print_line_rect(short x, short y, const char *msg, int msg_length, short
 	QuadCoords *txc=nullptr;
 	int msg_width=0, width, idx, printable_count=0, tab_width=tab_count*dx*zoom, w2=dx*zoom, height=dy*zoom, k2=0;
 	char overflow=false;
-	vrtx.resize(msg_length<<4);//vx, vy, txx, txy		x4 vertices/char
+	vrtx.resize(nchars<<4);//vx, vy, txx, txy		x4 vertices/char
 	for(int k=0, k3=0;k3<nchars;++k)
 	{
 		char c;
