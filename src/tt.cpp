@@ -1672,6 +1672,8 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					{
 						filename=str;
 						set_title(filename, false);
+						hist_cont=true;
+						dimensions_known=false;
 					}
 				}
 				return true;
