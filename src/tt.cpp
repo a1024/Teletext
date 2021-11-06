@@ -241,7 +241,7 @@ int					calc_width(short x, short y, const char *msg, int msg_length, short tab_
 		//if(c=='\n')
 		//	break;
 		if(c=='\t')
-			width=tab_width-(x+msg_width-tab_origin)%tab_width, c=' ';
+			width=tab_width-mod(x+msg_width-tab_origin, tab_width), c=' ';
 		else if(c>=32&&c<0xFF)
 			width=w2;
 		else
@@ -265,7 +265,7 @@ int					inv_calc_width(short x, short y, const char *msg, int msg_length, short 
 		if(c=='\n')
 			return k;
 		if(c=='\t')
-			temp_width=tab_width-(x+msg_width-tab_origin)%tab_width, c=' ';
+			temp_width=tab_width-mod(x+msg_width-tab_origin, tab_width), c=' ';
 		else if(c>=32&&c<0xFF)
 			temp_width=w2;
 		else
@@ -282,34 +282,6 @@ int					inv_calc_width(short x, short y, const char *msg, int msg_length, short 
 		}
 	}
 	return k;
-}
-void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int msg_length, short tab_origin_chars, int &cwidth, int &cheight, int kcursor, int &cx, int &cy, int kselcur, int &sx, int &sy)
-{
-	cheight=1, cwidth=0;
-	int k=0, linelen=0;
-	for(;k<msg_length;++k)
-	{
-		if(k==kcursor)
-			cx=linelen, cy=cheight-1;
-		if(k==kselcur)
-			sx=linelen, sy=cheight-1;
-		if(msg[k]=='\t')
-			linelen+=tab_count-(x_chars+linelen-tab_origin_chars)%tab_count;
-		else if(msg[k]=='\n')
-		{
-			if(cwidth<linelen)
-				cwidth=linelen;
-			++cheight, linelen=0;
-		}
-		else
-			++linelen;
-	}
-	if(cwidth<linelen)
-		cwidth=linelen;
-	if(k==kcursor)
-		cx=linelen, cy=cheight-1;
-	if(k==kselcur)
-		sx=linelen, sy=cheight-1;
 }
 int					print_line(short x, short y, const char *msg, int msg_length, short tab_origin, short zoom)
 {
@@ -422,11 +394,11 @@ U64					colors_selection=0xFFFF0000FFABABAB;
 int					color_cursorlinebk=0xFF202020;
 U64					colors_cursorline=(u64)color_cursorlinebk<<32|0xFFABABAB;
 short				font_zoom=1;//font pixel size
-int					ccx=0, ccy=0,//cursor coordinates in characters
-					scx=0, scy=0,//selcur coordinates in characters
-					wpx=0, wpy=0,//window position in pixels
-					nlines=1, text_width=0,//in characters
-					cursor=0, selcur=0;
+int					wpx=0, wpy=0,//window position inside the text buffer, in pixels
+					ccx=0, ccy=0,//cursor coordinates in the text buffer, in character units
+					scx=0, scy=0,//selcur coordinates in the text buffer, in character units
+					cursor=0, selcur=0,
+					nlines=1, text_width=0;//in characters
 bool				sel_rect=false;
 //struct			TextFile
 //{
@@ -448,12 +420,6 @@ enum				DragType
 	DRAG_RECT,
 };
 DragType			drag;
-//void				insert(char c)
-//{
-//	text.insert(text.begin()+cursor, c);
-//	++cursor;
-//	selcur=cursor;
-//}
 
 const int			scrollbarwidth=17;
 struct				Scrollbar
@@ -498,7 +464,7 @@ std::vector<History> history;
 int					histpos=-1;//pointing at previous action
 bool				hist_cont=true;
 
-bool				modified=false;
+bool				modified=false, dimensions_known=false, wnd_to_cursor=false;
 void				set_title(std::wstring const &name, bool _modified)
 {
 	modified=_modified;
@@ -523,12 +489,110 @@ void				clear_modified()
 		set_window_title_w(g_wbuf+1);
 	}
 }
-void				cursor_teleport()//preset the cursor before calling, to scroll window till cursor is visible
+
+void				calc_cursor_coords(short x_chars, short tab_origin_chars)
 {
-	//hist_cont=false;
-	//if(!keyboard[VK_SHIFT])
-	//	selcur=cursor;
+	ccx=0, ccy=0;
+	for(int k=0;k<cursor;++k)
+	{
+		if(text[k]=='\n')
+			ccx=0, ++ccy;
+		else if(text[k]=='\t')
+			ccx+=tab_count-mod(x_chars+ccx-tab_origin_chars, tab_count);
+		else
+			++ccx;
+	}
 }
+void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int msg_length, short tab_origin_chars, int &cwidth, int &cheight, int kcursor, int &cx, int &cy, int kselcur, int &sx, int &sy)
+{
+	cheight=1, cwidth=0;
+	int k=0, linelen=0;
+	for(;k<msg_length;++k)
+	{
+		if(k==kcursor)
+			cx=linelen, cy=cheight-1;
+		if(k==kselcur)
+			sx=linelen, sy=cheight-1;
+		//if(k==kcursor)
+		//{
+		//	if(cx)
+		//		*cx=linelen;
+		//	if(cy)
+		//		*cy=cheight-1;
+		//}
+		//if(k==kselcur)
+		//{
+		//	if(sx)
+		//		*sx=linelen;
+		//	if(sy)
+		//		*sy=cheight-1;
+		//}
+		if(msg[k]=='\t')
+			linelen+=tab_count-mod(x_chars+linelen-tab_origin_chars, tab_count);
+		else if(msg[k]=='\n')
+		{
+			if(cwidth<linelen)
+				cwidth=linelen;
+			++cheight, linelen=0;
+		}
+		else
+			++linelen;
+	}
+	if(cwidth<linelen)
+		cwidth=linelen;
+	if(k==kcursor)
+		cx=linelen, cy=cheight-1;
+	if(k==kselcur)
+		sx=linelen, sy=cheight-1;
+	//if(k==kcursor)
+	//{
+	//	if(cx)
+	//		*cx=linelen;
+	//	if(cy)
+	//		*cy=cheight-1;
+	//}
+	//if(k==kselcur)
+	//{
+	//	if(sx)
+	//		*sx=linelen;
+	//	if(sy)
+	//		*sy=cheight-1;
+	//}
+	if(sel_rect)
+	{
+		if(cwidth<cx)
+			cwidth=cx;
+		if(cwidth<sx)
+			cwidth=sx;
+	}
+}
+#if 0
+void				cursor_teleport()//preset the cursor or (ccx, ccy) before calling, to scroll window till (ccx, ccy) is visible
+{
+	auto arr=text.c_str();
+	int textlen=text.size();
+	if(!dimensions_known)
+	{
+		dimensions_known=true;
+		if(sel_rect)
+			calc_dimensions_chars(-wpx, -wpy, arr, textlen, -wpx, text_width, nlines, -1, ccx, ccy, -1, scx, scy);
+		else
+			calc_dimensions_chars(-wpx, -wpy, arr, textlen, -wpx, text_width, nlines, cursor, ccx, ccy, selcur, scx, scy);
+	}
+	int dxpx=dx*font_zoom, dypx=dy*font_zoom;
+	int cpx=ccx*dxpx, cpy=ccy*dypx;
+	int xpad=dxpx&-(w>(dxpx<<1)), ypad=dypx&-(h>(dypx<<1));
+	if(wpx>cpx+xpad)
+		wpx=cpx+xpad;
+	if(wpx<cpx-w-xpad)
+		wpx=cpx-w-xpad;
+	if(wpy>cpy+ypad)
+		wpy=cpy+ypad;
+	if(wpy<cpy-h-ypad)
+		wpy=cpy-h-ypad;
+}
+#endif
+
 void				hist_undo()//ctrl z
 {
 	if(histpos<0)
@@ -549,13 +613,15 @@ void				hist_undo()//ctrl z
 		text.insert(text.begin()+h.idx, h.data.begin(), h.data.end());
 		selcur=h.idx, cursor=h.idx+h.data.size();
 	}
+	calc_cursor_coords(-wpx, -wpx);
 	sel_rect=false;
 	--histpos;
 	if(histpos<0)
 		clear_modified();
 
 	hist_cont=false;
-	cursor_teleport();
+	dimensions_known=false;
+	wnd_to_cursor=true;
 }
 void				hist_redo()//ctrl y
 {
@@ -574,11 +640,13 @@ void				hist_redo()//ctrl y
 		text.erase(text.begin()+h.idx, text.begin()+h.idx+h.data.size());
 		cursor=selcur=h.idx;
 	}
+	calc_cursor_coords(-wpx, -wpx);
 	sel_rect=false;
 
 	set_modified();//
 	hist_cont=false;
-	cursor_teleport();
+	dimensions_known=false;
+	wnd_to_cursor=true;
 }
 void				hist_clear()
 {
@@ -597,9 +665,11 @@ void				text_replace(int i, int f, const char *a, int len)
 	history.push_back(History(M_INSERT, i, text.c_str()+i, len));
 	histpos+=2;
 	
+	cursor=selcur=i+len;
+	calc_cursor_coords(-wpx, -wpx);
 	hist_cont=false;
-	cursor=selcur=i+len;//, sel_rect=false;
-	cursor_teleport();
+	dimensions_known=false;
+	wnd_to_cursor=true;
 }
 void				text_insert(int i, const char *a, int len)
 {
@@ -610,9 +680,11 @@ void				text_insert(int i, const char *a, int len)
 	history.resize(histpos);
 	history.push_back(History(M_INSERT, i, text.c_str()+i, len));
 
+	cursor=selcur=i+len;
+	calc_cursor_coords(-wpx, -wpx);
 	hist_cont=false;
-	cursor=selcur=i+len;//, sel_rect=false;
-	cursor_teleport();
+	dimensions_known=false;
+	wnd_to_cursor=true;
 }
 void				text_erase(int i, int f)
 {
@@ -623,9 +695,11 @@ void				text_erase(int i, int f)
 
 	text.erase(text.begin()+i, text.begin()+f);
 
+	cursor=selcur=i;
+	calc_cursor_coords(-wpx, -wpx);
 	hist_cont=false;
-	cursor=selcur=i;//, sel_rect=false;
-	cursor_teleport();
+	dimensions_known=false;
+	wnd_to_cursor=true;
 }
 void				text_insert1(int i, char c)
 {
@@ -641,9 +715,11 @@ void				text_insert1(int i, char c)
 	else
 		history[histpos].data.push_back(c);
 
+	cursor=selcur=i+1;
+	calc_cursor_coords(-wpx, -wpx);
 	hist_cont=true;
-	cursor=selcur=i+1;//, sel_rect=false;
-	cursor_teleport();
+	dimensions_known=false;
+	wnd_to_cursor=true;
 }
 void				text_erase1_bksp(int i)
 {
@@ -664,9 +740,11 @@ void				text_erase1_bksp(int i)
 
 	text.erase(text.begin()+i-1);
 
+	cursor=selcur=i-1;
+	calc_cursor_coords(-wpx, -wpx);
 	hist_cont=true;
-	cursor=selcur=i-1;//, sel_rect=false;
-	cursor_teleport();
+	dimensions_known=false;
+	wnd_to_cursor=true;
 }
 void				text_erase1_del(int i)
 {
@@ -684,9 +762,11 @@ void				text_erase1_del(int i)
 
 	text.erase(text.begin()+i);
 	
+	cursor=selcur=i;
+	calc_cursor_coords(-wpx, -wpx);
 	hist_cont=true;
-	cursor=selcur=i;//, sel_rect=false;
-	cursor_teleport();
+	dimensions_known=false;
+	wnd_to_cursor=true;
 }
 
 inline int			find_line_start(int i)
@@ -712,35 +792,34 @@ char				group_char(char c)
 		return '\n';
 	return c;
 }
-void				cursor_at_mouse()
+void				cursor_at_mouse()//sets cursor, ccx & ccy
 {
-	int dypx=dy*font_zoom;
-	cursor=0;
-	//int wpy=wcy*font_zoom;
-	if((wpy+my)/dypx>0)
+	int dypx=dy*font_zoom, ypos=(wpy+my)/dypx;
+	cursor=0, ccy=0;
+	if(ypos>0)
 	{
-		for(int k=0, lineno=0;k<(int)text.size();++k)
+		for(int k=0;k<(int)text.size();++k)
 		{
 			if(text[k]=='\n')
 			{
-				cursor=k+1, ++lineno;
-				if((wpy+my)/dypx==lineno)
+				cursor=k+1, ++ccy;
+				if(ccy==ypos)
 					break;
 			}
 		}
 	}
-	//if(my>=0)
-	//{
-	//	for(int k=0, lineno=0;k<(int)text.size()-1;++k)
-	//	{
-	//		if(lineno==(wpy+my)/dy)
-	//			break;
-	//		if(text[k]=='\n')
-	//			cursor=k+1, ++lineno;
-	//	}
-	//}
-	cursor+=inv_calc_width(0, 0, text.c_str()+cursor, text.size()-cursor, 0, font_zoom, wpx+mx);
-	//cursor+=inv_calc_width(0, 0, text.c_str()+cursor, text.size()-cursor, 0, font_zoom, wcx*font_zoom+mx);//X no smooth scroll
+	cursor+=ccx=inv_calc_width(0, 0, text.c_str()+cursor, text.size()-cursor, 0, font_zoom, wpx+mx);
+}
+bool				cursor_at_mouse_rect(int &xpos, int &ypos)//sets ccx & ccy
+{
+	xpos=(wpx+mx)/(dx*font_zoom);
+	int ypos2=(wpy+my)/(dy*font_zoom);
+	if(ypos2>=0&&ypos2<nlines)
+	{
+		ypos=ypos2;
+		return true;
+	}
+	return false;
 }
 
 //scrollbar functions
@@ -748,6 +827,7 @@ const int			color_barbk=0x30F0F0F0, color_slider=0x50CDCDCD, color_button=0x50E5
 void				scrollbar_slider(int &winpos_ip, int imsize_ip, int winsize, int barsize, double zoom, short &sliderstart, short &slidersize)
 {
 	double winsize_ip=winsize/zoom;
+	imsize_ip+=winsize_ip*0.5;
 	slidersize=int(barsize*winsize_ip/imsize_ip);
 	if(slidersize<scrollbarwidth)
 	{
@@ -764,7 +844,9 @@ void				scrollbar_slider(int &winpos_ip, int imsize_ip, int winsize, int barsize
 }
 void				scrollbar_scroll(int &winpos_ip, int imsize_ip, int winsize, int barsize, int slider0, int mp_slider0, int mp_slider, double zoom, short &sliderstart, short &slidersize)//_ip: in image pixels, mp_slider: mouse position starting from start of slider
 {
-	double winsize_ip=winsize/zoom, r=winsize_ip/imsize_ip;
+	double winsize_ip=winsize/zoom;
+	imsize_ip+=winsize_ip*0.5;
+	double r=winsize_ip/imsize_ip;
 	slidersize=int(barsize*r);
 	bool minsize=slidersize<scrollbarwidth;
 	if(minsize)
@@ -793,14 +875,22 @@ void				draw_vscrollbar(int x, int sbwidth, int y1, int y2, int &winpos, int con
 
 inline void			lbutton_down_text()
 {
-	cursor_at_mouse();
 	//if(keyboard[VK_CONTROL])
 	if(sel_rect=keyboard[VK_MENU])
-		drag=DRAG_RECT;
+	{
+		int xpos=0, ypos=0;
+		if(cursor_at_mouse_rect(xpos, ypos))
+			drag=DRAG_RECT, ccx=xpos, ccy=ypos;
+		if(!keyboard[VK_SHIFT])
+			scx=ccx, scy=ccy;
+	}
 	else
+	{
 		drag=DRAG_SELECT;
-	if(!keyboard[VK_SHIFT])
-		selcur=cursor;
+		cursor_at_mouse();
+		if(!keyboard[VK_SHIFT])
+			selcur=cursor;
+	}
 }
 
 void				copy_to_clipboard(std::string const &str){copy_to_clipboard(str.c_str(), str.size());}
@@ -818,6 +908,7 @@ void				buffer2clipboard(int *buffer, int bw, int bh)
 	}
 	copy_to_clipboard(str);
 }
+
 void				wnd_on_create(){}
 bool				wnd_on_init()
 {
@@ -874,13 +965,36 @@ void				wnd_on_render()
 	//calculate text dimensions & cursor coordinates
 	auto arr=text.c_str();
 	int textlen=text.size();
-	calc_dimensions_chars(0, 0, arr, textlen, 0, text_width, nlines, cursor, ccx, ccy, selcur, scx, scy);
+	if(!dimensions_known)
+	{
+		dimensions_known=true;
+		if(sel_rect)
+			calc_dimensions_chars(-wpx, -wpy, arr, textlen, -wpx, text_width, nlines, -1, ccx, ccy, -1, scx, scy);
+		else
+			calc_dimensions_chars(-wpx, -wpy, arr, textlen, -wpx, text_width, nlines, cursor, ccx, ccy, selcur, scx, scy);
+		prof_add("calc dimensions");
+	}
 	int dxpx=dx*font_zoom, dypx=dy*font_zoom;
 	int iw=text_width*dxpx, ih=nlines*dypx;
 	
 	//decide if need scrollbars
 	hscroll.decide(iw+scrollbarwidth>w);
 	vscroll.decide(ih+scrollbarwidth>h);
+
+	int cpx=ccx*dxpx, cpy=ccy*dypx;
+	if(wnd_to_cursor)
+	{
+		wnd_to_cursor=false;
+		int xpad=dxpx<<1&-(w>(dxpx<<2)), ypad=dypx<<1&-(h>(dypx<<2));
+		if(wpx>cpx-xpad)
+			wpx=cpx-xpad;
+		if(wpx<cpx-w+xpad+vscroll.dwidth)
+			wpx=cpx-w+xpad+vscroll.dwidth;
+		if(wpy>cpy-ypad)
+			wpy=cpy-ypad;
+		if(wpy<cpy-h+ypad+hscroll.dwidth)
+			wpy=cpy-h+ypad+hscroll.dwidth;
+	}
 	if(hscroll.dwidth)
 	{
 		if(wpx<0)
@@ -903,7 +1017,6 @@ void				wnd_on_render()
 	//hscroll.decide_orwith(!hscroll.dwidth&&vscroll.dwidth&&xend>=w-scrollbarwidth);
 	//vscroll.decide_orwith(!vscroll.dwidth&&vscroll.dwidth&&yend>=h-74-scrollbarwidth);
 
-	int cpx=ccx*dxpx, cpy=ccy*dypx;
 	int y=0;
 	if(sel_rect)
 	{
@@ -917,7 +1030,7 @@ void				wnd_on_render()
 		else
 			ry1=ccy, ry2=scy;
 		int px1=rx1*dxpx, px2=rx2*dxpx, py1=ry1*dypx, py2=ry2*dypx;
-		//draw_rectangle(px1-wpx, px2-wpx, py1-wpy, py2+dypx-wpy, colors_selection.hi);
+		draw_rectangle(px1-wpx, px2-wpx, py1-wpy, py2+dypx-wpy, colors_selection.hi);
 		for(int start=0, line_start=0, lineno=0, x=0, k=0;;++k)
 		{
 			if(lineno>=ry1&&lineno<=ry2)
@@ -1104,10 +1217,15 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 		case DRAG_SELECT:
 		case DRAG_RECT:
 			if(sel_rect=keyboard[VK_MENU])
+			{
 				drag=DRAG_RECT;
+				cursor_at_mouse_rect(ccx, ccy);
+			}
 			else
+			{
 				drag=DRAG_SELECT;
-			cursor_at_mouse();
+				cursor_at_mouse();
+			}
 			return true;
 		case DRAG_VSCROLL:
 		case DRAG_HSCROLL:
@@ -1239,9 +1357,9 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 			case VK_OEM_4:					return false;
 			case VK_OEM_6:					return false;
 			case 'A':
-				hist_cont=false;
 				selcur=0, cursor=text.size(), sel_rect=false;
-				cursor_teleport();
+				ccy=nlines-1, ccx=cursor-find_line_start(cursor);
+				wnd_to_cursor=true, hist_cont=false;
 				break;
 			case 'S'://save
 				if(keyboard[VK_SHIFT]||!filename.size())
@@ -1318,6 +1436,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 
 					delete[] str;
 				}
+				calc_cursor_coords(-wpx, -wpx);
 				break;
 			case 'B':						return false;
 			case 'N'://TODO: tabs
@@ -1360,10 +1479,11 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					--cursor;
 					char initial=group_char(text[cursor]);
 					for(;cursor&&group_char(text[cursor-1])==initial;--cursor);
+					calc_cursor_coords(-wpx, -wpx);
 				}
 				if(!keyboard[VK_SHIFT])
-					selcur=cursor, sel_rect=false;
-				cursor_teleport();
+					selcur=cursor, scx=ccx, scy=ccy, sel_rect=false;
+				wnd_to_cursor=true;
 				break;
 			case VK_RIGHT://skip word
 				if(cursor<(int)text.size())
@@ -1372,30 +1492,32 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					char initial=group_char(text[cursor]);
 					++cursor;
 					for(;cursor<(int)text.size()&&group_char(text[cursor])==initial;++cursor);
+					calc_cursor_coords(-wpx, -wpx);
 				}
 				if(!keyboard[VK_SHIFT])
-					selcur=cursor, sel_rect=false;
-				cursor_teleport();
+					selcur=cursor, scx=ccx, scy=ccy, sel_rect=false;
+				wnd_to_cursor=true;
 				break;
 			case VK_HOME:
 				if(cursor)
 				{
 					hist_cont=false;
-					cursor=0;
+					cursor=0, ccx=0, ccy=0;
 				}
 				if(!keyboard[VK_SHIFT])
-					selcur=cursor, sel_rect=false;
-				cursor_teleport();
+					selcur=cursor, scx=ccx, scy=ccy, sel_rect=false;
+				wnd_to_cursor=true;
 				break;
 			case VK_END:
 				if(cursor<(int)text.size())
 				{
 					hist_cont=false;
 					cursor=text.size();
+					calc_cursor_coords(-wpx, -wpx);
 				}
 				if(!keyboard[VK_SHIFT])
-					selcur=cursor, sel_rect=false;
-				cursor_teleport();
+					selcur=cursor, scx=ccx, scy=ccy, sel_rect=false;
+				wnd_to_cursor=true;
 				break;
 			case VK_ESCAPE:case VK_F1:case VK_F2:case VK_F3:case VK_F4:case VK_F5:case VK_F6:case VK_F7:case VK_F8:case VK_F9:case VK_F10:case VK_F11:case VK_F12:case VK_INSERT:	return false;
 			case VK_F13:case VK_F14:case VK_F15:case VK_F16:case VK_F17:case VK_F18:case VK_F19:case VK_F20:case VK_F21:case VK_F22:case VK_F23:case VK_F24:						return false;
@@ -1509,7 +1631,11 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 			case VK_RETURN:					character=						'\n';	break;
 			case VK_UP:
 				if(!keyboard[VK_SHIFT]&&cursor!=selcur)
+				{
 					cursor=selcur=minimum(cursor, selcur), sel_rect=false;
+					calc_cursor_coords(-wpx, -wpx);
+					scx=ccx, scy=ccy;
+				}
 				else
 				{
 					hist_cont=false;
@@ -1522,14 +1648,19 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						int s0=find_line_start(start-1);
 						cursor=s0+inv_calc_width(0, 0, text.c_str()+s0, text.size()-s0, 0, font_zoom, width);
 					}
+					calc_cursor_coords(-wpx, -wpx);
 					if(!keyboard[VK_SHIFT])
-						selcur=cursor, sel_rect=false;
+						selcur=cursor, scx=ccx, scy=ccy, sel_rect=false;
 				}
-				cursor_teleport();
+				wnd_to_cursor=true;
 				return true;
 			case VK_DOWN:
 				if(!keyboard[VK_SHIFT]&&cursor!=selcur)
+				{
 					cursor=selcur=maximum(cursor, selcur), sel_rect=false;
+					calc_cursor_coords(-wpx, -wpx);
+					scx=ccx, scy=ccy;
+				}
 				else
 				{
 					hist_cont=false;
@@ -1543,64 +1674,81 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						int s2=end+1;
 						cursor=s2+inv_calc_width(0, 0, text.c_str()+s2, text.size()-s2, 0, font_zoom, width);
 					}
+					calc_cursor_coords(-wpx, -wpx);
 					if(!keyboard[VK_SHIFT])
-						selcur=cursor, sel_rect=false;
+						selcur=cursor, scx=ccx, scy=ccy, sel_rect=false;
 				}
-				cursor_teleport();
+				wnd_to_cursor=true;
 				return true;
 			case VK_LEFT:
 				if(!keyboard[VK_SHIFT]&&cursor!=selcur)
+				{
 					cursor=selcur=minimum(cursor, selcur), sel_rect=false;
+					calc_cursor_coords(-wpx, -wpx);
+					scx=ccx, scy=ccy;
+				}
 				else
 				{
 					if(cursor>0)
 					{
 						hist_cont=false;
 						--cursor;
+						calc_cursor_coords(-wpx, -wpx);
 					}
 					if(!keyboard[VK_SHIFT])
-						selcur=cursor, sel_rect=false;
+						selcur=cursor, scx=ccx, scy=ccy, sel_rect=false;
 				}
-				cursor_teleport();
+				wnd_to_cursor=true;
 				return true;
 			case VK_RIGHT:
 				if(!keyboard[VK_SHIFT]&&cursor!=selcur)
+				{
 					cursor=selcur=maximum(cursor, selcur), sel_rect=false;
+					calc_cursor_coords(-wpx, -wpx);
+					scx=ccx, scy=ccy;
+				}
 				else
 				{
 					if(cursor<(int)text.size())
 					{
 						hist_cont=false;
 						++cursor;
+						calc_cursor_coords(-wpx, -wpx);
 					}
 					if(!keyboard[VK_SHIFT])
-						selcur=cursor, sel_rect=false;
+						selcur=cursor, scx=ccx, scy=ccy, sel_rect=false;
 				}
-				cursor_teleport();
+				wnd_to_cursor=true;
 				return true;
 			case VK_HOME:
 				{
 					int c2=find_line_start(cursor);
 					if(cursor!=c2)
+					{
 						cursor=c2, hist_cont=false;
+						calc_cursor_coords(-wpx, -wpx);
+					}
 					if(!keyboard[VK_SHIFT])
-						selcur=cursor, sel_rect=false;
-					cursor_teleport();
+						selcur=cursor, scx=ccx, scy=ccy, sel_rect=false;
+					wnd_to_cursor=true;
 				}
 				return true;
 			case VK_END:
 				{
 					int c2=find_line_end(cursor);
 					if(cursor!=c2)
+					{
 						cursor=c2, hist_cont=false;
+						calc_cursor_coords(-wpx, -wpx);
+					}
 					if(!keyboard[VK_SHIFT])
-						selcur=cursor, sel_rect=false;
-					cursor_teleport();
+						selcur=cursor, scx=ccx, scy=ccy, sel_rect=false;
+					wnd_to_cursor=true;
 				}
 				return true;
 			case VK_ESCAPE://deselect
-				selcur=cursor, sel_rect=false;
-				cursor_teleport();
+				selcur=cursor, scx=ccx, scy=ccy, sel_rect=false;
+				wnd_to_cursor=true;
 				return true;
 			case VK_F1:
 				display_help();
