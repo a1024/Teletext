@@ -146,6 +146,8 @@ bool				save_text_file(const wchar_t *filename, std::string &str);
 int					ask_to_save();
 void				mouse_capture();
 void				mouse_release();
+void				update_key_state(char key);
+void				update_main_key_states();
 void				update_screen();
 
 //OpenGL

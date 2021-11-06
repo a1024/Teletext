@@ -691,6 +691,16 @@ void				mouse_release()
 {
 	int success=ReleaseCapture();	SYS_ASSERT(success);
 }
+void				update_key_state(char key)
+{
+	keyboard[key]=(GetAsyncKeyState(key)>>15)!=0;
+}
+void				update_main_key_states()
+{
+	update_key_state(VK_MENU);
+	update_key_state(VK_SHIFT);
+	update_key_state(VK_CONTROL);
+}
 
 #if 0
 static void			font_change(int font_idx, int size)
@@ -823,12 +833,14 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 		if(wnd_on_input(hWnd, message, wParam, lParam))
 			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[wParam]=true;
+		update_main_key_states();
 		break;
 	case WM_KEYUP:
 	case WM_SYSKEYUP:
 		if(wnd_on_input(hWnd, message, wParam, lParam))
 			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[wParam]=false;
+		update_main_key_states();
 		break;
 
 	case WM_CLOSE:
