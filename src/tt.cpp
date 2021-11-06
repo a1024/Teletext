@@ -456,11 +456,14 @@ enum				DragType
 DragType			drag;
 struct				Range
 {
-	unsigned i, f;
-	Range():i(-1), f(0){}
-	Range(unsigned i, unsigned f):i(i), f(f){}
-	void set(unsigned p, int &extent)
+	unsigned
+		linestart,//absolute index
+		i, f;//offsets from linestart
+	Range():linestart(0), i(-1), f(0){}
+	Range(unsigned linestart, unsigned i, unsigned f):linestart(linestart), i(i), f(f){}
+	void set(unsigned linestart, unsigned p, int &extent)
 	{
+		this->linestart=linestart;
 		if(i>p)
 			i=p;
 		if(f<p)
@@ -678,6 +681,17 @@ void				cursor_teleport()//preset the cursor or (ccx, ccy) before calling, to sc
 }
 #endif
 
+inline int			find_line_start(int i)
+{
+	i-=text[i]=='\n';
+	for(;i>=0&&text[i]!='\n';--i);
+	return i+1;
+}
+inline int			find_line_end(int i)
+{
+	for(;i<(int)text.size()&&text[i]!='\n';++i);
+	return i;
+}
 void				hist_undo()//ctrl z
 {
 	if(histpos<0)
@@ -872,24 +886,35 @@ int					calc_ranges(Ranges &ranges)
 	else
 		ry1=ccy, ry2=scy;
 	ranges.resize(ry2+1-ry1);
-	int linelen=0, lineno=0, r_idx=0, k=0, extent=0;
+	int linestart=0, linelen=0, lineno=0, r_idx=0, k=0, extent=0;
+	Range *r=nullptr;
 	for(;k<(int)text.size();++k)
 	{
-		if(lineno>=ry1&&lineno<=ry2&&linelen>=rx1&&linelen<rx2+(rx1==rx2))
-			ranges[r_idx].set(k, extent);
+		if(lineno>=ry1&&lineno<=ry2&&linelen>=rx1&&linelen<=rx2)
+		//if(lineno>=ry1&&lineno<=ry2&&linelen>=rx1&&linelen<rx2+(rx1==rx2))
+			ranges[r_idx].set(linestart, k-linestart, extent);
 		if(text[k]=='\n')
 		{
 			if(lineno>=ry1&&lineno<=ry2)
+			{
+				r=ranges.data()+r_idx;
+				if(r->i==-1)
+					r->linestart=linestart, r->i=rx1, r->f=rx2;
 				++r_idx;
-			linelen=0, ++lineno;
+			}
+			linestart=k+1, linelen=0, ++lineno;
 		}
 		else if(text[k]=='\t')
 			linelen+=tab_count-mod(-wpx+linelen-(-wpx), tab_count);
 		else
 			++linelen;
 	}
-	if(lineno>=ry1&&lineno<=ry2&&linelen>=rx1&&linelen<rx2+(rx1==rx2))
-		ranges[r_idx].set(k, extent);
+	if(lineno>=ry1&&lineno<=ry2&&linelen>=rx1&&linelen<=rx2)
+	//if(lineno>=ry1&&lineno<=ry2&&linelen>=rx1&&linelen<rx2+(rx1==rx2))
+		ranges[r_idx].set(linestart, k-linestart, extent);
+	r=ranges.data()+r_idx;
+	if(r->i==-1)
+		r->linestart=linestart, r->i=rx1, r->f=rx2;
 	return extent;
 }
 void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are updated
@@ -897,43 +922,81 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 	set_modified();
 	history.resize(histpos+1);
 	ActionData data;
-	bool erased=false;
-	for(int k=ranges.size()-1;k>=0;--k)				//first erase selection
+	bool changed=false;
+	for(int k=ranges.size()-1;k>=0;--k)				//1) pad selection
 	{
 		auto &range=ranges[k];
 		if(range.i<range.f)
 		{
-			erased=true;
-			data.push_back(ActionFragment(range.i, text.c_str()+range.i, range.f-range.i));
-			//history.push_back(History(ACTION_ERASE_RECT_SELECTION, range.i, text.c_str()+range.i, range.f-range.i));
-			text.erase(text.begin()+range.i, text.begin()+range.f);
-			for(int k2=k+1;k2<(int)ranges.size();++k2)//update previous ranges
+			int lineend=find_line_end(range.linestart);
+			if(lineend<=range.linestart+range.i)//line ends before selection - pad this line
 			{
-				auto &r2=ranges[k2];
-				r2.i-=range.f-range.i;
-				r2.f=r2.i;
+				changed=true;
+				int delta=range.linestart+range.i-lineend;
+				text.insert(text.begin()+lineend, delta, ' ');
+				data.push_back(ActionFragment(lineend, text.c_str()+lineend, delta));
+				for(int k2=k+1;k2<ranges.size();++k2)
+					ranges[k2].linestart+=delta;
 			}
+			//else if(lineend>range.linestart+range.f)//line ends after selection - no pad necessary
+			//{
+			//}
+			//else//line ends inside selection - no pad necessary
+			//{
+			//}
+		}
+	}
+	if(changed)
+	{
+		history.push_back(History(ACTION_INSERT_RECT, std::move(data)));
+		++histpos;
+	}
+	changed=false;
+	for(int k=ranges.size()-1;k>=0;--k)				//2) erase selection
+	{
+		auto &range=ranges[k];
+		int lineend=find_line_end(range.linestart);
+		if(range.i<range.f)
+		{
+			int lineend=find_line_end(range.linestart), delta=0;
+			//if(lineend<=range.linestart+range.i)//unreachable
+			//{
+			//}
+			//else
+			if(lineend>range.linestart+range.f)//erase [i, f[
+			{
+				changed=true;
+				delta=range.f-range.i;
+				data.push_back(ActionFragment(range.linestart+range.i, text.c_str()+range.linestart+range.i, delta));
+				text.erase(text.begin()+range.linestart+range.i, text.begin()+range.linestart+range.f);
+			}
+			else if(range.linestart+range.i<lineend&&lineend<range.linestart+range.f)//erase [i, lineend[
+			{
+				changed=true;
+				delta=lineend-(range.linestart+range.i);
+				data.push_back(ActionFragment(range.linestart+range.i, text.c_str()+range.linestart+range.i, delta));
+				text.erase(text.begin()+range.linestart+range.i, text.begin()+lineend);
+			}
+			if(delta)
+				for(int k2=k+1;k2<(int)ranges.size();++k2)//update previous ranges
+					ranges[k2].linestart-=delta;
 			range.f=range.i;
 		}
 	}
-	if(erased)
+	if(changed)
 	{
 		history.push_back(History(ACTION_ERASE_RECT_SELECTION, std::move(data)));
 		++histpos;
 	}
-	else
-		data.clear();
 
 	if(len>0)
 	{
-		for(int k=0;k<(int)ranges.size();++k)		//then insert text
+		for(int k=0;k<(int)ranges.size();++k)		//3) insert text
 		{
 			auto &range=ranges[k];
-			text.insert(text.begin()+range.i, a, a+len);
+			text.insert(text.begin()+range.linestart+range.i, a, a+len);
 			
-			data.push_back(ActionFragment(range.i, a, len));
-			//history.push_back(History(ACTION_INSERT_RECT, range.i, text.c_str()+range.i, len));
-			//++histpos;
+			data.push_back(ActionFragment(range.linestart+range.i, a, len));
 			for(int k2=k+1;k2<(int)ranges.size();++k2)//update next ranges
 			{
 				auto &r2=ranges[k2];
@@ -1097,17 +1160,6 @@ void				text_erase1_del(int i)
 	//++total_action_count;
 }
 
-inline int			find_line_start(int i)
-{
-	i-=text[i]=='\n';
-	for(;i>=0&&text[i]!='\n';--i);
-	return i+1;
-}
-inline int			find_line_end(int i)
-{
-	for(;i<(int)text.size()&&text[i]!='\n';++i);
-	return i;
-}
 char				group_char(char c)
 {
 	if(c>='0'&&c<='9'||c=='.')
@@ -1141,10 +1193,10 @@ void				cursor_at_mouse()//sets cursor, ccx & ccy
 	//inv_calc_width(0, 0, text.c_str()+cursor, text.size()-cursor, 0, font_zoom, wpx+mx, &ccx, &d_idx);
 	cursor+=d_idx;
 }
-bool				cursor_at_mouse_rect(int &xpos, int &ypos)//sets ccx & ccy
+bool				cursor_at_mouse_rect(int &xpos, int &ypos)//sets ccx & ccy dummies
 {
-	int dypx=dy*font_zoom, ypos0=(wpy+my)/dypx;
-	int idx=0, ypos2=0;
+	int dypx=dy*font_zoom, dxpx=dx*font_zoom,
+		ypos0=(wpy+my)/dypx, idx=0, ypos2=0;
 	if(ypos0>0)
 	{
 		for(int k=0;k<(int)text.size();++k)
@@ -1157,9 +1209,12 @@ bool				cursor_at_mouse_rect(int &xpos, int &ypos)//sets ccx & ccy
 			}
 		}
 	}
-	inv_calc_width(0, 0, text.c_str()+idx, text.size()-idx, 0, font_zoom, wpx+mx+(dx*font_zoom>>1), &ccx, nullptr);
-	//inv_calc_width(0, 0, text.c_str()+idx, text.size()-idx, 0, font_zoom, wpx+mx, &ccx, nullptr);
-	//idx+=ccx;
+	inv_calc_width(0, 0, text.c_str()+idx, text.size()-idx, 0, font_zoom, wpx+mx+(dxpx>>1), &xpos, nullptr);
+	int xpos2=(wpx+mx+(dxpx>>1))/dxpx;
+	if(xpos<xpos2)
+		xpos=xpos2;
+	//inv_calc_width(0, 0, text.c_str()+idx, text.size()-idx, 0, font_zoom, wpx+mx, &xpos, nullptr);
+	//idx+=xpos;
 
 /*	int ypos2=(wpy+my)/(dy*font_zoom);
 	int dxpx=dx*font_zoom;
