@@ -43,7 +43,7 @@ void				display_help()
 		"\n"
 		"Shift+Arrows/Home/End:\tSelect\n"
 		"Ctrl+A:\t\t\tSelect all\n"
-		"Ctrl+Drag:\t\t\tRectangular selection\n"
+		"Alt+Drag:\t\t\tRectangular selection\n"
 		"Shift+Drag:\t\tResize selection\n"
 		"Ctrl+Shift+Left/Right:\tSelect words\n"
 		"Escape:\t\t\tDeselect");
@@ -238,6 +238,8 @@ int					calc_width(short x, short y, const char *msg, int msg_length, short tab_
 	for(int k=0;k<msg_length;++k)
 	{
 		char c=msg[k];
+		//if(c=='\n')
+		//	break;
 		if(c=='\t')
 			width=tab_width-(x+msg_width-tab_origin)%tab_width, c=' ';
 		else if(c>=32&&c<0xFF)
@@ -281,7 +283,7 @@ int					inv_calc_width(short x, short y, const char *msg, int msg_length, short 
 	}
 	return k;
 }
-void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int msg_length, short tab_origin_chars, int kcursor, int &cwidth, int &cheight, int &cx, int &cy)
+void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int msg_length, short tab_origin_chars, int &cwidth, int &cheight, int kcursor, int &cx, int &cy, int kselcur, int &sx, int &sy)
 {
 	cheight=1, cwidth=0;
 	int k=0, linelen=0;
@@ -289,6 +291,8 @@ void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int
 	{
 		if(k==kcursor)
 			cx=linelen, cy=cheight-1;
+		if(k==kselcur)
+			sx=linelen, sy=cheight-1;
 		if(msg[k]=='\t')
 			linelen+=tab_count-(x_chars+linelen-tab_origin_chars)%tab_count;
 		else if(msg[k]=='\n')
@@ -304,6 +308,8 @@ void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int
 		cwidth=linelen;
 	if(k==kcursor)
 		cx=linelen, cy=cheight-1;
+	if(k==kselcur)
+		sx=linelen, sy=cheight-1;
 }
 int					print_line(short x, short y, const char *msg, int msg_length, short tab_origin, short zoom)
 {
@@ -360,6 +366,55 @@ int					print(short zoom, short tab_origin, short x, short y, const char *format
 	va_end(args);
 	return print_line(x, y, g_buf, len, tab_origin, zoom);
 };
+int					print_line_rect(short x, short y, const char *msg, int msg_length, short tab_origin, short zoom, short nchars, int &nconsumed)
+{
+	if(msg_length<1)
+		return 0;
+	float rect[4]={};
+	QuadCoords *txc=nullptr;
+	int msg_width=0, width, idx, printable_count=0, tab_width=tab_count*dx*zoom, w2=dx*zoom, height=dy*zoom, k2=0;
+	char overflow=false;
+	vrtx.resize(msg_length<<4);//vx, vy, txx, txy		x4 vertices/char
+	for(int k=0, k3=0;k3<nchars;++k)
+	{
+		char c;
+		if(overflow||k>=msg_length||msg[k]=='\n')
+			c=' ', overflow=true;
+		else
+			c=msg[k], ++k2;
+		if(c=='\t')
+			width=tab_width-mod(x+msg_width-tab_origin, tab_width), c=' ', k3+=width/w2;
+		else if(c>=32&&c<0xFF)
+			width=w2, ++k3;
+		else
+			width=0, ++k3;
+		if(width)
+		{
+			toNDC_nobias(float(x+msg_width		), float(y			), rect[0], rect[1]);
+			toNDC_nobias(float(x+msg_width+width), float(y+height	), rect[2], rect[3]);//y2<y1
+			idx=k<<4;
+			txc=font_coords+c-32;
+			vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
+			vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
+			vrtx[idx+ 8]=rect[2], vrtx[idx+ 9]=rect[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
+			vrtx[idx+12]=rect[2], vrtx[idx+13]=rect[1],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
+
+			msg_width+=width;
+			++printable_count;
+		}
+	}
+	setGLProgram(shader_text.program);
+	select_texture(font_txid, ns_text::u_atlas);
+	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);								GL_CHECK();
+	glBufferData(GL_ARRAY_BUFFER, msg_length<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
+	glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);		GL_CHECK();
+
+	glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+	glDrawArrays(GL_QUADS, 0, msg_length<<2);		GL_CHECK();//draw the quads: 4 vertices per character quad
+	glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+	nconsumed=k2;
+	return msg_width;
+}
 
 //U64				colors_text=0xFFABABABFF000000;//black on white
 U64					colors_text=0xFF000000FFABABAB;//dark mode
@@ -368,10 +423,11 @@ int					color_cursorlinebk=0xFF202020;
 U64					colors_cursorline=(u64)color_cursorlinebk<<32|0xFFABABAB;
 short				font_zoom=1;//font pixel size
 int					ccx=0, ccy=0,//cursor coordinates in characters
+					scx=0, scy=0,//selcur coordinates in characters
 					wpx=0, wpy=0,//window position in pixels
 					nlines=1, text_width=0,//in characters
 					cursor=0, selcur=0;
-bool				vertical_mode=false;
+bool				sel_rect=false;
 //struct			TextFile
 //{
 //	std::string filename, text;
@@ -389,6 +445,7 @@ enum				DragType
 	DRAG_SELECT,
 	DRAG_VSCROLL,
 	DRAG_HSCROLL,
+	DRAG_RECT,
 };
 DragType			drag;
 //void				insert(char c)
@@ -492,6 +549,7 @@ void				hist_undo()//ctrl z
 		text.insert(text.begin()+h.idx, h.data.begin(), h.data.end());
 		selcur=h.idx, cursor=h.idx+h.data.size();
 	}
+	sel_rect=false;
 	--histpos;
 	if(histpos<0)
 		clear_modified();
@@ -516,6 +574,7 @@ void				hist_redo()//ctrl y
 		text.erase(text.begin()+h.idx, text.begin()+h.idx+h.data.size());
 		cursor=selcur=h.idx;
 	}
+	sel_rect=false;
 
 	set_modified();//
 	hist_cont=false;
@@ -539,7 +598,7 @@ void				text_replace(int i, int f, const char *a, int len)
 	histpos+=2;
 	
 	hist_cont=false;
-	cursor=selcur=i+len;
+	cursor=selcur=i+len;//, sel_rect=false;
 	cursor_teleport();
 }
 void				text_insert(int i, const char *a, int len)
@@ -552,7 +611,7 @@ void				text_insert(int i, const char *a, int len)
 	history.push_back(History(M_INSERT, i, text.c_str()+i, len));
 
 	hist_cont=false;
-	cursor=selcur=i+len;
+	cursor=selcur=i+len;//, sel_rect=false;
 	cursor_teleport();
 }
 void				text_erase(int i, int f)
@@ -565,7 +624,7 @@ void				text_erase(int i, int f)
 	text.erase(text.begin()+i, text.begin()+f);
 
 	hist_cont=false;
-	cursor=selcur=i;
+	cursor=selcur=i;//, sel_rect=false;
 	cursor_teleport();
 }
 void				text_insert1(int i, char c)
@@ -583,7 +642,7 @@ void				text_insert1(int i, char c)
 		history[histpos].data.push_back(c);
 
 	hist_cont=true;
-	cursor=selcur=i+1;
+	cursor=selcur=i+1;//, sel_rect=false;
 	cursor_teleport();
 }
 void				text_erase1_bksp(int i)
@@ -606,7 +665,7 @@ void				text_erase1_bksp(int i)
 	text.erase(text.begin()+i-1);
 
 	hist_cont=true;
-	cursor=selcur=i-1;
+	cursor=selcur=i-1;//, sel_rect=false;
 	cursor_teleport();
 }
 void				text_erase1_del(int i)
@@ -626,7 +685,7 @@ void				text_erase1_del(int i)
 	text.erase(text.begin()+i);
 	
 	hist_cont=true;
-	cursor=selcur=i;
+	cursor=selcur=i;//, sel_rect=false;
 	cursor_teleport();
 }
 
@@ -717,7 +776,7 @@ void				scrollbar_scroll(int &winpos_ip, int imsize_ip, int winsize, int barsize
 		sliderstart=barsize-slidersize;
 	winpos_ip=int((imsize_ip+2-winsize_ip)*sliderstart/(barsize-slidersize));
 }
-void			draw_vscrollbar(int x, int sbwidth, int y1, int y2, int &winpos, int content_h, int vscroll_s0, int vscroll_my_start, double zoom, short &vscroll_start, short &vscroll_size, int dragtype)//vertical scrollbar
+void				draw_vscrollbar(int x, int sbwidth, int y1, int y2, int &winpos, int content_h, int vscroll_s0, int vscroll_my_start, double zoom, short &vscroll_start, short &vscroll_size, int dragtype)//vertical scrollbar
 {
 //	const int scrollbarwidth=17;
 	draw_rectangle(x, x+sbwidth, y1, y1+sbwidth, color_button);//up
@@ -735,9 +794,13 @@ void			draw_vscrollbar(int x, int sbwidth, int y1, int y2, int &winpos, int cont
 inline void			lbutton_down_text()
 {
 	cursor_at_mouse();
+	//if(keyboard[VK_CONTROL])
+	if(sel_rect=keyboard[VK_MENU])
+		drag=DRAG_RECT;
+	else
+		drag=DRAG_SELECT;
 	if(!keyboard[VK_SHIFT])
 		selcur=cursor;
-	drag=DRAG_SELECT;
 }
 
 void				copy_to_clipboard(std::string const &str){copy_to_clipboard(str.c_str(), str.size());}
@@ -811,7 +874,7 @@ void				wnd_on_render()
 	//calculate text dimensions & cursor coordinates
 	auto arr=text.c_str();
 	int textlen=text.size();
-	calc_dimensions_chars(0, 0, arr, textlen, 0, cursor, text_width, nlines, ccx, ccy);
+	calc_dimensions_chars(0, 0, arr, textlen, 0, text_width, nlines, cursor, ccx, ccy, selcur, scx, scy);
 	int dxpx=dx*font_zoom, dypx=dy*font_zoom;
 	int iw=text_width*dxpx, ih=nlines*dypx;
 	
@@ -842,7 +905,85 @@ void				wnd_on_render()
 
 	int cpx=ccx*dxpx, cpy=ccy*dypx;
 	int y=0;
-	if(cursor==selcur)
+	if(sel_rect)
+	{
+		int rx1, rx2, ry1, ry2;//rect coordinates in characters
+		if(scx<ccx)
+			rx1=scx, rx2=ccx;
+		else
+			rx1=ccx, rx2=scx;
+		if(scy<ccy)
+			ry1=scy, ry2=ccy;
+		else
+			ry1=ccy, ry2=scy;
+		int px1=rx1*dxpx, px2=rx2*dxpx, py1=ry1*dypx, py2=ry2*dypx;
+		//draw_rectangle(px1-wpx, px2-wpx, py1-wpy, py2+dypx-wpy, colors_selection.hi);
+		for(int start=0, line_start=0, lineno=0, x=0, k=0;;++k)
+		{
+			if(lineno>=ry1&&lineno<=ry2)
+			{
+				int ypos=y-wpy;
+				k=start+inv_calc_width(x-wpx, ypos, arr+start, textlen-start, -wpx, font_zoom, px1);
+				if(ypos>-dxpx&&ypos<h+dxpx)
+					x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
+				if(k<textlen&&text[k]=='\n')
+					start=k+1, x=0, y+=dypx, line_start=start=k+1, ++lineno;
+				else
+				{
+					start=k;
+					if(k>=textlen)
+						break;
+					set_text_colors(colors_selection);
+					k=start+inv_calc_width(x-wpx, ypos, arr+start, textlen-start, -wpx, font_zoom, px2-px1);
+					int nconsumed=0;
+					if(ypos>-dxpx&&ypos<h+dxpx)
+						x+=print_line_rect(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom, rx2-rx1, nconsumed);
+					start+=nconsumed, k=start;
+					//for(;;++k)
+					//{
+					//	if(k>=textlen||text[k]=='\n'||k-line_start==rx2)
+					//	{
+					//		int nconsumed=0;
+					//		if(ypos>-dxpx&&ypos<h+dxpx)
+					//			x+=print_line_rect(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom, rx2-rx1, nconsumed);
+					//		start+=nconsumed, k=start;
+					//		break;
+					//	}
+					//}
+					set_text_colors(colors_text);
+
+					if(k>=textlen)
+						break;
+					if(text[k]!='\n')
+					{
+						k=find_line_end(k);
+						//if(k>=textlen)
+						//	break;
+						//++k;
+						//continue;
+						int ypos=y-wpy;
+						if(ypos>-dxpx&&ypos<h+dxpx)
+							x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
+						if(k>=textlen)
+							break;
+					}
+					x=0, y+=dypx, line_start=start=k+1, ++lineno;
+				}
+			}
+			else if(k>=textlen||text[k]=='\n')
+			{
+				int ypos=y-wpy;
+				if(ypos>-dxpx&&ypos<h+dxpx)
+					x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
+				y+=dypx;
+				if(k>=textlen)
+					break;
+				x=0, line_start=start=k+1, ++lineno;
+			}
+		}
+		draw_line_i(cpx-wpx, py1-wpy, cpx-wpx, py2+dypx-wpy, 0xFFFFFFFF);//draw cursor
+	}
+	else if(cursor==selcur)
 	{
 		draw_rectangle(0, w, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
 		for(int start=0, line_start=0, lineno=0, x=0, k=0;;++k)
@@ -866,6 +1007,7 @@ void				wnd_on_render()
 				++lineno;
 			}
 		}
+		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
 	}
 	else
 	{
@@ -904,8 +1046,8 @@ void				wnd_on_render()
 				x=0;
 			}
 		}
+		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
 	}
-	draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
 	prof_add("text");
 
 	//draw possible scrollbars
@@ -960,6 +1102,11 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 		switch(drag)
 		{
 		case DRAG_SELECT:
+		case DRAG_RECT:
+			if(sel_rect=keyboard[VK_MENU])
+				drag=DRAG_RECT;
+			else
+				drag=DRAG_SELECT;
 			cursor_at_mouse();
 			return true;
 		case DRAG_VSCROLL:
@@ -1093,7 +1240,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 			case VK_OEM_6:					return false;
 			case 'A':
 				hist_cont=false;
-				selcur=0, cursor=text.size();
+				selcur=0, cursor=text.size(), sel_rect=false;
 				cursor_teleport();
 				break;
 			case 'S'://save
@@ -1215,7 +1362,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					for(;cursor&&group_char(text[cursor-1])==initial;--cursor);
 				}
 				if(!keyboard[VK_SHIFT])
-					selcur=cursor;
+					selcur=cursor, sel_rect=false;
 				cursor_teleport();
 				break;
 			case VK_RIGHT://skip word
@@ -1227,7 +1374,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					for(;cursor<(int)text.size()&&group_char(text[cursor])==initial;++cursor);
 				}
 				if(!keyboard[VK_SHIFT])
-					selcur=cursor;
+					selcur=cursor, sel_rect=false;
 				cursor_teleport();
 				break;
 			case VK_HOME:
@@ -1237,7 +1384,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					cursor=0;
 				}
 				if(!keyboard[VK_SHIFT])
-					selcur=cursor;
+					selcur=cursor, sel_rect=false;
 				cursor_teleport();
 				break;
 			case VK_END:
@@ -1247,7 +1394,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					cursor=text.size();
 				}
 				if(!keyboard[VK_SHIFT])
-					selcur=cursor;
+					selcur=cursor, sel_rect=false;
 				cursor_teleport();
 				break;
 			case VK_ESCAPE:case VK_F1:case VK_F2:case VK_F3:case VK_F4:case VK_F5:case VK_F6:case VK_F7:case VK_F8:case VK_F9:case VK_F10:case VK_F11:case VK_F12:case VK_INSERT:	return false;
@@ -1264,6 +1411,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 			char character=caps_lock!=keyboard[VK_SHIFT];
 			switch(wParam)
 			{
+			case VK_MENU:					return drag==DRAG_SELECT||drag==DRAG_RECT;
 			case VK_CAPITAL:				return false;
 			case VK_NUMLOCK:				return false;
 			case VK_OEM_3:					character=keyboard[VK_SHIFT]	?'~':	'`'	;	break;
@@ -1339,7 +1487,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					else
 						start=cursor, end=selcur;
 					text_erase(start, end);
-					cursor=selcur=start;
+					//cursor=selcur=start, sel_rect=false;
 				}
 				else
 					text_erase1_del(cursor);
@@ -1353,7 +1501,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					else
 						start=cursor, end=selcur;
 					text_erase(start, end);
-					cursor=selcur=start;
+					//cursor=selcur=start, sel_rect=false;
 				}
 				else
 					text_erase1_bksp(cursor);
@@ -1361,7 +1509,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 			case VK_RETURN:					character=						'\n';	break;
 			case VK_UP:
 				if(!keyboard[VK_SHIFT]&&cursor!=selcur)
-					cursor=selcur=minimum(cursor, selcur);
+					cursor=selcur=minimum(cursor, selcur), sel_rect=false;
 				else
 				{
 					hist_cont=false;
@@ -1375,13 +1523,13 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						cursor=s0+inv_calc_width(0, 0, text.c_str()+s0, text.size()-s0, 0, font_zoom, width);
 					}
 					if(!keyboard[VK_SHIFT])
-						selcur=cursor;
+						selcur=cursor, sel_rect=false;
 				}
 				cursor_teleport();
 				return true;
 			case VK_DOWN:
 				if(!keyboard[VK_SHIFT]&&cursor!=selcur)
-					cursor=selcur=maximum(cursor, selcur);
+					cursor=selcur=maximum(cursor, selcur), sel_rect=false;
 				else
 				{
 					hist_cont=false;
@@ -1396,13 +1544,13 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						cursor=s2+inv_calc_width(0, 0, text.c_str()+s2, text.size()-s2, 0, font_zoom, width);
 					}
 					if(!keyboard[VK_SHIFT])
-						selcur=cursor;
+						selcur=cursor, sel_rect=false;
 				}
 				cursor_teleport();
 				return true;
 			case VK_LEFT:
 				if(!keyboard[VK_SHIFT]&&cursor!=selcur)
-					cursor=selcur=minimum(cursor, selcur);
+					cursor=selcur=minimum(cursor, selcur), sel_rect=false;
 				else
 				{
 					if(cursor>0)
@@ -1411,13 +1559,13 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						--cursor;
 					}
 					if(!keyboard[VK_SHIFT])
-						selcur=cursor;
+						selcur=cursor, sel_rect=false;
 				}
 				cursor_teleport();
 				return true;
 			case VK_RIGHT:
 				if(!keyboard[VK_SHIFT]&&cursor!=selcur)
-					cursor=selcur=maximum(cursor, selcur);
+					cursor=selcur=maximum(cursor, selcur), sel_rect=false;
 				else
 				{
 					if(cursor<(int)text.size())
@@ -1426,7 +1574,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						++cursor;
 					}
 					if(!keyboard[VK_SHIFT])
-						selcur=cursor;
+						selcur=cursor, sel_rect=false;
 				}
 				cursor_teleport();
 				return true;
@@ -1436,7 +1584,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					if(cursor!=c2)
 						cursor=c2, hist_cont=false;
 					if(!keyboard[VK_SHIFT])
-						selcur=cursor;
+						selcur=cursor, sel_rect=false;
 					cursor_teleport();
 				}
 				return true;
@@ -1446,12 +1594,12 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					if(cursor!=c2)
 						cursor=c2, hist_cont=false;
 					if(!keyboard[VK_SHIFT])
-						selcur=cursor;
+						selcur=cursor, sel_rect=false;
 					cursor_teleport();
 				}
 				return true;
 			case VK_ESCAPE://deselect
-				selcur=cursor;
+				selcur=cursor, sel_rect=false;
 				cursor_teleport();
 				return true;
 			case VK_F1:
@@ -1478,7 +1626,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 				else
 					start=cursor, end=selcur;
 				text_replace(start, end, &character, 1);
-				cursor=selcur=start;
+				//cursor=selcur=start, sel_rect=false;
 			}
 			else
 				text_insert1(cursor, character);
