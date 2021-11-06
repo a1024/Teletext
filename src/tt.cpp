@@ -40,13 +40,16 @@ void				display_help()
 		"Ctrl+Up/Down:\tScroll\n"
 		"Ctrl+Left/Right:\tSkip word\n"
 	//	"Ctrl+F:\t\tFind\n"//TODO
+	//	"Ctrl+R:\t\tReplace\n"
 		"\n"
 		"Shift+Arrows/Home/End:\tSelect\n"
 		"Ctrl+A:\t\t\tSelect all\n"
 		"Alt+Drag:\t\t\tRectangular selection\n"
 		"Shift+Drag:\t\tResize selection\n"
 		"Ctrl+Shift+Left/Right:\tSelect words\n"
-		"Escape:\t\t\tDeselect");
+		"Escape:\t\t\tDeselect\n"
+		"\n"
+		"F4:\tToggle benchmark");
 }
 
 void				copy_to_clipboard(std::string const &str){copy_to_clipboard(str.c_str(), str.size());}
@@ -457,10 +460,11 @@ DragType			drag;
 struct				Range
 {
 	unsigned
-		linestart,//absolute index
+		linestart, lineend,//absolute index
+		linecols,//line width in character units
 		i, f;//offsets from linestart
-	Range():linestart(0), i(-1), f(0){}
-	Range(unsigned linestart, unsigned i, unsigned f):linestart(linestart), i(i), f(f){}
+	Range():linestart(0), lineend(0), linecols(0), i(-1), f(0){}
+	//Range(unsigned linestart, unsigned i, unsigned f):linestart(linestart), i(i), f(f){}
 	void set(unsigned linestart, unsigned p, int &extent)
 	{
 		this->linestart=linestart;
@@ -521,15 +525,11 @@ struct				History
 	History():type(ACTION_UNINITIALIZED), scx0(0), ccx0(0), scy0(0), ccy0(0){}
 	History(History const &h):type(h.type), data(h.data), scx0(h.scx0), ccx0(h.ccx0), scy0(h.scy0), ccy0(h.ccy0){}
 	History(History &&h):type(h.type), data((ActionData&&)h.data), scx0(h.scx0), ccx0(h.ccx0), scy0(h.scy0), ccy0(h.ccy0){}
-	History(ActionType type, int idx, const char *a, int len):type(type)//normal editing
+	History(ActionType type, int idx, const char *a, int len, int cursor0, int selcur0):type(type), cursor0(cursor0), selcur0(selcur0), z_unused0(0), z_unused1(0)//normal editing
 	{
-		cursor0=cursor, selcur0=selcur, z_unused0=0, z_unused1=0;
 		data.push_back(ActionFragment(idx, a, len));
 	}
-	History(ActionType type, ActionData &&data):type(type), data((ActionData&&)data)//rectangular editing
-	{
-		scx0=scx, ccx0=ccx, scy0=scy, ccy0=ccy;
-	}
+	History(ActionType type, ActionData &&data, int scx0, int ccx0, int scy0, int ccy0):type(type), data((ActionData&&)data), scx0(scx0), ccx0(ccx0), scy0(scy0), ccy0(ccy0){}//rectangular editing
 };
 std::vector<History> history;
 int					histpos=-1;//pointing at previous action
@@ -577,55 +577,55 @@ void				calc_cursor_coords(short x_chars, short tab_origin_chars)
 void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int msg_length, short tab_origin_chars, int &cwidth, int &cheight, int kcursor, int &cx, int &cy, int kselcur, int &sx, int &sy)
 {
 	cheight=1, cwidth=0;
-	int k=0, linelen=0;
+	int k=0, linecols=0;
 	for(;k<msg_length;++k)
 	{
 		if(k==kcursor)
-			cx=linelen, cy=cheight-1;
+			cx=linecols, cy=cheight-1;
 		if(k==kselcur)
-			sx=linelen, sy=cheight-1;
+			sx=linecols, sy=cheight-1;
 		//if(k==kcursor)
 		//{
 		//	if(cx)
-		//		*cx=linelen;
+		//		*cx=linecols;
 		//	if(cy)
 		//		*cy=cheight-1;
 		//}
 		//if(k==kselcur)
 		//{
 		//	if(sx)
-		//		*sx=linelen;
+		//		*sx=linecols;
 		//	if(sy)
 		//		*sy=cheight-1;
 		//}
 		if(msg[k]=='\t')
-			linelen+=tab_count-mod(x_chars+linelen-tab_origin_chars, tab_count);
+			linecols+=tab_count-mod(x_chars+linecols-tab_origin_chars, tab_count);
 		else if(msg[k]=='\n')
 		{
-			if(cwidth<linelen)
-				cwidth=linelen;
-			++cheight, linelen=0;
+			if(cwidth<linecols)
+				cwidth=linecols;
+			++cheight, linecols=0;
 		}
 		else
-			++linelen;
+			++linecols;
 	}
-	if(cwidth<linelen)
-		cwidth=linelen;
+	if(cwidth<linecols)
+		cwidth=linecols;
 	if(k==kcursor)
-		cx=linelen, cy=cheight-1;
+		cx=linecols, cy=cheight-1;
 	if(k==kselcur)
-		sx=linelen, sy=cheight-1;
+		sx=linecols, sy=cheight-1;
 	//if(k==kcursor)
 	//{
 	//	if(cx)
-	//		*cx=linelen;
+	//		*cx=linecols;
 	//	if(cy)
 	//		*cy=cheight-1;
 	//}
 	//if(k==kselcur)
 	//{
 	//	if(sx)
-	//		*sx=linelen;
+	//		*sx=linecols;
 	//	if(sy)
 	//		*sy=cheight-1;
 	//}
@@ -793,35 +793,40 @@ int					calc_ranges(Ranges &ranges)
 	else
 		ry1=ccy, ry2=scy;
 	ranges.resize(ry2+1-ry1);
-	int linestart=0, linelen=0, lineno=0, r_idx=0, k=0, extent=0;
+	int linestart=0, linecols=0, lineno=0, r_idx=0, k=0, extent=0;
 	Range *r=nullptr;
 	for(;k<(int)text.size();++k)
 	{
-		if(lineno>=ry1&&lineno<=ry2&&linelen>=rx1&&linelen<=rx2)
-		//if(lineno>=ry1&&lineno<=ry2&&linelen>=rx1&&linelen<rx2+(rx1==rx2))
-			ranges[r_idx].set(linestart, k-linestart, extent);
+		//if(lineno>=ry1&&lineno<=ry2&&linecols>=rx1&&linecols<rx2+(rx1==rx2))
+		if(lineno>=ry1&&lineno<=ry2&&linecols>=rx1&&linecols<=rx2)
+			ranges[r_idx].set(linestart, k-linestart, extent);//i&f are idx! because inside
 		if(text[k]=='\n')
 		{
 			if(lineno>=ry1&&lineno<=ry2)
 			{
 				r=ranges.data()+r_idx;
 				if(r->i==-1)
-					r->linestart=linestart, r->i=rx1, r->f=rx2;
+					r->linestart=linestart, r->i=k-linestart+rx1-linecols, r->f=r->i+rx2-rx1;//always idx						//i&f are cols! because didn't reach selection X
+				r->lineend=k, r->linecols=linecols;
 				++r_idx;
 			}
-			linestart=k+1, linelen=0, ++lineno;
+			linestart=k+1, linecols=0, ++lineno;
 		}
 		else if(text[k]=='\t')
-			linelen+=tab_count-mod(-wpx+linelen-(-wpx), tab_count);
+			linecols+=tab_count-mod(-wpx+linecols-(-wpx), tab_count);
 		else
-			++linelen;
+			++linecols;
 	}
-	if(lineno>=ry1&&lineno<=ry2&&linelen>=rx1&&linelen<=rx2)
-	//if(lineno>=ry1&&lineno<=ry2&&linelen>=rx1&&linelen<rx2+(rx1==rx2))
-		ranges[r_idx].set(linestart, k-linestart, extent);
-	r=ranges.data()+r_idx;
-	if(r->i==-1)
-		r->linestart=linestart, r->i=rx1, r->f=rx2;
+	//if(lineno>=ry1&&lineno<=ry2&&linecols>=rx1&&linecols<rx2+(rx1==rx2))
+	if(lineno>=ry1&&lineno<=ry2)
+	{
+		r=ranges.data()+r_idx;
+		if(linecols>=rx1&&linecols<=rx2)
+			r->set(linestart, k-linestart, extent);
+		if(r->i==-1)
+			r->linestart=linestart, r->i=k-linestart+rx1-linecols, r->f=r->i+rx2-rx1;
+		r->lineend=k, r->linecols=linecols;
+	}
 	return extent;
 }
 void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are updated
@@ -829,92 +834,153 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 	set_modified();
 	history.resize(histpos+1);
 	ActionData data;
-	bool changed=false;
-	for(int k=ranges.size()-1;k>=0;--k)				//1) pad selection
+	bool padded=false, erased=false;
+	for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)	//1) pad selection
 	{
 		auto &range=ranges[k];
-		if(range.i<range.f)
+		range.linestart+=cumulative_delta;
+		range.lineend+=cumulative_delta;
+		//range.lineend=find_line_end(range.linestart);
+		//range.linecols=calc_width(-wpx, -wpy, text.c_str()+range.linestart, range.lineend-range.linestart, -wpx, font_zoom);
+		int linecount=range.lineend-range.linestart;
+		if(linecount<range.i)//line ends before selection - pad this line
+		//if(range.linecols<range.i)
+		//if(range.linecols<range.linestart+range.i)
 		{
-			unsigned lineend=find_line_end(range.linestart);
-			if(lineend<=range.linestart+range.i)//line ends before selection - pad this line
-			{
-				changed=true;
-				int delta=range.linestart+range.i-lineend;
-				text.insert(text.begin()+lineend, delta, ' ');
-				data.push_back(ActionFragment(lineend, text.c_str()+lineend, delta));
-				for(int k2=k+1;k2<(int)ranges.size();++k2)
-					ranges[k2].linestart+=delta;
-			}
-			//else if(lineend>range.linestart+range.f)//line ends after selection - no pad necessary
+			padded=true;
+			int delta=range.i-linecount;
+			//int delta=range.i-range.linecols;
+			//int delta=range.linestart+range.i-range.linecols;
+			text.insert(text.begin()+range.lineend, delta, ' ');
+			data.push_back(ActionFragment(range.lineend, text.c_str()+range.lineend, delta));
+			cumulative_delta+=delta;
+			range.lineend+=delta;
+			//for(int k2=k+1;k2<(int)ranges.size();++k2)//TODO: optimize this loop away
 			//{
-			//}
-			//else//line ends inside selection - no pad necessary
-			//{
+			//	ranges[k2].linestart+=delta;
+			//	ranges[k2].lineend+=delta;
 			//}
 		}
+	//	else if(linecount>=range.f)//line ends after selection - no pad necessary
+	//	{
+	//	}
+	//	else//line ends inside selection - no pad necessary
+	//	{
+	//	}
 	}
-	if(changed)
+	if(padded)
 	{
-		history.push_back(History(ACTION_INSERT_RECT, std::move(data)));
+		history.push_back(History(ACTION_INSERT_RECT, std::move(data), scx, ccx, scy, ccy));
 		++histpos;
 	}
-	changed=false;
-	for(int k=ranges.size()-1;k>=0;--k)				//2) erase selection
+	for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)	//2) erase selection
+	//for(int k=ranges.size()-1, cumulative_delta=0;k>=0;--k)
 	{
 		auto &range=ranges[k];
-		int lineend=find_line_end(range.linestart);
+		range.linestart-=cumulative_delta;
+		range.lineend-=cumulative_delta;
 		if(range.i<range.f)
 		{
-			unsigned lineend=find_line_end(range.linestart), delta=0;
-			//if(lineend<=range.linestart+range.i)//unreachable
+			unsigned linecount=range.lineend-range.linestart, delta=0;
+			//unsigned lineend=find_line_end(range.linestart), delta=0;
+
+			//if(linecount<range.i)//unreachable
 			//{
 			//}
 			//else
-			if(lineend>range.linestart+range.f)//erase [i, f[
+			if(linecount>=range.f)//erase [linestart+i, linestart+f[
 			{
-				changed=true;
+				erased=true;
 				delta=range.f-range.i;
 				data.push_back(ActionFragment(range.linestart+range.i, text.c_str()+range.linestart+range.i, delta));
 				text.erase(text.begin()+range.linestart+range.i, text.begin()+range.linestart+range.f);
 			}
-			else if(range.linestart+range.i<lineend&&lineend<range.linestart+range.f)//erase [i, lineend[
+			else if(range.i<linecount&&linecount<range.f)//erase [linestart+i, lineend[
 			{
-				changed=true;
-				delta=lineend-(range.linestart+range.i);
+				erased=true;
+				delta=linecount-range.i;
 				data.push_back(ActionFragment(range.linestart+range.i, text.c_str()+range.linestart+range.i, delta));
-				text.erase(text.begin()+range.linestart+range.i, text.begin()+lineend);
+				text.erase(text.begin()+range.linestart+range.i, text.begin()+range.lineend);
+
+				//int dummy_width=0, k_out=0;
+				//inv_calc_width(-wpx, -wpy, text.c_str()+range.linestart, range.lineend-range.linestart, -wpx, font_zoom, range.i, &dummy_width, &k_out);
+				//delta=range.lineend-k_out;
+				//data.push_back(ActionFragment(k_out, text.c_str()+k_out, delta));
+				//text.erase(text.begin()+k_out, text.begin()+range.lineend);
+
+				//delta=range.lineend-(range.linestart+range.i);//X
+				//data.push_back(ActionFragment(range.linestart+range.i, text.c_str()+range.linestart+range.i, delta));
+				//text.erase(text.begin()+range.linestart+range.i, text.begin()+range.lineend);
 			}
-			if(delta)
-				for(int k2=k+1;k2<(int)ranges.size();++k2)//update previous ranges
-					ranges[k2].linestart-=delta;
+			cumulative_delta+=delta;
+			range.lineend-=delta;
+			//if(delta)
+			//{
+			//	for(int k2=k+1;k2<(int)ranges.size();++k2)//update previous ranges
+			//	{
+			//		ranges[k2].linestart-=delta;
+			//		ranges[k2].lineend-=delta;
+			//	}
+			//}
 			range.f=range.i;
 		}
 	}
-	if(changed)
+	if(erased)
 	{
-		history.push_back(History(ACTION_ERASE_RECT_SELECTION, std::move(data)));
+		history.push_back(History(ACTION_ERASE_RECT_SELECTION, std::move(data), scx, ccx, scy, ccy));
 		++histpos;
 	}
-
-	if(len>0)
+	
+	ccx=scx=minimum(ccx, scx);
+	if(len>0)													//3) insert text
 	{
-		for(int k=0;k<(int)ranges.size();++k)		//3) insert text
+		if(padded||erased||!hist_cont||histpos<0||history[histpos].type!=ACTION_INSERT_RECT||history[histpos].data.size()!=ranges.size())
 		{
-			auto &range=ranges[k];
-			text.insert(text.begin()+range.linestart+range.i, a, a+len);
-			
-			data.push_back(ActionFragment(range.linestart+range.i, a, len));
-			for(int k2=k+1;k2<(int)ranges.size();++k2)//update next ranges
+			for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
 			{
-				auto &r2=ranges[k2];
-				r2.i+=len;
-				r2.f=r2.i;
+				auto &range=ranges[k];
+				range.linestart+=cumulative_delta;
+				text.insert(text.begin()+range.linestart+range.i, a, a+len);
+
+				data.push_back(ActionFragment(range.linestart+range.i, a, len));
+				//for(int k2=k+1;k2<(int)ranges.size();++k2)//update next ranges
+				//{
+				//	auto &r2=ranges[k2];
+				//	r2.i+=len;
+				//	r2.f=r2.i;
+				//}
+				cumulative_delta+=len;
+				range.lineend+=cumulative_delta;
+			}
+			history.push_back(History(ACTION_INSERT_RECT, std::move(data), scx, ccx, scy, ccy));
+			++histpos;
+		}
+		else
+		{
+			auto &h=history[histpos];
+			for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
+			{
+				auto &range=ranges[k];
+				range.linestart+=cumulative_delta;
+				h.data[k].idx+=cumulative_delta;
+				text.insert(text.begin()+range.linestart+range.i, a, a+len);
+
+				auto &dk=h.data[k];
+				dk.str.insert(dk.str.end(), a, a+len);
+				//for(int k2=k+1;k2<(int)ranges.size();++k2)//update next ranges
+				//{
+				//	auto &r2=ranges[k2];
+				//	r2.i+=len;
+				//	r2.f=r2.i;
+				//	h.data[k2].idx+=len;
+				//}
+				cumulative_delta+=len;
+				range.lineend+=cumulative_delta;
 			}
 		}
-		history.push_back(History(ACTION_INSERT_RECT, std::move(data)));
-		++histpos;
+		ccx=scx+=len;
 	}
-	ccx=scx=minimum(ccx, scx)+len;
+	hist_cont=true;
 	dimensions_known=false;
 	wnd_to_cursor=true;
 }
@@ -922,11 +988,11 @@ void				text_replace(int i, int f, const char *a, int len)
 {
 	set_modified();
 	history.resize(histpos+1);
-	history.push_back(History(ACTION_ERASE_SELECTION, i, text.c_str()+i, f-i));
+	history.push_back(History(ACTION_ERASE_SELECTION, i, text.c_str()+i, f-i, cursor, selcur));
 
 	text.replace(text.begin()+i, text.begin()+f, a, a+len);
 
-	history.push_back(History(ACTION_INSERT, i, text.c_str()+i, len));
+	history.push_back(History(ACTION_INSERT, i, text.c_str()+i, len, i, i));
 	histpos+=2;
 	
 	cursor=selcur=i+len;
@@ -943,7 +1009,7 @@ void				text_insert(int i, const char *a, int len)
 
 	++histpos;
 	history.resize(histpos);
-	history.push_back(History(ACTION_INSERT, i, text.c_str()+i, len));
+	history.push_back(History(ACTION_INSERT, i, text.c_str()+i, len, cursor, selcur));
 
 	cursor=selcur=i+len;
 	calc_cursor_coords(-wpx, -wpx);
@@ -957,7 +1023,7 @@ void				text_erase(int i, int f)
 	set_modified();
 	++histpos;
 	history.resize(histpos);
-	history.push_back(History(f-i>2?ACTION_ERASE_SELECTION:ACTION_ERASE, i, text.c_str()+i, f-i));
+	history.push_back(History(f-i>2?ACTION_ERASE_SELECTION:ACTION_ERASE, i, text.c_str()+i, f-i, cursor, selcur));
 
 	text.erase(text.begin()+i, text.begin()+f);
 
@@ -973,11 +1039,11 @@ void				text_insert1(int i, char c)
 	set_modified();
 	text.insert(text.begin()+i, c);
 
-	if(!hist_cont||c=='\n'||histpos<0||history[histpos].type==ACTION_ERASE||history[histpos].type==ACTION_ERASE_SELECTION)
+	if(!hist_cont||c=='\n'||histpos<0||history[histpos].type!=ACTION_INSERT)
 	{
 		++histpos;
 		history.resize(histpos);
-		history.push_back(History(ACTION_INSERT, i, text.c_str()+i, 1));
+		history.push_back(History(ACTION_INSERT, i, text.c_str()+i, 1, cursor, selcur));
 	}
 	else
 		history[histpos].data[0].str.push_back(c);
@@ -994,11 +1060,11 @@ void				text_erase1_bksp(int i)
 	if(i<1)
 		return;
 	set_modified();
-	if(!hist_cont||histpos<0||history[histpos].type==ACTION_INSERT)
+	if(!hist_cont||histpos<0||history[histpos].type!=ACTION_ERASE)
 	{
 		++histpos;
 		history.resize(histpos);
-		history.push_back(History(ACTION_ERASE, i-1, text.c_str()+i-1, 1));
+		history.push_back(History(ACTION_ERASE, i-1, text.c_str()+i-1, 1, cursor, selcur));
 	}
 	else
 	{
@@ -1020,11 +1086,11 @@ void				text_erase1_del(int i)
 	if(i>=(int)text.size())
 		return;
 	set_modified();
-	if(!hist_cont||histpos<0||history[histpos].type==ACTION_INSERT)
+	if(!hist_cont||histpos<0||history[histpos].type!=ACTION_ERASE)
 	{
 		++histpos;
 		history.resize(histpos);
-		history.push_back(History(ACTION_ERASE, i, text.c_str()+i, 1));
+		history.push_back(History(ACTION_ERASE, i, text.c_str()+i, 1, cursor, selcur));
 	}
 	else
 		history[histpos].data[0].str.push_back(text[i]);
@@ -1283,8 +1349,8 @@ void				wnd_on_render()
 	//hscroll.decide_orwith(!hscroll.dwidth&&vscroll.dwidth&&xend>=w-scrollbarwidth);
 	//vscroll.decide_orwith(!vscroll.dwidth&&vscroll.dwidth&&yend>=h-74-scrollbarwidth);
 
-	sprintf_s(g_buf, g_buf_size, "cc(%d, %d), sc(%d, %d)", ccx, ccy, scx, scy);//
-	set_window_title_a(g_buf);//
+	//sprintf_s(g_buf, g_buf_size, "cc(%d, %d), sc(%d, %d)", ccx, ccy, scx, scy);//
+	//set_window_title_a(g_buf);//
 	int y=0;
 	if(rectsel)
 	{
@@ -1459,7 +1525,7 @@ void				wnd_on_render()
 	//font_drop();
 
 	update_screen();
-	prof_add("Swap");
+	prof_add("swap");
 	prof_print();
 }
 bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
@@ -1668,20 +1734,20 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						else
 							ry1=ccy, ry2=scy;
 						str.reserve((rx2-rx1)*(ry2-ry1));
-						for(int k=0, linelen=0, lineno=0;k<(int)text.size();++k)
+						for(int k=0, linecols=0, lineno=0;k<(int)text.size();++k)
 						{
-							if(lineno>=ry1&&lineno<=ry2&&linelen>=rx1&&linelen<rx2)
+							if(lineno>=ry1&&lineno<=ry2&&linecols>=rx1&&linecols<rx2)
 								str+=text[k];
 							if(text[k]=='\n')
 							{
 								if(lineno>=ry1&&lineno<=ry2)
 									str+='\n';
-								linelen=0, ++lineno;
+								linecols=0, ++lineno;
 							}
 							else if(text[k]=='\t')
-								linelen+=tab_count-mod(-wpx+linelen-(-wpx), tab_count);
+								linecols+=tab_count-mod(-wpx+linecols-(-wpx), tab_count);
 							else
-								++linelen;
+								++linecols;
 						}
 						if(str.back()!='\n')
 							str+='\n';
