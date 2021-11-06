@@ -499,7 +499,6 @@ enum				ActionType
 	ACTION_ERASE_SELECTION,
 	ACTION_ERASE_RECT_SELECTION,
 };
-//int				total_action_count=0;
 struct				ActionFragment
 {
 	int idx;
@@ -508,8 +507,6 @@ struct				ActionFragment
 	ActionFragment(ActionFragment const &af):idx(af.idx), str(af.str){}
 	ActionFragment(ActionFragment &&af):idx(af.idx), str((std::string&&)af.str){}
 	ActionFragment(int idx, const char *a, int len):idx(idx), str(a, len){}
-	//ActionFragment(int idx, std::string const &str):idx(idx), str(str){}
-	//ActionFragment(int idx, std::string &&str):idx(idx), str((std::string&&)str){}
 };
 typedef std::vector<ActionFragment> ActionData;
 struct				History
@@ -533,21 +530,7 @@ struct				History
 	{
 		scx0=scx, ccx0=ccx, scy0=scy, ccy0=ccy;
 	}
-	//ActionType type;
-	//int action_id,//for rectangular selection
-	//	idx;
-	//std::string data;
-	//History():type(ACTION_UNINITIALIZED), action_id(0), idx(0){}
-	//History(History const &h):type(h.type), action_id(h.action_id), idx(h.idx), data(h.data){}
-	//History(History &&h):type(h.type), action_id(h.action_id), idx(h.idx), data((std::string&&)h.data){}
-	//History(ActionType type, int idx, const char *a, int len):type(type), action_id(total_action_count), idx(idx), data(a, a+len){}
 };
-/*struct			History
-{
-	int idx;
-	bool continuous, insert;
-	char c;
-};//*/
 std::vector<History> history;
 int					histpos=-1;//pointing at previous action
 bool				hist_cont=true;
@@ -654,32 +637,6 @@ void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int
 			cwidth=sx;
 	}
 }
-#if 0
-void				cursor_teleport()//preset the cursor or (ccx, ccy) before calling, to scroll window till (ccx, ccy) is visible
-{
-	auto arr=text.c_str();
-	int textlen=text.size();
-	if(!dimensions_known)
-	{
-		dimensions_known=true;
-		if(rectsel)
-			calc_dimensions_chars(-wpx, -wpy, arr, textlen, -wpx, text_width, nlines, -1, ccx, ccy, -1, scx, scy);
-		else
-			calc_dimensions_chars(-wpx, -wpy, arr, textlen, -wpx, text_width, nlines, cursor, ccx, ccy, selcur, scx, scy);
-	}
-	int dxpx=dx*font_zoom, dypx=dy*font_zoom;
-	int cpx=ccx*dxpx, cpy=ccy*dypx;
-	int xpad=dxpx&-(w>(dxpx<<1)), ypad=dypx&-(h>(dypx<<1));
-	if(wpx>cpx+xpad)
-		wpx=cpx+xpad;
-	if(wpx<cpx-w-xpad)
-		wpx=cpx-w-xpad;
-	if(wpy>cpy+ypad)
-		wpy=cpy+ypad;
-	if(wpy<cpy-h-ypad)
-		wpy=cpy-h-ypad;
-}
-#endif
 
 inline int			find_line_start(int i)
 {
@@ -742,40 +699,6 @@ void				hist_undo()//ctrl z
 		rectsel=true;
 		break;
 	}
-/*	for(int action_id=history[histpos].action_id;histpos>=0&&action_id==history[histpos].action_id;--histpos)
-	{
-		auto &h=history[histpos];
-		if(h.type==ACTION_INSERT)
-		{
-			text.erase(text.begin()+h.idx, text.begin()+h.idx+h.data.size());
-			selcur=cursor=h.idx;
-			rectsel=false;
-		}
-		else if(h.type==ACTION_INSERT_RECT)
-		{
-			text.erase(text.begin()+h.idx, text.begin()+h.idx+h.data.size());
-			selcur=cursor=h.idx;
-			rectsel=true;
-		}
-		else if(h.type==ACTION_ERASE)
-		{
-			text.insert(text.begin()+h.idx, h.data.begin(), h.data.end());
-			selcur=cursor=h.idx+h.data.size();
-			rectsel=false;
-		}
-		else if(h.type==ACTION_ERASE_SELECTION)
-		{
-			text.insert(text.begin()+h.idx, h.data.begin(), h.data.end());
-			selcur=h.idx, cursor=h.idx+h.data.size();
-			rectsel=false;
-		}
-		else if(h.type==ACTION_ERASE_RECT_SELECTION)
-		{
-			text.insert(text.begin()+h.idx, h.data.begin(), h.data.end());
-			selcur=h.idx, cursor=h.idx+h.data.size();
-			rectsel=true;
-		}
-	}//*/
 	if(rectsel)
 		scx=action.scx0, scy=action.scy0, ccx=action.ccx0, ccy=action.ccy0;//set selection rect
 	else
@@ -844,26 +767,10 @@ void				hist_redo()//ctrl y
 		}
 		break;
 	}
-/*	for(int action_id=history[histpos+1].action_id;histpos<(int)history.size()-1&&action_id==history[histpos+1].action_id;++histpos)
-	{
-		auto &h=history[histpos+1];
-		if(h.type==ACTION_INSERT)
-		{
-			text.insert(text.begin()+h.idx, h.data.begin(), h.data.end());
-			cursor=selcur=h.idx+h.data.size();
-			//selcur=h.idx, cursor=h.idx+h.data.size();
-		}
-		else if(h.type==ACTION_ERASE||h.type==ACTION_ERASE_SELECTION)
-		{
-			text.erase(text.begin()+h.idx, text.begin()+h.idx+h.data.size());
-			cursor=selcur=h.idx;
-		}
-	}//*/
 	if(!rectsel)
 		calc_cursor_coords(-wpx, -wpx);
-	//rectsel=false;
 
-	set_modified();//
+	//set_modified();//
 	hist_cont=false;
 	dimensions_known=false;
 	wnd_to_cursor=true;
@@ -928,14 +835,14 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 		auto &range=ranges[k];
 		if(range.i<range.f)
 		{
-			int lineend=find_line_end(range.linestart);
+			unsigned lineend=find_line_end(range.linestart);
 			if(lineend<=range.linestart+range.i)//line ends before selection - pad this line
 			{
 				changed=true;
 				int delta=range.linestart+range.i-lineend;
 				text.insert(text.begin()+lineend, delta, ' ');
 				data.push_back(ActionFragment(lineend, text.c_str()+lineend, delta));
-				for(int k2=k+1;k2<ranges.size();++k2)
+				for(int k2=k+1;k2<(int)ranges.size();++k2)
 					ranges[k2].linestart+=delta;
 			}
 			//else if(lineend>range.linestart+range.f)//line ends after selection - no pad necessary
@@ -958,7 +865,7 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 		int lineend=find_line_end(range.linestart);
 		if(range.i<range.f)
 		{
-			int lineend=find_line_end(range.linestart), delta=0;
+			unsigned lineend=find_line_end(range.linestart), delta=0;
 			//if(lineend<=range.linestart+range.i)//unreachable
 			//{
 			//}
@@ -1007,37 +914,9 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 		history.push_back(History(ACTION_INSERT_RECT, std::move(data)));
 		++histpos;
 	}
-/*	for(int k=ranges.size()-1;k>=0;--k)
-	{
-		auto &range=ranges[k];
-		if(range.i<range.f)
-		{
-			history.push_back(History(ACTION_ERASE_RECT_SELECTION, range.i, text.c_str()+range.i, range.f-range.i));
-			if(len<1)
-				text.erase(text.begin()+range.i, text.begin()+range.f);
-			else
-			{
-				text.replace(text.begin()+range.i, text.begin()+range.f, a, a+len);
-
-				history.push_back(History(ACTION_INSERT_RECT, range.i, text.c_str()+range.i, len));
-				histpos+=2;
-			}
-		}
-		else if(range.i==range.f&&len>0)
-		{
-			text.insert(text.begin()+range.i, a, a+len);
-
-			history.push_back(History(ACTION_INSERT_RECT, range.i, text.c_str()+range.i, len));
-			++histpos;
-		}
-	}//*/
 	ccx=scx=minimum(ccx, scx)+len;
-	//cursor=selcur=i+len;//X
-	//calc_cursor_coords(-wpx, -wpx);//X
-	//hist_cont=false;//X
 	dimensions_known=false;
 	wnd_to_cursor=true;
-	//++total_action_count;
 }
 void				text_replace(int i, int f, const char *a, int len)
 {
@@ -1190,7 +1069,6 @@ void				cursor_at_mouse()//sets cursor, ccx & ccy
 	}
 	int d_idx=0;
 	inv_calc_width(-wpx, -wpy, text.c_str()+cursor, text.size()-cursor, -wpx, font_zoom, wpx+mx+(dx*font_zoom>>1), &ccx, &d_idx);
-	//inv_calc_width(0, 0, text.c_str()+cursor, text.size()-cursor, 0, font_zoom, wpx+mx, &ccx, &d_idx);
 	cursor+=d_idx;
 }
 bool				cursor_at_mouse_rect(int &xpos, int &ypos)//sets ccx & ccy dummies
@@ -1217,13 +1095,6 @@ bool				cursor_at_mouse_rect(int &xpos, int &ypos)//sets ccx & ccy dummies
 	int xpos2=(wpx+mx+(dxpx>>1))/dxpx;
 	if(ncols<xpos2)//if mx is beyond the reach of the line
 		xpos=xpos2;
-	//inv_calc_width(0, 0, text.c_str()+idx, text.size()-idx, 0, font_zoom, wpx+mx, &xpos, nullptr);
-	//idx+=xpos;
-
-/*	int ypos2=(wpy+my)/(dy*font_zoom);
-	int dxpx=dx*font_zoom;
-	xpos=(wpx+mx+(dxpx>>1))/dxpx;//X  ignores tab
-	//xpos=(wpx+mx)/dxpx;//*/
 
 	if(ypos2>=0&&ypos2<nlines)
 	{
@@ -1451,17 +1322,6 @@ void				wnd_on_render()
 					if(ypos>-dxpx&&ypos<h+dxpx)
 						x+=print_line_rect(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom, rx2-rx1, nconsumed);
 					start+=nconsumed, k=start;
-					//for(;;++k)
-					//{
-					//	if(k>=textlen||text[k]=='\n'||k-line_start==rx2)
-					//	{
-					//		int nconsumed=0;
-					//		if(ypos>-dxpx&&ypos<h+dxpx)
-					//			x+=print_line_rect(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom, rx2-rx1, nconsumed);
-					//		start+=nconsumed, k=start;
-					//		break;
-					//	}
-					//}
 					set_text_colors(colors_text);
 
 					if(k>=textlen)
@@ -1469,10 +1329,6 @@ void				wnd_on_render()
 					if(text[k]!='\n')
 					{
 						k=find_line_end(k);
-						//if(k>=textlen)
-						//	break;
-						//++k;
-						//continue;
 						int ypos=y-wpy;
 						if(ypos>-dxpx&&ypos<h+dxpx)
 							x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);

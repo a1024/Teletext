@@ -672,6 +672,7 @@ bool				save_text_file(const wchar_t *filename, std::string &str)
 	}
 	fwrite(str.c_str(), 1, str.size(), file);
 	fclose(file);
+	return true;
 }
 int					ask_to_save()
 {
