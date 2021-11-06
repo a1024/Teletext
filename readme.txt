@@ -14,7 +14,6 @@ r	g	b	r	g	b
 
 
 TODO:
-- Rectangular selection
 - Status bar
 - Find & replace
 - Optional syntax highlighting for C/C++
@@ -22,3 +21,6 @@ TODO:
 - Multiple tabs
 - Save on write
 - Port to Linux
+
+DONE:
+- Rectangular selection
