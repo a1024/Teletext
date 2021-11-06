@@ -1189,29 +1189,33 @@ void				cursor_at_mouse()//sets cursor, ccx & ccy
 		}
 	}
 	int d_idx=0;
-	inv_calc_width(0, 0, text.c_str()+cursor, text.size()-cursor, 0, font_zoom, wpx+mx+(dx*font_zoom>>1), &ccx, &d_idx);
+	inv_calc_width(-wpx, -wpy, text.c_str()+cursor, text.size()-cursor, -wpx, font_zoom, wpx+mx+(dx*font_zoom>>1), &ccx, &d_idx);
 	//inv_calc_width(0, 0, text.c_str()+cursor, text.size()-cursor, 0, font_zoom, wpx+mx, &ccx, &d_idx);
 	cursor+=d_idx;
 }
 bool				cursor_at_mouse_rect(int &xpos, int &ypos)//sets ccx & ccy dummies
 {
-	int dypx=dy*font_zoom, dxpx=dx*font_zoom,
-		ypos0=(wpy+my)/dypx, idx=0, ypos2=0;
+	int dxpx=dx*font_zoom, dypx=dy*font_zoom,
+		ypos0=(wpy+my)/dypx, linestart=0, ypos2=0;
 	if(ypos0>0)
 	{
 		for(int k=0;k<(int)text.size();++k)
 		{
 			if(text[k]=='\n')
 			{
-				idx=k+1, ++ypos2;
+				linestart=k+1, ++ypos2;
 				if(ypos2==ypos0)
 					break;
 			}
 		}
 	}
-	inv_calc_width(0, 0, text.c_str()+idx, text.size()-idx, 0, font_zoom, wpx+mx+(dxpx>>1), &xpos, nullptr);
+	int d_idx=0;
+	inv_calc_width(-wpx, -wpy, text.c_str()+linestart, text.size()-linestart, -wpx, font_zoom, wpx+mx+(dxpx>>1), &xpos, &d_idx);
+
+	d_idx=find_line_end(linestart+d_idx);
+	int ncols=calc_width(-wpx, -wpy, text.c_str()+linestart, d_idx-linestart, -wpx, font_zoom)/dxpx;
 	int xpos2=(wpx+mx+(dxpx>>1))/dxpx;
-	if(xpos<xpos2)
+	if(ncols<xpos2)//if mx is beyond the reach of the line
 		xpos=xpos2;
 	//inv_calc_width(0, 0, text.c_str()+idx, text.size()-idx, 0, font_zoom, wpx+mx, &xpos, nullptr);
 	//idx+=xpos;
