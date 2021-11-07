@@ -15,6 +15,7 @@ r	g	b	r	g	b
 
 TODO:
 - Status bar
+- Go to previous/next cursor location
 - Find & replace
 - Optional syntax highlighting for C/C++
 - Config file
