@@ -592,7 +592,7 @@ const wchar_t*		open_file_dialog()
 	{
 		sizeof(OPENFILENAMEW),
 		ghWnd, ghInstance,
-		L"Text Filex (*.txt)\0*.TXT\0", 0, 0, 1,
+		L"All Files (*.*)\0*.*\0", 0, 0, 1,
 		g_wbuf, g_buf_size,
 		0, 0,//initial filename
 		0,
@@ -620,7 +620,9 @@ const wchar_t*		save_file_dialog()
 	{
 		sizeof(OPENFILENAMEW),
 		ghWnd, ghInstance,
-		L"Text Filex (*.txt)\0*.TXT\0", 0, 0, 1,
+		L"Text File (.txt)\0*.txt\0"
+		L"C/C++ Source (.c; .cpp)\0*.txt\0"
+		L"C/C++ Header (.h; .hpp)\0*.txt\0", 0, 0, 1,
 		g_wbuf, g_buf_size,
 		0, 0,//initial filename
 		0,

@@ -39,7 +39,9 @@ void				display_help()
 		"\n"
 		"Ctrl+Up/Down:\tScroll\n"
 		"Ctrl+Left/Right:\tSkip word\n"
-	//	"Ctrl+F:\t\tFind\n"//TODO
+	//	"Ctrl+-:\t\tPrevious location\n"//TODO
+	//	"Ctrl+Shift+-:\tNext location\n"
+	//	"Ctrl+F:\t\tFind\n"
 	//	"Ctrl+R:\t\tReplace\n"
 		"\n"
 		"Shift+Arrows/Home/End:\tSelect\n"
@@ -327,6 +329,8 @@ int					print_line(short x, short y, const char *msg, int msg_length, short tab_
 	float rect[4]={};
 	QuadCoords *txc=nullptr;
 	int msg_width=0, width, idx, printable_count=0, tab_width=tab_count*dx*zoom, w2=dx*zoom, height=dy*zoom;
+	if(y+height<0||y>=h)
+		return calc_width(x, y, msg, msg_length, tab_origin, zoom);
 	vrtx.resize(msg_length<<4);//vx, vy, txx, txy		x4 vertices/char
 	for(int k=0;k<msg_length;++k)
 	{
@@ -339,28 +343,34 @@ int					print_line(short x, short y, const char *msg, int msg_length, short tab_
 			width=0;
 		if(width)
 		{
-			toNDC_nobias(float(x+msg_width		), float(y			), rect[0], rect[1]);
-			toNDC_nobias(float(x+msg_width+width), float(y+height	), rect[2], rect[3]);//y2<y1
-			idx=k<<4;
-			txc=font_coords+c-32;
-			vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
-			vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
-			vrtx[idx+ 8]=rect[2], vrtx[idx+ 9]=rect[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
-			vrtx[idx+12]=rect[2], vrtx[idx+13]=rect[1],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
+			if(x+msg_width+width>=0&&x+msg_width<w)
+			{
+				toNDC_nobias(float(x+msg_width		), float(y			), rect[0], rect[1]);
+				toNDC_nobias(float(x+msg_width+width), float(y+height	), rect[2], rect[3]);//y2<y1
+				idx=k<<4;
+				txc=font_coords+c-32;
+				vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
+				vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
+				vrtx[idx+ 8]=rect[2], vrtx[idx+ 9]=rect[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
+				vrtx[idx+12]=rect[2], vrtx[idx+13]=rect[1],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
 
+				++printable_count;
+			}
 			msg_width+=width;
-			++printable_count;
 		}
 	}
-	setGLProgram(shader_text.program);
-	select_texture(font_txid, ns_text::u_atlas);
-	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);								GL_CHECK();
-	glBufferData(GL_ARRAY_BUFFER, msg_length<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
-	glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);		GL_CHECK();
+	if(printable_count)
+	{
+		setGLProgram(shader_text.program);
+		select_texture(font_txid, ns_text::u_atlas);
+		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
+		glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
+		glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);			GL_CHECK();
 
-	glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
-	glDrawArrays(GL_QUADS, 0, msg_length<<2);		GL_CHECK();//draw the quads: 4 vertices per character quad
-	glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+		glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+		glDrawArrays(GL_QUADS, 0, printable_count<<2);	GL_CHECK();//draw the quads: 4 vertices per character quad
+		glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+	}
 	return msg_width;
 }
 int					print(short zoom, short tab_origin, short x, short y, const char *format, ...)
@@ -431,10 +441,17 @@ U64					colors_selection=0xFFFF0000FFABABAB;
 int					color_cursorlinebk=0xFF202020;
 U64					colors_cursorline=(u64)color_cursorlinebk<<32|0xFFABABAB;
 short				font_zoom=1;//font pixel size
+//struct			Cursor
+//{
+//	bool rectmode;
+//	int cursor=0, selcur=0,//text indices
+//		ccx=0, ccy=0,//cursor coordinates in the text buffer, in character units
+//		scx=0, scy=0;//selcur coordinates in the text buffer, in character units
+//};
 int					wpx=0, wpy=0,//window position inside the text buffer, in pixels
+					cursor=0, selcur=0,//text indices
 					ccx=0, ccy=0,//cursor coordinates in the text buffer, in character units
 					scx=0, scy=0,//selcur coordinates in the text buffer, in character units
-					cursor=0, selcur=0,
 					nlines=1, text_width=0;//in characters
 bool				rectsel=false;
 //struct			TextFile
@@ -536,6 +553,13 @@ int					histpos=-1;//pointing at previous action
 bool				hist_cont=true;
 
 bool				modified=false, dimensions_known=false, wnd_to_cursor=false;
+
+//struct			TextBox
+//{
+//};
+//struct			TextTab
+//{
+//};
 void				set_title(std::wstring const &name, bool _modified)
 {
 	modified=_modified;
@@ -840,26 +864,15 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 		auto &range=ranges[k];
 		range.linestart+=cumulative_delta;
 		range.lineend+=cumulative_delta;
-		//range.lineend=find_line_end(range.linestart);
-		//range.linecols=calc_width(-wpx, -wpy, text.c_str()+range.linestart, range.lineend-range.linestart, -wpx, font_zoom);
 		int linecount=range.lineend-range.linestart;
 		if(linecount<range.i)//line ends before selection - pad this line
-		//if(range.linecols<range.i)
-		//if(range.linecols<range.linestart+range.i)
 		{
 			padded=true;
 			int delta=range.i-linecount;
-			//int delta=range.i-range.linecols;
-			//int delta=range.linestart+range.i-range.linecols;
 			text.insert(text.begin()+range.lineend, delta, ' ');
 			data.push_back(ActionFragment(range.lineend, text.c_str()+range.lineend, delta));
 			cumulative_delta+=delta;
 			range.lineend+=delta;
-			//for(int k2=k+1;k2<(int)ranges.size();++k2)//TODO: optimize this loop away
-			//{
-			//	ranges[k2].linestart+=delta;
-			//	ranges[k2].lineend+=delta;
-			//}
 		}
 	//	else if(linecount>=range.f)//line ends after selection - no pad necessary
 	//	{
@@ -874,7 +887,6 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 		++histpos;
 	}
 	for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)	//2) erase selection
-	//for(int k=ranges.size()-1, cumulative_delta=0;k>=0;--k)
 	{
 		auto &range=ranges[k];
 		range.linestart-=cumulative_delta;
@@ -882,8 +894,6 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 		if(range.i<range.f)
 		{
 			unsigned linecount=range.lineend-range.linestart, delta=0;
-			//unsigned lineend=find_line_end(range.linestart), delta=0;
-
 			//if(linecount<range.i)//unreachable
 			//{
 			//}
@@ -901,27 +911,9 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 				delta=linecount-range.i;
 				data.push_back(ActionFragment(range.linestart+range.i, text.c_str()+range.linestart+range.i, delta));
 				text.erase(text.begin()+range.linestart+range.i, text.begin()+range.lineend);
-
-				//int dummy_width=0, k_out=0;
-				//inv_calc_width(-wpx, -wpy, text.c_str()+range.linestart, range.lineend-range.linestart, -wpx, font_zoom, range.i, &dummy_width, &k_out);
-				//delta=range.lineend-k_out;
-				//data.push_back(ActionFragment(k_out, text.c_str()+k_out, delta));
-				//text.erase(text.begin()+k_out, text.begin()+range.lineend);
-
-				//delta=range.lineend-(range.linestart+range.i);//X
-				//data.push_back(ActionFragment(range.linestart+range.i, text.c_str()+range.linestart+range.i, delta));
-				//text.erase(text.begin()+range.linestart+range.i, text.begin()+range.lineend);
 			}
 			cumulative_delta+=delta;
 			range.lineend-=delta;
-			//if(delta)
-			//{
-			//	for(int k2=k+1;k2<(int)ranges.size();++k2)//update previous ranges
-			//	{
-			//		ranges[k2].linestart-=delta;
-			//		ranges[k2].lineend-=delta;
-			//	}
-			//}
 			range.f=range.i;
 		}
 	}
@@ -943,12 +935,6 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 				text.insert(text.begin()+range.linestart+range.i, a, a+len);
 
 				data.push_back(ActionFragment(range.linestart+range.i, a, len));
-				//for(int k2=k+1;k2<(int)ranges.size();++k2)//update next ranges
-				//{
-				//	auto &r2=ranges[k2];
-				//	r2.i+=len;
-				//	r2.f=r2.i;
-				//}
 				cumulative_delta+=len;
 				range.lineend+=cumulative_delta;
 			}
@@ -967,13 +953,6 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 
 				auto &dk=h.data[k];
 				dk.str.insert(dk.str.end(), a, a+len);
-				//for(int k2=k+1;k2<(int)ranges.size();++k2)//update next ranges
-				//{
-				//	auto &r2=ranges[k2];
-				//	r2.i+=len;
-				//	r2.f=r2.i;
-				//	h.data[k2].idx+=len;
-				//}
 				cumulative_delta+=len;
 				range.lineend+=cumulative_delta;
 			}
@@ -1352,7 +1331,7 @@ void				wnd_on_render()
 	//sprintf_s(g_buf, g_buf_size, "cc(%d, %d), sc(%d, %d)", ccx, ccy, scx, scy);//
 	//set_window_title_a(g_buf);//
 	int y=0;
-	if(rectsel)
+	if(rectsel)//rectangular selection
 	{
 		int rx1, rx2, ry1, ry2;//rect coordinates in characters
 		if(scx<ccx)
@@ -1417,33 +1396,7 @@ void				wnd_on_render()
 		}
 		draw_line_i(cpx-wpx, py1-wpy, cpx-wpx, py2+dypx-wpy, 0xFFFFFFFF);//draw cursor
 	}
-	else if(cursor==selcur)
-	{
-		draw_rectangle_i(0, w, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
-		for(int start=0, line_start=0, lineno=0, x=0, k=0;;++k)
-		{
-			if(k>=textlen||text[k]=='\n')
-			{
-				int ypos=y-wpy;
-				if(ypos>-dxpx&&ypos<h+dxpx)
-				{
-					if(lineno==ccy)
-						set_text_colors(colors_cursorline);
-					x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
-					if(lineno==ccy)
-						set_text_colors(colors_text);
-				}
-				y+=dypx;
-				if(k>=textlen)
-					break;
-				line_start=start=k+1;
-				x=0;
-				++lineno;
-			}
-		}
-		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
-	}
-	else
+	else if(cursor!=selcur)//normal selection
 	{
 		int selstart, selend;
 		if(cursor<selcur)
@@ -1478,6 +1431,32 @@ void				wnd_on_render()
 					break;
 				line_start=start=k+1;
 				x=0;
+			}
+		}
+		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
+	}
+	else//no selection
+	{
+		draw_rectangle_i(0, w, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
+		for(int start=0, line_start=0, lineno=0, x=0, k=0;;++k)
+		{
+			if(k>=textlen||text[k]=='\n')
+			{
+				int ypos=y-wpy;
+				if(ypos>-dxpx&&ypos<h+dxpx)
+				{
+					if(lineno==ccy)
+						set_text_colors(colors_cursorline);
+					x+=print_line(x-wpx, ypos, arr+start, k-start, -wpx, font_zoom);
+					if(lineno==ccy)
+						set_text_colors(colors_text);
+				}
+				y+=dypx;
+				if(k>=textlen)
+					break;
+				line_start=start=k+1;
+				x=0;
+				++lineno;
 			}
 		}
 		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
@@ -1665,7 +1644,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 			case 'O'://open
 				{
 					//TODO: tabs
-					auto str=save_file_dialog();
+					auto str=open_file_dialog();
 					//keyboard[VK_CONTROL]=(GetAsyncKeyState(VK_CONTROL)>>15)!=0;
 					keyboard['O']=(GetAsyncKeyState('O')>>15)!=0;
 					if(str&&open_text_file(str, text))
@@ -1688,7 +1667,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 			case 'S'://save
 				if(keyboard[VK_SHIFT]||!filename.size())
 				{
-					auto str=open_file_dialog();
+					auto str=save_file_dialog();
 					//keyboard[VK_CONTROL]=(GetAsyncKeyState(VK_CONTROL)>>15)!=0;
 					keyboard['S']=(GetAsyncKeyState('S')>>15)!=0;
 					if(str&&save_text_file(str, text))
