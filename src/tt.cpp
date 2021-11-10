@@ -19,6 +19,9 @@
 #include			<vector>
 #define				STB_IMAGE_IMPLEMENTATION
 #include			"stb_image.h"//https://github.com/nothings/stb
+
+//	#define			HELP_SHOWALL
+
 const char			file[]=__FILE__;
 char				g_buf[G_BUF_SIZE]={};
 int					w=0, h=0;
@@ -36,12 +39,18 @@ void				display_help()
 		"Ctrl+C:\t\tCopy\n"
 		"Ctrl+V:\t\tPaste\n"
 		"\n"
+#ifdef HELP_SHOWALL
+		"Ctrl+Tab:\t\tNext tab\n"
+		"Ctrl+Shift+Tab:\tPrevious tab\n"
+#endif
 		"Ctrl+Up/Down:\tScroll\n"
 		"Ctrl+Left/Right:\tSkip word\n"
-	//	"Ctrl+-:\t\tPrevious location\n"//TODO
-	//	"Ctrl+Shift+-:\tNext location\n"
-	//	"Ctrl+F:\t\tFind\n"
-	//	"Ctrl+R:\t\tReplace\n"
+#ifdef HELP_SHOWALL
+		"Ctrl+-:\t\tPrevious location\n"
+		"Ctrl+Shift+-:\tNext location\n"
+		"Ctrl+F:\t\tFind\n"
+		"Ctrl+R:\t\tReplace\n"
+#endif
 		"\n"
 		"Shift+Arrows/Home/End:\tSelect\n"
 		"Ctrl+A:\t\t\tSelect all\n"
