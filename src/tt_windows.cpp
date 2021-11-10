@@ -506,8 +506,11 @@ void				messagebox(const char *title, const char *format, ...)
 {
 	int len=vsprintf_s(g_buf, g_buf_size, format, (char*)(&format+1));
 	len=MultiByteToWideChar(CP_UTF8, 0, g_buf, len, g_wbuf, g_buf_size);	SYS_ASSERT(len);
-	MultiByteToWideChar(CP_UTF8, 0, title, strlen(title), g_wbuf+len+1, g_buf_size-(len+1));	SYS_ASSERT(len);
-	MessageBoxW(ghWnd, g_wbuf, g_wbuf+len+1, MB_OK);
+	g_wbuf[len]='\0';
+	++len;
+	int len2=MultiByteToWideChar(CP_UTF8, 0, title, strlen(title), g_wbuf+len, g_buf_size-len);	SYS_ASSERT(len2);
+	g_wbuf[len+len2]='\0';
+	MessageBoxW(ghWnd, g_wbuf, g_wbuf+len, MB_OK);
 	//MessageBoxA(ghWnd, g_buf, title, MB_OK);
 }
 void				copy_to_clipboard_c(const char *a, int size)//size not including null terminator
@@ -549,8 +552,13 @@ void				get_window_title(char *str, int size)
 	int success=GetWindowTextW(ghWnd, g_wbuf, g_buf_size);	SYS_ASSERT(success);
 	//char c[]="?";
 	//int invalid=false;
-	int len=WideCharToMultiByte(CP_UTF8, 0, g_wbuf, wcslen(g_wbuf), str, size, nullptr, nullptr);
-	SYS_ASSERT(len);
+	int len=WideCharToMultiByte(CP_UTF8, 0, g_wbuf, wcslen(g_wbuf), str, size, nullptr, nullptr);	SYS_ASSERT(len);
+	if(!len)
+	{
+		str[0]='\0';
+		return;
+	}
+	str[len]='\0';
 	//GetWindowTextA(ghWnd, str, size);
 }
 //void				set_window_title(const char *str)
@@ -561,6 +569,9 @@ void				get_window_title(char *str, int size)
 void				set_window_title(const char *str)
 {
 	int len=MultiByteToWideChar(CP_UTF8, 0, str, strlen(str), g_wbuf, g_buf_size);	SYS_ASSERT(len);
+	if(!len)
+		return;
+	g_wbuf[len]='\0';
 	int success=SetWindowTextW(ghWnd, g_wbuf);	SYS_ASSERT(success);
 	//int success=SetWindowTextA(ghWnd, str);	SYS_ASSERT(success);
 }
@@ -619,6 +630,9 @@ const char*			open_file_dialog()
 	//char c[]="?";
 	//int invalid=false;
 	int len=WideCharToMultiByte(CP_UTF8, 0, ofn.lpstrFile, wcslen(ofn.lpstrFile), g_buf, g_buf_size, nullptr, nullptr);	SYS_ASSERT(len);
+	if(!len)
+		return nullptr;
+	g_buf[len]='\0';
 	return g_buf;
 	//memcpy(g_wbuf, ofn.lpstrFile, wcslen(ofn.lpstrFile)*sizeof(wchar_t));
 	//return g_wbuf;
@@ -654,6 +668,9 @@ const char*			save_file_dialog()
 	//char c[]="?";
 	//int invalid=false;
 	int len=WideCharToMultiByte(CP_UTF8, 0, ofn.lpstrFile, wcslen(ofn.lpstrFile), g_buf, g_buf_size, nullptr, nullptr);	SYS_ASSERT(len);
+	if(!len)
+		return nullptr;
+	g_buf[len]='\0';
 	return g_buf;
 	//memcpy(g_wbuf, ofn.lpstrFile, wcslen(ofn.lpstrFile)*sizeof(wchar_t));
 	//return g_wbuf;
@@ -698,7 +715,13 @@ int					ask_to_save()
 	else
 		swprintf_s(g_wbuf, L"Save changes to Untitled?");
 	int result=MessageBoxW(ghWnd, g_wbuf, L"Paint++", MB_YESNOCANCEL);
-	return result;
+	switch(result)
+	{
+	case IDYES:		return 0;
+	case IDNO:		return 1;
+	case IDCANCEL:	return 2;
+	}
+	return -1;
 }
 
 void				mouse_capture()
@@ -771,79 +794,7 @@ void				swap_buffers()
 	SwapBuffers(ghDC);
 	//BitBlt(ghDC, 0, 0, w, h, ghMemDC, 0, 0, SRCCOPY);
 }
-const char numrow[]=")!@#$%^&*(";
-#if 0
-const char			*keymap[]=
-{	//1234567
-	"        "//normal
-	"        "
-	"        "
-	"        "
-	"        "
-	"        "
-	"01234567"
-	"89      "
-	" abcdefg"
-	"hijklmno"
-	"pqrstuvw"
-	"xyz     "
-	"        "
-	"        "
-	"        "
-	"        ",
-	//1234567
-	"        "//shift
-	"        "
-	"        "
-	"        "
-	"        "
-	"        "
-	")!@#$%^&"
-	"*(      "
-	" ABCDEFG"
-	"HIJKLMNO"
-	"PQRSTUVW"
-	"XYZ     "
-	"        "
-	"        "
-	"        "
-	"        ",
-	//1234567
-	"        "//capslock
-	"        "
-	"        "
-	"        "
-	"        "
-	"        "
-	"01234567"
-	"89      "
-	" ABCDEFG"
-	"HJIKLMNO"
-	"PQRSTUVW"
-	"XYZ     "
-	"        "
-	"        "
-	"        "
-	"        ",
-	//1234567
-	"        "//shift + capslock
-	"        "
-	"        "
-	"        "
-	"        "
-	"        "
-	")!@#$%^&"
-	"*(      "
-	" abcdefg"
-	"hijklmno"
-	"pqrstuvw"
-	"xyz     "
-	"        "
-	"        "
-	"        "
-	"        ",
-};
-#endif
+const char			numrow[]=")!@#$%^&*(";
 long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long lParam)
 {
 	switch(message)
@@ -966,22 +917,22 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 				case VK_DELETE:	redraw=wnd_on_deletechar();		break;
 				case VK_BACK:	redraw=wnd_on_backspace();		break;
 
-				case VK_OEM_1:		redraw=wnd_on_type(shift?':':';');break;
-				case VK_OEM_2:		redraw=wnd_on_type(shift?'?':'/');break;
-				case VK_OEM_3:		redraw=wnd_on_type(shift?'~':'`');break;
-				case VK_OEM_4:		redraw=wnd_on_type(shift?'{':'[');break;
-				case VK_OEM_5:		redraw=wnd_on_type(shift?'|':'\\');break;
-				case VK_OEM_6:		redraw=wnd_on_type(shift?'}':']');break;
-				case VK_OEM_7:		redraw=wnd_on_type(shift?'\"':'\'');break;
-				case VK_OEM_MINUS:	redraw=wnd_on_type(shift?'_':'-');break;
-				case VK_OEM_PLUS:	redraw=wnd_on_type(shift?'+':'=');break;
-				case VK_OEM_COMMA:	redraw=wnd_on_type(shift?'<':',');break;
-				case VK_OEM_PERIOD:	redraw=wnd_on_type(shift?'>':'.');break;
-				case VK_DECIMAL:	redraw=wnd_on_type('.');break;
-				case VK_ADD:		redraw=wnd_on_type('+');break;
-				case VK_SUBTRACT:	redraw=wnd_on_type('-');break;
-				case VK_MULTIPLY:	redraw=wnd_on_type('*');break;
-				case VK_DIVIDE:		redraw=wnd_on_type('/');break;
+				case VK_OEM_1:		redraw=wnd_on_type(shift?	':':';'		);break;
+				case VK_OEM_2:		redraw=wnd_on_type(shift?	'?':'/'		);break;
+				case VK_OEM_3:		redraw=wnd_on_type(shift?	'~':'`'		);break;
+				case VK_OEM_4:		redraw=wnd_on_type(shift?	'{':'['		);break;
+				case VK_OEM_5:		redraw=wnd_on_type(shift?	'|':'\\'	);break;
+				case VK_OEM_6:		redraw=wnd_on_type(shift?	'}':']'		);break;
+				case VK_OEM_7:		redraw=wnd_on_type(shift?	'\"':'\''	);break;
+				case VK_OEM_MINUS:	redraw=wnd_on_type(shift?	'_':'-'		);break;
+				case VK_OEM_PLUS:	redraw=wnd_on_type(shift?	'+':'='		);break;
+				case VK_OEM_COMMA:	redraw=wnd_on_type(shift?	'<':','		);break;
+				case VK_OEM_PERIOD:	redraw=wnd_on_type(shift?	'>':'.'		);break;
+				case VK_DECIMAL:	redraw=wnd_on_type(			'.'			);break;
+				case VK_ADD:		redraw=wnd_on_type(			'+'			);break;
+				case VK_SUBTRACT:	redraw=wnd_on_type(			'-'			);break;
+				case VK_MULTIPLY:	redraw=wnd_on_type(			'*'			);break;
+				case VK_DIVIDE:		redraw=wnd_on_type(			'/'			);break;
 				default:
 					if(wParam>='A'&&wParam<='Z')
 						redraw=wnd_on_type(wParam+('a'-'A')*lowercase);
