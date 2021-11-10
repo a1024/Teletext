@@ -14,6 +14,8 @@ r	g	b	r	g	b
 
 
 TODO:
+- Indentation with tab/shift tab
+- Wrap option
 - Status bar
 - Go to previous/next cursor location
 - Find & replace
