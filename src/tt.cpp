@@ -18,16 +18,15 @@
 #include			<string.h>
 #include			<vector>
 #define				STB_IMAGE_IMPLEMENTATION
-#include			"stb_image.h"//nothings.org/stb
+#include			"stb_image.h"//https://github.com/nothings/stb
 const char			file[]=__FILE__;
 char				g_buf[G_BUF_SIZE]={};
-wchar_t				g_wbuf[G_BUF_SIZE]={};
 int					w=0, h=0;
 short				mx=0, my=0, dx=0, dy=0, tab_count=4;
 
 void				display_help()
 {
-	messageboxa("Controls",
+	messagebox("Controls",
 		"Ctrl+O:\t\tOpen\n"
 		"Ctrl+S:\t\tSave\n"
 		"Ctrl+Shift+S:\tSave as\n"
@@ -54,7 +53,7 @@ void				display_help()
 		"F4:\tToggle benchmark");
 }
 
-void				copy_to_clipboard(std::string const &str){copy_to_clipboard(str.c_str(), str.size());}
+void				copy_to_clipboard(std::string const &str){copy_to_clipboard_c(str.c_str(), str.size());}
 void				buffer2clipboard(const int *buffer, int bw, int bh)
 {
 	std::string str;
@@ -72,7 +71,18 @@ void				buffer2clipboard(const int *buffer, int bw, int bh)
 void				int2clipboard(int i)
 {
 	int printed=sprintf_s(g_buf, g_buf_size, " %08X", i);
-	copy_to_clipboard(g_buf, printed);
+	copy_to_clipboard_c(g_buf, printed);
+}
+
+//string encoding
+void				utf16_to_utf8(const wchar_t *utf16, int len, std::wstring &utf8)
+{
+	for(int k=0;k<len;++k)
+	{
+	}
+}
+void				utf8_to_utf16(const char *utf8, int len, std::wstring &utf16)
+{
 }
 
 //shaders
@@ -205,7 +215,7 @@ void				draw_line(float x1, float y1, float x2, float y2, int color)
 	setGLProgram(shader_2d.program);			GL_CHECK();
 	send_color(ns_2d::u_color, color);			GL_CHECK();
 	glEnableVertexAttribArray(ns_2d::a_coords);	GL_CHECK();
-		
+	
 	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);						GL_CHECK();
 	glBufferData(GL_ARRAY_BUFFER, 4<<2, g_fbuf, GL_STATIC_DRAW);		GL_CHECK();
 	glVertexAttribPointer(ns_2d::a_coords, 2, GL_FLOAT, GL_FALSE, 0, 0);GL_CHECK();
@@ -460,7 +470,7 @@ bool				rectsel=false;
 //	bool modified;
 //};
 //std::vector<TextFile> tabs;
-std::wstring		filename;//
+std::string			filename;//utf8
 std::string			text;//
 //std::string		text="Hello.\nSample Text.\nWhat\'s going on???\n";
 char				caps_lock=false;
@@ -560,19 +570,19 @@ bool				modified=false, dimensions_known=false, wnd_to_cursor=false;
 //struct			TextTab
 //{
 //};
-void				set_title(std::wstring const &name, bool _modified)
+void				set_title(std::string const &name, bool _modified)
 {
 	modified=_modified;
-	set_window_title_w((name+L" - Teletext").c_str());
+	set_window_title((name+" - Teletext").c_str());
 }
 void				set_modified()
 {
 	if(!modified)
 	{
 		modified=true;
-		get_window_title_w(g_wbuf+1, g_buf_size-1);
+		get_window_title(g_buf+1, g_buf_size-1);
 		g_wbuf[0]=L'*';
-		set_window_title_w(g_wbuf);
+		set_window_title(g_buf);
 	}
 }
 void				clear_modified()
@@ -580,8 +590,8 @@ void				clear_modified()
 	if(modified)
 	{
 		modified=false;
-		get_window_title_w(g_wbuf, g_buf_size);
-		set_window_title_w(g_wbuf+1);
+		get_window_title(g_buf, g_buf_size);
+		set_window_title(g_buf+1);
 	}
 }
 
@@ -608,20 +618,6 @@ void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int
 			cx=linecols, cy=cheight-1;
 		if(k==kselcur)
 			sx=linecols, sy=cheight-1;
-		//if(k==kcursor)
-		//{
-		//	if(cx)
-		//		*cx=linecols;
-		//	if(cy)
-		//		*cy=cheight-1;
-		//}
-		//if(k==kselcur)
-		//{
-		//	if(sx)
-		//		*sx=linecols;
-		//	if(sy)
-		//		*sy=cheight-1;
-		//}
 		if(msg[k]=='\t')
 			linecols+=tab_count-mod(x_chars+linecols-tab_origin_chars, tab_count);
 		else if(msg[k]=='\n')
@@ -639,20 +635,6 @@ void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int
 		cx=linecols, cy=cheight-1;
 	if(k==kselcur)
 		sx=linecols, sy=cheight-1;
-	//if(k==kcursor)
-	//{
-	//	if(cx)
-	//		*cx=linecols;
-	//	if(cy)
-	//		*cy=cheight-1;
-	//}
-	//if(k==kselcur)
-	//{
-	//	if(sx)
-	//		*sx=linecols;
-	//	if(sy)
-	//		*sy=cheight-1;
-	//}
 	if(rectsel)
 	{
 		if(cwidth<cx)
@@ -865,7 +847,7 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 		range.linestart+=cumulative_delta;
 		range.lineend+=cumulative_delta;
 		int linecount=range.lineend-range.linestart;
-		if(linecount<range.i)//line ends before selection - pad this line
+		if(linecount<(int)range.i)//line ends before selection - pad this line
 		{
 			padded=true;
 			int delta=range.i-linecount;
@@ -1202,20 +1184,20 @@ void				draw_vscrollbar(int x, int sbwidth, int y1, int y2, int &winpos, int con
 
 inline void			lbutton_down_text()
 {
-	//if(keyboard[VK_CONTROL])
-	if(rectsel=keyboard[VK_MENU]!=0)
+	//if(get_key_state(TK_CONTROL))
+	if(rectsel=get_key_state(TK_LALT)||get_key_state(TK_RALT))
 	{
 		int xpos=0, ypos=0;
 		if(cursor_at_mouse_rect(xpos, ypos))
 			drag=DRAG_RECT, ccx=xpos, ccy=ypos;
-		if(!keyboard[VK_SHIFT])
+		if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
 			scx=ccx, scy=ccy;
 	}
 	else
 	{
 		drag=DRAG_SELECT;
 		cursor_at_mouse();
-		if(!keyboard[VK_SHIFT])
+		if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
 			selcur=cursor, scx=ccx, scy=ccy;
 	}
 }
@@ -1234,7 +1216,7 @@ bool				wnd_on_init()
 	auto rgb=(int*)stbi_load("font.PNG", &iw, &ih, &bytespp, 4);
 	if(!rgb)
 	{
-		messageboxa("Error", "Font texture not found.\nPlace a \'font.PNG\' file with the program.\n");
+		messagebox("Error", "Font texture not found.\nPlace a \'font.PNG\' file with the program.\n");
 		return false;
 	}
 	dx=rgb[0]&0xFF, dy=rgb[1]&0xFF;
@@ -1271,6 +1253,13 @@ void				wnd_on_render()
 {
 	prof_add("Render entry");
 
+	//static float level=0, inc=0.1;
+	//glClearColor(level, level, level, 1);
+	//level+=inc;
+	//if(level<0)
+	//	level=0, inc=0.1;
+	//if(level>1)
+	//	level=1, inc=-0.1;
 	glClear(GL_COLOR_BUFFER_BIT);
 	
 	//calculate text dimensions & cursor coordinates
@@ -1503,11 +1492,543 @@ void				wnd_on_render()
 	//GUITPrint(10, 100, "A");
 	//font_drop();
 
-	update_screen();
+	swap_buffers();
 	prof_add("swap");
 	prof_print();
+	report_errors();
 }
-bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
+bool				wnd_on_mousemove()
+{
+	switch(drag)
+	{
+	case DRAG_SELECT:
+	case DRAG_RECT:
+		if(rectsel)
+		{
+			drag=DRAG_RECT;
+			cursor_at_mouse_rect(ccx, ccy);
+		}
+		else
+		{
+			drag=DRAG_SELECT;
+			cursor_at_mouse();
+		}
+		return true;
+	case DRAG_VSCROLL:
+	case DRAG_HSCROLL:
+		return true;
+	}
+	return false;
+}
+bool				wnd_on_mousewheel(bool mw_forward)
+{
+	if(get_key_state(TK_LCTRL)||get_key_state(TK_RCTRL))
+	{
+		if(mw_forward)
+		{
+			if(font_zoom<32)
+				font_zoom<<=1, wpx<<=1, wpy<<=1;
+		}
+		else if(font_zoom>1)
+			font_zoom>>=1, wpx>>=1, wpy>>=1;
+	}
+	else
+	{
+		if(mw_forward)
+			wpy-=dy*font_zoom*3;
+		else
+			wpy+=dy*font_zoom*3;
+	}
+	return true;
+}
+bool				wnd_on_lbuttondown()
+{
+	if(vscroll.dwidth)
+	{
+		if(hscroll.dwidth)	//both scrollbars present
+		{
+			if(mx<w-scrollbarwidth)
+			{
+				if(my<h-scrollbarwidth)
+					lbutton_down_text();
+				else
+					drag=DRAG_HSCROLL, hscroll.click_on_slider(mx);
+			}
+			else
+			{
+				if(my<h-scrollbarwidth)
+					drag=DRAG_VSCROLL, vscroll.click_on_slider(my);
+			}
+		}
+		else				//only vscroll present
+		{
+			if(mx<w-scrollbarwidth)
+				lbutton_down_text();
+			else
+				drag=DRAG_VSCROLL, vscroll.click_on_slider(my);
+		}
+	}
+	else
+	{
+		if(hscroll.dwidth)	//only hscroll present
+		{
+			if(my<h-scrollbarwidth)
+				lbutton_down_text();
+			else
+				drag=DRAG_HSCROLL, hscroll.click_on_slider(mx);
+		}
+		else				//no scrollbars
+			lbutton_down_text();
+	}
+	mouse_capture();
+	return true;
+}
+bool				wnd_on_lbuttonup()
+{
+	drag=DRAG_NONE;
+	mouse_release();
+	return true;
+}
+bool				wnd_on_rbuttondown(){return false;}
+bool				wnd_on_rbuttonup(){return false;}
+
+bool				wnd_on_display_help()
+{
+	display_help();
+	return true;
+}
+bool				wnd_on_toggle_profiler()
+{
+	prof_toggle();
+	return true;
+}
+bool				wnd_on_open()
+{
+	//TODO: tabs
+	auto str=open_file_dialog();
+	if(str&&open_text_file(str, text))
+	{
+		filename=str;
+		set_title(filename, false);
+		hist_cont=true;
+		dimensions_known=false;
+	}
+	return true;
+}
+bool				wnd_on_select_all()
+{
+	selcur=0, cursor=text.size(), rectsel=false;
+	ccy=nlines-1, ccx=cursor-find_line_start(cursor);
+	wnd_to_cursor=true, hist_cont=false;
+	return true;
+}
+bool				wnd_on_deselect()
+{
+	selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_save(bool save_as)
+{
+	if(save_as||!filename.size())
+	{
+		auto str=save_file_dialog();
+		if(str&&save_text_file(str, text))
+		{
+			filename=str;
+			set_title(filename, false);
+		}
+	}
+	else
+	{
+		save_text_file(filename.c_str(), text);
+		set_title(filename, false);
+	}
+	return true;
+}
+bool				wnd_on_clear_hist()
+{
+	hist_clear();//TODO: inline
+	return true;
+}
+bool				wnd_on_undo()
+{
+	hist_undo();
+	return true;
+}
+bool				wnd_on_redo()
+{
+	hist_redo();
+	return true;
+}
+bool				wnd_on_copy()
+{
+	if(rectsel)
+	{
+		if(ccx!=scx||ccy!=scy)
+		{
+			std::string str;
+			int rx1, rx2, ry1, ry2;//rect coordinates in character units
+			if(scx<ccx)
+				rx1=scx, rx2=ccx;
+			else
+				rx1=ccx, rx2=scx;
+			if(scy<ccy)
+				ry1=scy, ry2=ccy;
+			else
+				ry1=ccy, ry2=scy;
+			str.reserve((rx2-rx1)*(ry2-ry1));
+			for(int k=0, linecols=0, lineno=0;k<(int)text.size();++k)
+			{
+				if(lineno>=ry1&&lineno<=ry2&&linecols>=rx1&&linecols<rx2)
+					str+=text[k];
+				if(text[k]=='\n')
+				{
+					if(lineno>=ry1&&lineno<=ry2)
+						str+='\n';
+					linecols=0, ++lineno;
+				}
+				else if(text[k]=='\t')
+					linecols+=tab_count-mod(-wpx+linecols-(-wpx), tab_count);
+				else
+					++linecols;
+			}
+			if(str.back()!='\n')
+				str+='\n';
+			copy_to_clipboard(str);
+		}
+	}
+	else if(cursor!=selcur)
+	{
+		int start, end;
+		if(selcur<cursor)
+			start=selcur, end=cursor;
+		else
+			start=cursor, end=selcur;
+		copy_to_clipboard_c(text.c_str()+start, end-start);
+	}
+	return false;
+}
+bool				wnd_on_paste()
+{
+	char *str=nullptr;
+	int len=0;
+	if(!paste_from_clipboard(str, len))
+		return false;
+	if(rectsel)
+	{
+		Ranges ranges;
+		calc_ranges(ranges);
+		text_replace_rect(ranges, str, len);
+		ccx=scx=minimum(ccx, scx);
+	}
+	else if(cursor!=selcur)
+	{
+		int start, end;
+		if(selcur<cursor)
+			start=selcur, end=cursor;
+		else
+			start=cursor, end=selcur;
+		text_replace(start, end, str, len);
+	}
+	else
+		text_insert(cursor, str, len);
+	delete[] str;
+	calc_cursor_coords(-wpx, -wpx);
+	return true;
+}
+bool				wnd_on_new()
+{
+	hist_clear();
+	text.clear();
+	return true;
+}
+bool				wnd_on_scroll_up_key()
+{
+	wpy-=dy*font_zoom;
+	return true;
+}
+bool				wnd_on_scroll_down_key()
+{
+	wpy+=dy*font_zoom;
+	return true;
+}
+bool				wnd_on_skip_word_left()
+{
+	if(cursor>0)
+	{
+		hist_cont=false;
+		--cursor;
+		char initial=group_char(text[cursor]);
+		for(;cursor&&group_char(text[cursor-1])==initial;--cursor);
+		calc_cursor_coords(-wpx, -wpx);
+	}
+	if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
+		selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_skip_word_right()
+{
+	if(cursor<(int)text.size())
+	{
+		hist_cont=false;
+		char initial=group_char(text[cursor]);
+		++cursor;
+		for(;cursor<(int)text.size()&&group_char(text[cursor])==initial;++cursor);
+		calc_cursor_coords(-wpx, -wpx);
+	}
+	if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
+		selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_goto_file_start()
+{
+	if(cursor)
+	{
+		hist_cont=false;
+		cursor=0, ccx=0, ccy=0;
+	}
+	if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
+		selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_goto_file_end()
+{
+	if(cursor<(int)text.size())
+	{
+		hist_cont=false;
+		cursor=text.size();
+		calc_cursor_coords(-wpx, -wpx);
+	}
+	if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
+		selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_goto_line_start()
+{
+	int c2=find_line_start(cursor);
+	if(cursor!=c2)
+	{
+		cursor=c2, hist_cont=false;
+		calc_cursor_coords(-wpx, -wpx);
+	}
+	if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
+		selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_goto_line_end()
+{
+	int c2=find_line_end(cursor);
+	if(cursor!=c2)
+	{
+		cursor=c2, hist_cont=false;
+		calc_cursor_coords(-wpx, -wpx);
+	}
+	if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
+		selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_begin_rectsel()
+{
+	if(drag==DRAG_SELECT)
+	{
+		drag=DRAG_RECT, rectsel=true;
+		return true;
+	}
+	return false;
+}
+bool				wnd_on_deletechar()
+{
+	if(rectsel)
+	{
+		Ranges ranges;
+		int extent=calc_ranges(ranges);
+		if(!extent)
+		{
+			for(int k=0;k<(int)ranges.size();++k)//selection trick
+			{
+				auto &range=ranges[k];
+				range.f+=range.f<(int)text.size()&&text[range.f]!='\n';
+			}
+		}
+		text_replace_rect(ranges, nullptr, 0);
+	}
+	else if(cursor!=selcur)
+	{
+		int start, end;
+		if(selcur<cursor)
+			start=selcur, end=cursor;
+		else
+			start=cursor, end=selcur;
+		text_erase(start, end);
+		//cursor=selcur=start, rectsel=false;
+	}
+	else
+		text_erase1_del(cursor);
+	return true;
+}
+bool				wnd_on_backspace()
+{
+	if(rectsel)
+	{
+		Ranges ranges;
+		int extent=calc_ranges(ranges);
+		if(!extent)
+		{
+			for(int k=0;k<(int)ranges.size();++k)//selection trick
+			{
+				auto &range=ranges[k];
+				range.i-=range.i>0&&text[range.i-1]!='\n';
+			}
+			--ccx, --scx;
+		}
+		text_replace_rect(ranges, nullptr, 0);
+	}
+	else if(cursor!=selcur)
+	{
+		int start, end;
+		if(selcur<cursor)
+			start=selcur, end=cursor;
+		else
+			start=cursor, end=selcur;
+		text_erase(start, end);
+		//cursor=selcur=start, rectsel=false;
+	}
+	else
+		text_erase1_bksp(cursor);
+	return true;
+}
+bool				wnd_on_cursor_up()
+{
+	if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT)&&cursor!=selcur)
+	{
+		cursor=selcur=minimum(cursor, selcur), rectsel=false;
+		calc_cursor_coords(-wpx, -wpx);
+		scx=ccx, scy=ccy;
+	}
+	else
+	{
+		hist_cont=false;
+		int start=find_line_start(cursor);
+		if(!start)
+			cursor=0;
+		else
+		{
+			int width=calc_width(0, 0, text.c_str()+start, cursor-start, 0, font_zoom);
+			int s0=find_line_start(start-1), d_idx=0;
+			inv_calc_width(0, 0, text.c_str()+s0, text.size()-s0, 0, font_zoom, width, nullptr, &d_idx);
+			cursor=s0+d_idx;
+		}
+		calc_cursor_coords(-wpx, -wpx);
+		if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
+			selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
+	}
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_cursor_down()
+{
+	if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT)&&cursor!=selcur)
+	{
+		cursor=selcur=maximum(cursor, selcur), rectsel=false;
+		calc_cursor_coords(-wpx, -wpx);
+		scx=ccx, scy=ccy;
+	}
+	else
+	{
+		hist_cont=false;
+		int end=find_line_end(cursor);
+		if(end>=(int)text.size())
+			cursor=text.size();
+		else
+		{
+			int start=find_line_start(cursor);
+			int width=calc_width(0, 0, text.c_str()+start, cursor-start, 0, font_zoom);
+			int s2=end+1, d_idx=0;
+			inv_calc_width(0, 0, text.c_str()+s2, text.size()-s2, 0, font_zoom, width, nullptr, &d_idx);
+			cursor=s2+d_idx;
+		}
+		calc_cursor_coords(-wpx, -wpx);
+		if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
+			selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
+	}
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_cursor_left()
+{
+	if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT)&&cursor!=selcur)
+	{
+		cursor=selcur=minimum(cursor, selcur), rectsel=false;
+		calc_cursor_coords(-wpx, -wpx);
+		scx=ccx, scy=ccy;
+	}
+	else
+	{
+		if(cursor>0)
+		{
+			hist_cont=false;
+			--cursor;
+			calc_cursor_coords(-wpx, -wpx);
+		}
+		if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
+			selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
+	}
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_cursor_right()
+{
+	if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT)&&cursor!=selcur)
+	{
+		cursor=selcur=maximum(cursor, selcur), rectsel=false;
+		calc_cursor_coords(-wpx, -wpx);
+		scx=ccx, scy=ccy;
+	}
+	else
+	{
+		if(cursor<(int)text.size())
+		{
+			hist_cont=false;
+			++cursor;
+			calc_cursor_coords(-wpx, -wpx);
+		}
+		if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
+			selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
+	}
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_type(char character)
+{
+	if(rectsel)
+	{
+		Ranges ranges;
+		calc_ranges(ranges);
+		text_replace_rect(ranges, &character, 1);
+	}
+	else if(cursor!=selcur)
+	{
+		int start, end;
+		if(selcur<cursor)
+			start=selcur, end=cursor;
+		else
+			start=cursor, end=selcur;
+		text_replace(start, end, &character, 1);
+		//cursor=selcur=start, rectsel=false;
+	}
+	else
+		text_insert1(cursor, character);
+	return true;
+}
+#if 0
+bool				wnd_on_input(int message, int wParam, int lParam)
 {
 	switch(message)
 	{
@@ -1517,7 +2038,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 		case DRAG_SELECT:
 		case DRAG_RECT:
 			if(rectsel)
-			//if(rectsel=keyboard[VK_MENU]!=0)
+			//if(rectsel=get_key_state(TK_MENU)!=0)
 			{
 				drag=DRAG_RECT;
 				cursor_at_mouse_rect(ccx, ccy);
@@ -1537,7 +2058,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 	case WM_MOUSEWHEEL:
 		{
 			bool mw_forward=((short*)&wParam)[1]>0;
-			if(keyboard[VK_CONTROL])
+			if(get_key_state(TK_LCTRL)||get_key_state(TK_RCTRL))
 			{
 				if(mw_forward)
 				{
@@ -1612,13 +2133,13 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 	case WM_KEYDOWN:
 	case WM_SYSKEYDOWN:
 #if 1
-		if(keyboard[VK_CONTROL])
+		if(get_key_state(TK_LCTRL)||get_key_state(TK_RCTRL))
 		{
 			switch(wParam)
 			{
-			case VK_CAPITAL:				return false;
-			case VK_NUMLOCK:				return false;
-			case VK_OEM_3:					return false;
+			case TK_CAPSLOCK:				return false;
+			case TK_NUMLOCK:				return false;
+		//	case VK_OEM_3:					return false;
 			case '1':						return false;
 			case '2':						return false;
 			case '3':						return false;
@@ -1629,8 +2150,8 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 			case '8':						return false;
 			case '9':						return false;
 			case '0':						return false;
-			case VK_OEM_MINUS:				return false;
-			case VK_OEM_PLUS:				return false;
+		//	case VK_OEM_MINUS:				return false;
+		//	case VK_OEM_PLUS:				return false;
 			case 'Q':						return false;
 			case 'W':						return false;
 			case 'E':						return false;
@@ -1645,8 +2166,6 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 				{
 					//TODO: tabs
 					auto str=open_file_dialog();
-					//keyboard[VK_CONTROL]=(GetAsyncKeyState(VK_CONTROL)>>15)!=0;
-					keyboard['O']=(GetAsyncKeyState('O')>>15)!=0;
 					if(str&&open_text_file(str, text))
 					{
 						filename=str;
@@ -1657,19 +2176,17 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 				}
 				return true;
 			case 'P':						return false;
-			case VK_OEM_4:					return false;
-			case VK_OEM_6:					return false;
+		//	case VK_OEM_4:					return false;
+		//	case VK_OEM_6:					return false;
 			case 'A':
 				selcur=0, cursor=text.size(), rectsel=false;
 				ccy=nlines-1, ccx=cursor-find_line_start(cursor);
 				wnd_to_cursor=true, hist_cont=false;
 				break;
 			case 'S'://save
-				if(keyboard[VK_SHIFT]||!filename.size())
+				if(get_key_state(TK_LSHIFT)||get_key_state(TK_RSHIFT)||!filename.size())
 				{
 					auto str=save_file_dialog();
-					//keyboard[VK_CONTROL]=(GetAsyncKeyState(VK_CONTROL)>>15)!=0;
-					keyboard['S']=(GetAsyncKeyState('S')>>15)!=0;
 					if(str&&save_text_file(str, text))
 					{
 						filename=str;
@@ -1692,9 +2209,9 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 			case 'J':						return false;
 			case 'K':						return false;
 			case 'L':						return false;
-			case VK_OEM_1:					return false;
-			case VK_OEM_7:					return false;
-			case VK_OEM_5:case VK_OEM_102:	return false;
+		//	case VK_OEM_1:					return false;
+		//	case VK_OEM_7:					return false;
+		//	case VK_OEM_5:case VK_OEM_102:	return false;
 			case 'Z':
 				hist_undo();
 				break;
@@ -1742,7 +2259,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						start=selcur, end=cursor;
 					else
 						start=cursor, end=selcur;
-					copy_to_clipboard(text.c_str()+start, end-start);
+					copy_to_clipboard_c(text.c_str()+start, end-start);
 				}
 				break;
 			case 'V':
@@ -1779,35 +2296,35 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 				text.clear();
 				return true;
 			case 'M':						return false;
-			case VK_OEM_COMMA:				return false;
-			case VK_OEM_PERIOD:				return false;
-			case VK_OEM_2:					return false;
-			case VK_SPACE:					return false;
-			case VK_NUMPAD0:				return false;
-			case VK_NUMPAD1:				return false;
-			case VK_NUMPAD2:				return false;
-			case VK_NUMPAD3:				return false;
-			case VK_NUMPAD4:				return false;
-			case VK_NUMPAD5:				return false;
-			case VK_NUMPAD6:				return false;
-			case VK_NUMPAD7:				return false;
-			case VK_NUMPAD8:				return false;
-			case VK_NUMPAD9:				return false;
-			case VK_DECIMAL:				return false;
-			case VK_ADD:					return false;
-			case VK_SUBTRACT:				return false;
-			case VK_MULTIPLY:				return false;
-			case VK_DIVIDE:					return false;
-			case VK_DELETE:					return false;
-			case VK_BACK:					return false;
-			case VK_RETURN:					return false;
-			case VK_UP://scroll navigation
+		//	case VK_OEM_COMMA:				return false;
+		//	case VK_OEM_PERIOD:				return false;
+		//	case VK_OEM_2:					return false;
+			case ' ':						return false;
+		//	case VK_NUMPAD0:				return false;
+		//	case VK_NUMPAD1:				return false;
+		//	case VK_NUMPAD2:				return false;
+		//	case VK_NUMPAD3:				return false;
+		//	case VK_NUMPAD4:				return false;
+		//	case VK_NUMPAD5:				return false;
+		//	case VK_NUMPAD6:				return false;
+		//	case VK_NUMPAD7:				return false;
+		//	case VK_NUMPAD8:				return false;
+		//	case VK_NUMPAD9:				return false;
+		//	case VK_DECIMAL:				return false;
+		//	case VK_ADD:					return false;
+		//	case VK_SUBTRACT:				return false;
+		//	case VK_MULTIPLY:				return false;
+		//	case VK_DIVIDE:					return false;
+		//	case VK_DELETE:					return false;
+			case TK_BACKSPACE:				return false;
+			case TK_ENTER:					return false;
+			case TK_UP://scroll navigation
 				wpy-=dy*font_zoom;
 				break;
-			case VK_DOWN:
+			case TK_DOWN:
 				wpy+=dy*font_zoom;
 				break;
-			case VK_LEFT://skip word
+			case TK_LEFT://skip word
 				if(cursor>0)
 				{
 					hist_cont=false;
@@ -1816,11 +2333,11 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					for(;cursor&&group_char(text[cursor-1])==initial;--cursor);
 					calc_cursor_coords(-wpx, -wpx);
 				}
-				if(!keyboard[VK_SHIFT])
+				if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
 					selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
 				wnd_to_cursor=true;
 				break;
-			case VK_RIGHT://skip word
+			case TK_RIGHT://skip word
 				if(cursor<(int)text.size())
 				{
 					hist_cont=false;
@@ -1829,68 +2346,82 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 					for(;cursor<(int)text.size()&&group_char(text[cursor])==initial;++cursor);
 					calc_cursor_coords(-wpx, -wpx);
 				}
-				if(!keyboard[VK_SHIFT])
+				if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
 					selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
 				wnd_to_cursor=true;
 				break;
-			case VK_HOME:
+			case TK_HOME:
 				if(cursor)
 				{
 					hist_cont=false;
 					cursor=0, ccx=0, ccy=0;
 				}
-				if(!keyboard[VK_SHIFT])
+				if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
 					selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
 				wnd_to_cursor=true;
 				break;
-			case VK_END:
+			case TK_END:
 				if(cursor<(int)text.size())
 				{
 					hist_cont=false;
 					cursor=text.size();
 					calc_cursor_coords(-wpx, -wpx);
 				}
-				if(!keyboard[VK_SHIFT])
+				if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
 					selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
 				wnd_to_cursor=true;
 				break;
-			case VK_ESCAPE:case VK_F1:case VK_F2:case VK_F3:case VK_F4:case VK_F5:case VK_F6:case VK_F7:case VK_F8:case VK_F9:case VK_F10:case VK_F11:case VK_F12:case VK_INSERT:	return false;
-			case VK_F13:case VK_F14:case VK_F15:case VK_F16:case VK_F17:case VK_F18:case VK_F19:case VK_F20:case VK_F21:case VK_F22:case VK_F23:case VK_F24:						return false;
-			case VK_TAB:					return false;
-			case VK_SHIFT:					return false;
-			case VK_CONTROL:case VK_LWIN:	return false;
-			case VK_PRIOR:case VK_NEXT:		return false;
+			case TK_ESC:					return false;
+			case TK_F1:						return false;
+			case TK_F2:						return false;
+			case TK_F3:						return false;
+			case TK_F4:						return false;
+			case TK_F5:						return false;
+			case TK_F6:						return false;
+			case TK_F7:						return false;
+			case TK_F8:						return false;
+			case TK_F9:						return false;
+			case TK_F10:					return false;
+			case TK_F11:					return false;
+			case TK_F12:					return false;
+			case TK_INSERT:					return false;
+			case TK_TAB:					return false;
+			case TK_LSHIFT:case TK_RSHIFT:	return false;
+			case TK_LCTRL:case TK_RCTRL:	return false;
+			case TK_LSTART:					return false;
+			case TK_PAGEUP:case TK_PAGEDOWN:return false;
 			default:						return false;
 			}
 		}
 		else//ctrl is up
 		{
-			char character=caps_lock!=keyboard[VK_SHIFT];
+			char character=caps_lock!=(get_key_state(TK_LSHIFT)||get_key_state(TK_RSHIFT));
+			char shiftdown=get_key_state(TK_LSHIFT)||get_key_state(TK_RSHIFT);
 			switch(wParam)
 			{
-			case VK_MENU:
+			case TK_LALT:case TK_RALT:
 				if(drag==DRAG_SELECT)
 				{
 					drag=DRAG_RECT, rectsel=true;
 					return true;
 				}
 				return false;
-			case VK_CAPITAL:				return false;
-			case VK_NUMLOCK:				return false;
-			case VK_OEM_3:					character=keyboard[VK_SHIFT]	?'~':	'`'	;	break;
-			case '0':						character=keyboard[VK_SHIFT]	?')':	'0'	;	break;
-			case '1':						character=keyboard[VK_SHIFT]	?'!':	'1'	;	break;
-			case '2':						character=keyboard[VK_SHIFT]	?'@':	'2'	;	break;
-			case '3':						character=keyboard[VK_SHIFT]	?'#':	'3'	;	break;
-			case '4':						character=keyboard[VK_SHIFT]	?'$':	'4'	;	break;
-			case '5':						character=keyboard[VK_SHIFT]	?'%':	'5'	;	break;
-			case '6':						character=keyboard[VK_SHIFT]	?'^':	'6'	;	break;
-			case '7':						character=keyboard[VK_SHIFT]	?'&':	'7'	;	break;
-			case '8':						character=keyboard[VK_SHIFT]	?'*':	'8'	;	break;
-			case '9':						character=keyboard[VK_SHIFT]	?'(':	'9'	;	break;
-			case VK_OEM_MINUS:				character=keyboard[VK_SHIFT]	?'_':	'-'	;	break;
-			case VK_OEM_PLUS:				character=keyboard[VK_SHIFT]	?'+':	'='	;	break;
-			case VK_TAB:					character=						'\t';			break;
+			case TK_CAPSLOCK:				return false;
+			case TK_NUMLOCK:				return false;
+		//	case VK_OEM_3:					character=shiftdown	?'~':	'`'	;	break;
+			case '0':						character=shiftdown	?')':	'0'	;	break;
+			case '1':						character=shiftdown	?'!':	'1'	;	break;
+			case '2':						character=shiftdown	?'@':	'2'	;	break;
+			case '3':						character=shiftdown	?'#':	'3'	;	break;
+			case '4':						character=shiftdown	?'$':	'4'	;	break;
+			case '5':						character=shiftdown	?'%':	'5'	;	break;
+			case '6':						character=shiftdown	?'^':	'6'	;	break;
+			case '7':						character=shiftdown	?'&':	'7'	;	break;
+			case '8':						character=shiftdown	?'*':	'8'	;	break;
+			case '9':						character=shiftdown	?'(':	'9'	;	break;
+		//	case VK_OEM_MINUS:				character=shiftdown	?'_':	'-'	;	break;
+		//	case VK_OEM_PLUS:				character=shiftdown	?'+':	'='	;	break;
+			case '\t':						character=						'\t';			break;
 			case 'Q':						character=character				?'Q':	'q'	;	break;
 			case 'W':						character=character				?'W':	'w'	;	break;
 			case 'E':						character=character				?'E':	'e'	;	break;
@@ -1901,8 +2432,8 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 			case 'I':						character=character				?'I':	'i'	;	break;
 			case 'O':						character=character				?'O':	'o'	;	break;
 			case 'P':						character=character				?'P':	'p'	;	break;
-			case VK_OEM_4:					character=keyboard[VK_SHIFT]	?'{':	'['	;	break;
-			case VK_OEM_6:					character=keyboard[VK_SHIFT]	?'}':	']'	;	break;
+		//	case VK_OEM_4:					character=shiftdown	?'{':	'['	;	break;
+		//	case VK_OEM_6:					character=shiftdown	?'}':	']'	;	break;
 			case 'A':						character=character				?'A':	'a'	;	break;
 			case 'S':						character=character				?'S':	's'	;	break;
 			case 'D':						character=character				?'D':	'd'	;	break;
@@ -1912,9 +2443,9 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 			case 'J':						character=character				?'J':	'j'	;	break;
 			case 'K':						character=character				?'K':	'k'	;	break;
 			case 'L':						character=character				?'L':	'l'	;	break;
-			case VK_OEM_1:					character=keyboard[VK_SHIFT]	?':':	';'	;	break;
-			case VK_OEM_7:					character=keyboard[VK_SHIFT]	?'"':	'\'';	break;
-			case VK_OEM_5:case VK_OEM_102:	character=keyboard[VK_SHIFT]	?'|':	'\\';	break;
+		//	case VK_OEM_1:					character=shiftdown	?':':	';'	;	break;
+		//	case VK_OEM_7:					character=shiftdown	?'"':	'\'';	break;
+		//	case VK_OEM_5:case VK_OEM_102:	character=shiftdown	?'|':	'\\';	break;
 			case 'Z':						character=character				?'Z':	'z'	;	break;
 			case 'X':						character=character				?'X':	'x'	;	break;
 			case 'C':						character=character				?'C':	'c'	;	break;
@@ -1922,26 +2453,26 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 			case 'B':						character=character				?'B':	'b'	;	break;
 			case 'N':						character=character				?'N':	'n'	;	break;
 			case 'M':						character=character				?'M':	'm'	;	break;
-			case VK_OEM_COMMA:				character=keyboard[VK_SHIFT]	?'<':	','	;	break;
-			case VK_OEM_PERIOD:				character=keyboard[VK_SHIFT]	?'>':	'.'	;	break;
-			case VK_OEM_2:					character=keyboard[VK_SHIFT]	?'?':	'/'	;	break;
-			case VK_SPACE:					character=						' '	;			break;
-			case VK_NUMPAD0:				character=						'0'	;			break;
-			case VK_NUMPAD1:				character=						'1'	;			break;
-			case VK_NUMPAD2:				character=						'2'	;			break;
-			case VK_NUMPAD3:				character=						'3'	;			break;
-			case VK_NUMPAD4:				character=						'4'	;			break;
-			case VK_NUMPAD5:				character=						'5'	;			break;
-			case VK_NUMPAD6:				character=						'6'	;			break;
-			case VK_NUMPAD7:				character=						'7'	;			break;
-			case VK_NUMPAD8:				character=						'8'	;			break;
-			case VK_NUMPAD9:				character=						'9'	;			break;
-			case VK_DECIMAL:				character=						'.'	;			break;
-			case VK_ADD:					character=						'+'	;			break;
-			case VK_SUBTRACT:				character=						'-'	;			break;
-			case VK_MULTIPLY:				character=						'*'	;			break;
-			case VK_DIVIDE:					character=						'/'	;			break;
-			case VK_DELETE:
+		//	case VK_OEM_COMMA:				character=shiftdown	?'<':	','	;	break;
+		//	case VK_OEM_PERIOD:				character=shiftdown	?'>':	'.'	;	break;
+		//	case VK_OEM_2:					character=shiftdown	?'?':	'/'	;	break;
+		//	case VK_SPACE:					character=						' '	;			break;
+		//	case VK_NUMPAD0:				character=						'0'	;			break;
+		//	case VK_NUMPAD1:				character=						'1'	;			break;
+		//	case VK_NUMPAD2:				character=						'2'	;			break;
+		//	case VK_NUMPAD3:				character=						'3'	;			break;
+		//	case VK_NUMPAD4:				character=						'4'	;			break;
+		//	case VK_NUMPAD5:				character=						'5'	;			break;
+		//	case VK_NUMPAD6:				character=						'6'	;			break;
+		//	case VK_NUMPAD7:				character=						'7'	;			break;
+		//	case VK_NUMPAD8:				character=						'8'	;			break;
+		//	case VK_NUMPAD9:				character=						'9'	;			break;
+		//	case VK_DECIMAL:				character=						'.'	;			break;
+		//	case VK_ADD:					character=						'+'	;			break;
+		//	case VK_SUBTRACT:				character=						'-'	;			break;
+		//	case VK_MULTIPLY:				character=						'*'	;			break;
+		//	case VK_DIVIDE:					character=						'/'	;			break;
+			case TK_DELETE:
 				if(rectsel)
 				{
 					Ranges ranges;
@@ -1969,7 +2500,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 				else
 					text_erase1_del(cursor);
 				return true;
-			case VK_BACK://backspace
+			case TK_BACKSPACE://backspace
 				if(rectsel)
 				{
 					Ranges ranges;
@@ -1998,9 +2529,9 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 				else
 					text_erase1_bksp(cursor);
 				return true;
-			case VK_RETURN:					character=						'\n';	break;
-			case VK_UP:
-				if(!keyboard[VK_SHIFT]&&cursor!=selcur)
+			case TK_ENTER:					character=						'\n';	break;
+			case TK_UP:
+				if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT)&&cursor!=selcur)
 				{
 					cursor=selcur=minimum(cursor, selcur), rectsel=false;
 					calc_cursor_coords(-wpx, -wpx);
@@ -2020,13 +2551,13 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						cursor=s0+d_idx;
 					}
 					calc_cursor_coords(-wpx, -wpx);
-					if(!keyboard[VK_SHIFT])
+					if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
 						selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
 				}
 				wnd_to_cursor=true;
 				return true;
-			case VK_DOWN:
-				if(!keyboard[VK_SHIFT]&&cursor!=selcur)
+			case TK_DOWN:
+				if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT)&&cursor!=selcur)
 				{
 					cursor=selcur=maximum(cursor, selcur), rectsel=false;
 					calc_cursor_coords(-wpx, -wpx);
@@ -2047,13 +2578,13 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						cursor=s2+d_idx;
 					}
 					calc_cursor_coords(-wpx, -wpx);
-					if(!keyboard[VK_SHIFT])
+					if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
 						selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
 				}
 				wnd_to_cursor=true;
 				return true;
-			case VK_LEFT:
-				if(!keyboard[VK_SHIFT]&&cursor!=selcur)
+			case TK_LEFT:
+				if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT)&&cursor!=selcur)
 				{
 					cursor=selcur=minimum(cursor, selcur), rectsel=false;
 					calc_cursor_coords(-wpx, -wpx);
@@ -2067,13 +2598,13 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						--cursor;
 						calc_cursor_coords(-wpx, -wpx);
 					}
-					if(!keyboard[VK_SHIFT])
+					if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
 						selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
 				}
 				wnd_to_cursor=true;
 				return true;
-			case VK_RIGHT:
-				if(!keyboard[VK_SHIFT]&&cursor!=selcur)
+			case TK_RIGHT:
+				if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT)&&cursor!=selcur)
 				{
 					cursor=selcur=maximum(cursor, selcur), rectsel=false;
 					calc_cursor_coords(-wpx, -wpx);
@@ -2087,12 +2618,12 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						++cursor;
 						calc_cursor_coords(-wpx, -wpx);
 					}
-					if(!keyboard[VK_SHIFT])
+					if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
 						selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
 				}
 				wnd_to_cursor=true;
 				return true;
-			case VK_HOME:
+			case TK_HOME:
 				{
 					int c2=find_line_start(cursor);
 					if(cursor!=c2)
@@ -2100,12 +2631,12 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						cursor=c2, hist_cont=false;
 						calc_cursor_coords(-wpx, -wpx);
 					}
-					if(!keyboard[VK_SHIFT])
+					if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
 						selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
 					wnd_to_cursor=true;
 				}
 				return true;
-			case VK_END:
+			case TK_END:
 				{
 					int c2=find_line_end(cursor);
 					if(cursor!=c2)
@@ -2113,29 +2644,38 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 						cursor=c2, hist_cont=false;
 						calc_cursor_coords(-wpx, -wpx);
 					}
-					if(!keyboard[VK_SHIFT])
+					if(!get_key_state(TK_LSHIFT)&&!get_key_state(TK_RSHIFT))
 						selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
 					wnd_to_cursor=true;
 				}
 				return true;
-			case VK_ESCAPE://deselect
+			case TK_ESC://deselect
 				selcur=cursor, scx=ccx, scy=ccy, rectsel=false;
 				wnd_to_cursor=true;
 				return true;
-			case VK_F1:
+			case TK_F1:
 				display_help();
 				return false;
-			case VK_F2:
-			case VK_F3:
+			case TK_F2:
+			case TK_F3:
 				return false;
-			case VK_F4:
+			case TK_F4:
 				prof_toggle();
 				return true;
-			case VK_F5:case VK_F6:case VK_F7:case VK_F8:case VK_F9:case VK_F10:case VK_F11:case VK_F12:case VK_INSERT:	return false;
-			case VK_F13:case VK_F14:case VK_F15:case VK_F16:case VK_F17:case VK_F18:case VK_F19:case VK_F20:case VK_F21:case VK_F22:case VK_F23:case VK_F24:	return false;
-			case VK_SHIFT:					return false;
-			case VK_CONTROL:case VK_LWIN:	return false;
-			case VK_PRIOR:case VK_NEXT:		return false;
+			case TK_F5:
+			case TK_F6:
+			case TK_F7:
+			case TK_F8:
+			case TK_F9:
+			case TK_F10:
+			case TK_F11:
+			case TK_F12:
+			case TK_INSERT:
+				return false;
+			case TK_LSHIFT:case TK_RSHIFT:	return false;
+			case TK_LCTRL:case TK_RCTRL:	return false;
+			case TK_LSTART:					return false;
+			case TK_PAGEUP:case TK_PAGEDOWN:return false;
 			default:						return false;
 			}
 			if(rectsel)
@@ -2165,6 +2705,7 @@ bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam)
 	}
 	return true;
 }
+#endif
 bool				wnd_on_quit()//return false to deny exit
 {
 	return true;

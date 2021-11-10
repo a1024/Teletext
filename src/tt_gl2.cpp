@@ -25,10 +25,11 @@ extern const float	_pi=acos(-1.f), _2pi=2*_pi, pi_2=_pi*0.5f, inv_2pi=1/_2pi,
 					infinity=(float)_HUGE,
 					inv255=1.f/255, inv256=1.f/256, inv128=1.f/128;
 
-GL_State			GL2_state=GL2_NOTHING;
-const unsigned char *GLversion=nullptr;
+const char			*GLversion=nullptr;
 int					glMajorVer=0, glMinorVer=0;
 
+#ifndef __linux__
+GL_State			GL2_state=GL2_NOTHING;
 const int 			gl_api_decl_start=__LINE__;//const var is already static
 void				(__stdcall *glBlendEquation)(unsigned mode)=nullptr;
 //void				(__stdcall *glGenVertexArrays)(int n, unsigned *arrays)=nullptr;//OpenGL 3.0
@@ -70,6 +71,7 @@ void				(__stdcall *glUniform3f)(int location, float v0, float v1, float v2)=nul
 void				(__stdcall *glUniform3fv)(int location, int count, const float *value)=nullptr;
 void				(__stdcall *glUniform4f)(int location, float v0, float v1, float v2, float v3)=nullptr;
 const int 			gl_api_decl_end=__LINE__;
+#endif
 
 //error handling
 void 				p_check(void (*p)(), const char *file, int line, const char *func_name, int *state)
@@ -119,6 +121,7 @@ void				gl_error(const char *file, int line)
 	log_error(file, line, "GL %d: %s", err, glerr2str(err));
 }
 
+#ifndef __linux__
 void				load_OGL_API()
 {
 	if(!GL2_state)//load API
@@ -175,6 +178,7 @@ void				load_OGL_API()
 			GL2_state=GL2_API_LOADED;
 	}
 }
+#endif
 
 //shader API
 unsigned			CompileShader(const char *src, unsigned type, const char *programname=nullptr)
@@ -190,7 +194,7 @@ unsigned			CompileShader(const char *src, unsigned type, const char *programname
 		glGetShaderiv(shaderID, GL_INFO_LOG_LENGTH, &infoLogLength);
 		std::vector<char> errorMessage(infoLogLength+1);
 		glGetShaderInfoLog(shaderID, infoLogLength, 0, &errorMessage[0]);
-		copy_to_clipboard(&errorMessage[0], infoLogLength);
+		copy_to_clipboard_c(&errorMessage[0], infoLogLength);
 		if(programname)
 			LOG_ERROR("%s compilation failed. Output copied to cipboard.", programname);
 		else
@@ -223,7 +227,7 @@ unsigned			make_gl_program_impl(const char *vertSrc, const char *fragSrc, const 
 		glGetProgramiv(ProgramID, GL_INFO_LOG_LENGTH, &infoLogLength);
 		std::vector<char> errorMessage(infoLogLength+1);
 		glGetProgramInfoLog(ProgramID, infoLogLength, 0, &errorMessage[0]);
-		copy_to_clipboard(&errorMessage[0], infoLogLength);
+		copy_to_clipboard_c(&errorMessage[0], infoLogLength);
 		if(programname)
 			LOG_ERROR("%s compilation failed. Output copied to cipboard.", programname);
 		else
@@ -267,12 +271,17 @@ void				setGLProgram(unsigned program)
 void				send_color(unsigned location, int color)
 {
 	auto p=(unsigned char*)&color;
+
 	static const __m128 m_255=_mm_set1_ps(inv255);
 	__m128 c=_mm_castsi128_ps(_mm_set_epi32(p[3], p[2], p[1], p[0]));
 	c=_mm_cvtepi32_ps(_mm_castps_si128(c));
 	c=_mm_mul_ps(c, m_255);
-	glUniform4f(location, c.m128_f32[0], c.m128_f32[1], c.m128_f32[2], c.m128_f32[3]);
+	ALIGN(16) float comp[4];
+	_mm_store_ps(comp, c);
+	glUniform4f(location, comp[0], comp[1], comp[2], comp[3]);
+
 	//glUniform4f(location, p[0]*inv255, p[1]*inv255, p[2]*inv255, p[3]*inv255);
+	
 	GL_CHECK();
 }
 void				send_color_rgb(unsigned location, int color)
@@ -282,7 +291,9 @@ void				send_color_rgb(unsigned location, int color)
 	__m128 c=_mm_castsi128_ps(_mm_set_epi32(p[3], p[2], p[1], p[0]));
 	c=_mm_cvtepi32_ps(_mm_castps_si128(c));
 	c=_mm_mul_ps(c, m_255);
-	glUniform3f(location, c.m128_f32[0], c.m128_f32[1], c.m128_f32[2]);
+	ALIGN(16) float comp[4];
+	_mm_store_ps(comp, c);
+	glUniform3f(location, comp[0], comp[1], comp[2]);
 	GL_CHECK();
 }
 void				send_vec3(unsigned location, const float *v){glUniform3fv(location, 1, v);}

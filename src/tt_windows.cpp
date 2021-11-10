@@ -1,4 +1,4 @@
-//tt_system.cpp - OS-dependent code
+//tt_system.cpp - Windows-dependent code
 //Copyright (C) 2021 Ayman Wagih
 //
 //This program is free software: you can redistribute it and/or modify
@@ -14,22 +14,23 @@
 //You should have received a copy of the GNU General Public License
 //along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+//TODO: UTF8 everywhere
+
+#ifdef _WINDOWS
 #include			"tt.h"
 #include			<stdio.h>
 #include			<vector>
 #include			<algorithm>
-
 #include			<io.h>//for console
 #include			<fcntl.h>
 #include			<iostream>
-
-#ifdef _MSC_VER
 #define				scanf	scanf_s
 //#include			<Windows.h>//included in tt.h
 #pragma				comment(lib, "OpenGL32.lib")
 #pragma				comment(lib, "GLU32.lib")
 const char			file[]=__FILE__;
 
+wchar_t				g_wbuf[G_BUF_SIZE]={};
 static HINSTANCE	ghInstance=nullptr;
 static HWND			ghWnd=nullptr;
 static RECT			R={};
@@ -501,17 +502,15 @@ void				console_pause()
 	char c=0;
 	scanf_s("%c", &c);
 }
-void				messageboxw(const wchar_t *title, const wchar_t *format, ...)
+void				messagebox(const char *title, const char *format, ...)
 {
-	vswprintf_s(g_wbuf, g_buf_size, format, (char*)(&format+1));
-	MessageBoxW(ghWnd, g_wbuf, title, MB_OK);
+	int len=vsprintf_s(g_buf, g_buf_size, format, (char*)(&format+1));
+	len=MultiByteToWideChar(CP_UTF8, 0, g_buf, len, g_wbuf, g_buf_size);	SYS_ASSERT(len);
+	MultiByteToWideChar(CP_UTF8, 0, title, strlen(title), g_wbuf+len+1, g_buf_size-(len+1));	SYS_ASSERT(len);
+	MessageBoxW(ghWnd, g_wbuf, g_wbuf+len+1, MB_OK);
+	//MessageBoxA(ghWnd, g_buf, title, MB_OK);
 }
-void				messageboxa(const char *title, const char *format, ...)
-{
-	vsprintf_s(g_buf, g_buf_size, format, (char*)(&format+1));
-	MessageBoxA(ghWnd, g_buf, title, MB_OK);
-}
-void				copy_to_clipboard(const char *a, int size)//size not including null terminator
+void				copy_to_clipboard_c(const char *a, int size)//size not including null terminator
 {
 	char *clipboard=(char*)LocalAlloc(LMEM_FIXED, (size+1)*sizeof(char));
 	memcpy(clipboard, a, (size+1)*sizeof(char));
@@ -528,7 +527,7 @@ bool				paste_from_clipboard(char *&str, int &len)
 	if(!a)
 	{
 		CloseClipboard();
-		messageboxa("Error", "Failed to paste from clipboard");
+		messagebox("Error", "Failed to paste from clipboard");
 		return false;
 	}
 	int len0=strlen(a);
@@ -545,19 +544,25 @@ bool				paste_from_clipboard(char *&str, int &len)
 	CloseClipboard();
 	return true;
 }
-void				get_window_title_w(wchar_t *str, int size)
+void				get_window_title(char *str, int size)
 {
-	GetWindowTextW(ghWnd, str, size);
+	int success=GetWindowTextW(ghWnd, g_wbuf, g_buf_size);	SYS_ASSERT(success);
+	//char c[]="?";
+	//int invalid=false;
+	int len=WideCharToMultiByte(CP_UTF8, 0, g_wbuf, wcslen(g_wbuf), str, size, nullptr, nullptr);
+	SYS_ASSERT(len);
+	//GetWindowTextA(ghWnd, str, size);
 }
-void				set_window_title_w(const wchar_t *str)
+//void				set_window_title(const char *str)
+//{
+//	int success=SetWindowTextA(ghWnd, str);
+//	SYS_ASSERT(success);
+//}
+void				set_window_title(const char *str)
 {
-	int success=SetWindowTextW(ghWnd, str);
-	SYS_ASSERT(success);
-}
-void				set_window_title_a(const char *str)
-{
-	int success=SetWindowTextA(ghWnd, str);
-	SYS_ASSERT(success);
+	int len=MultiByteToWideChar(CP_UTF8, 0, str, strlen(str), g_wbuf, g_buf_size);	SYS_ASSERT(len);
+	int success=SetWindowTextW(ghWnd, g_wbuf);	SYS_ASSERT(success);
+	//int success=SetWindowTextA(ghWnd, str);	SYS_ASSERT(success);
 }
 int					GUINPrint(int x, int y, int w, int h, const char *a, ...)
 {
@@ -585,7 +590,7 @@ void				GUIPrint(int x, int y, const char *a, ...)
 	}
 }
 
-const wchar_t*		open_file_dialog()
+const char*			open_file_dialog()
 {
 	g_wbuf[0]=0;
 	OPENFILENAMEW ofn=
@@ -609,11 +614,16 @@ const wchar_t*		open_file_dialog()
 	};
 	int success=GetOpenFileNameW(&ofn);
 	if(!success)
-		return 0;
-	memcpy(g_wbuf, ofn.lpstrFile, wcslen(ofn.lpstrFile)*sizeof(wchar_t));
-	return g_wbuf;
+		return nullptr;
+
+	//char c[]="?";
+	//int invalid=false;
+	int len=WideCharToMultiByte(CP_UTF8, 0, ofn.lpstrFile, wcslen(ofn.lpstrFile), g_buf, g_buf_size, nullptr, nullptr);	SYS_ASSERT(len);
+	return g_buf;
+	//memcpy(g_wbuf, ofn.lpstrFile, wcslen(ofn.lpstrFile)*sizeof(wchar_t));
+	//return g_wbuf;
 }
-const wchar_t*		save_file_dialog()
+const char*			save_file_dialog()
 {
 	g_wbuf[0]=0;
 	OPENFILENAMEW ofn=
@@ -639,18 +649,23 @@ const wchar_t*		save_file_dialog()
 	};
 	int success=GetSaveFileNameW(&ofn);
 	if(!success)
-		return 0;
-	memcpy(g_wbuf, ofn.lpstrFile, wcslen(ofn.lpstrFile)*sizeof(wchar_t));
-	return g_wbuf;
+		return nullptr;
+
+	//char c[]="?";
+	//int invalid=false;
+	int len=WideCharToMultiByte(CP_UTF8, 0, ofn.lpstrFile, wcslen(ofn.lpstrFile), g_buf, g_buf_size, nullptr, nullptr);	SYS_ASSERT(len);
+	return g_buf;
+	//memcpy(g_wbuf, ofn.lpstrFile, wcslen(ofn.lpstrFile)*sizeof(wchar_t));
+	//return g_wbuf;
 }
-bool				open_text_file(const wchar_t *filename, std::string &str)
+bool				open_text_file(const char *filename, std::string &str)
 {
 	FILE *file=nullptr;
-	int ret=_wfopen_s(&file, filename, L"r");
+	int ret=fopen_s(&file, filename, "r");
 	if(ret)
 	{
 		strerror_s(g_buf, g_buf_size, ret);
-		messageboxa("Error", "Cannot open \'%s\'.\n%s", filename, g_buf);
+		messagebox("Error", "Cannot open \'%s\'.\n%s", filename, g_buf);
 		return false;
 	}
 	fseek(file, 0, SEEK_END);
@@ -662,14 +677,14 @@ bool				open_text_file(const wchar_t *filename, std::string &str)
 	str.resize(strlen(str.c_str()));//remove extra null terminators at the end
 	return true;
 }
-bool				save_text_file(const wchar_t *filename, std::string &str)
+bool				save_text_file(const char *filename, std::string &str)
 {
 	FILE *file=nullptr;
-	int ret=_wfopen_s(&file, filename, L"w");
+	int ret=fopen_s(&file, filename, "w");
 	if(ret)
 	{
 		strerror_s(g_buf, g_buf_size, ret);
-		messageboxa("Error", "Cannot save \'%s\'.\n%s", filename, g_buf);
+		messagebox("Error", "Cannot save \'%s\'.\n%s", filename, g_buf);
 		return false;
 	}
 	fwrite(str.c_str(), 1, str.size(), file);
@@ -694,15 +709,16 @@ void				mouse_release()
 {
 	int success=ReleaseCapture();	SYS_ASSERT(success);
 }
-void				update_key_state(char key)
+bool				get_key_state(int key)
 {
 	keyboard[key]=(GetAsyncKeyState(key)>>15)!=0;
+	return keyboard[key]!=0;
 }
 void				update_main_key_states()
 {
-	update_key_state(VK_MENU);
-	update_key_state(VK_SHIFT);
-	update_key_state(VK_CONTROL);
+	get_key_state(VK_MENU);
+	get_key_state(VK_SHIFT);
+	get_key_state(VK_CONTROL);
 }
 
 #if 0
@@ -750,11 +766,84 @@ bool				resize_window()
 		h=1;
 	return w0!=w||h0!=h;
 }
-void				update_screen()
+void				swap_buffers()
 {
 	SwapBuffers(ghDC);
 	//BitBlt(ghDC, 0, 0, w, h, ghMemDC, 0, 0, SRCCOPY);
 }
+const char numrow[]=")!@#$%^&*(";
+#if 0
+const char			*keymap[]=
+{	//1234567
+	"        "//normal
+	"        "
+	"        "
+	"        "
+	"        "
+	"        "
+	"01234567"
+	"89      "
+	" abcdefg"
+	"hijklmno"
+	"pqrstuvw"
+	"xyz     "
+	"        "
+	"        "
+	"        "
+	"        ",
+	//1234567
+	"        "//shift
+	"        "
+	"        "
+	"        "
+	"        "
+	"        "
+	")!@#$%^&"
+	"*(      "
+	" ABCDEFG"
+	"HIJKLMNO"
+	"PQRSTUVW"
+	"XYZ     "
+	"        "
+	"        "
+	"        "
+	"        ",
+	//1234567
+	"        "//capslock
+	"        "
+	"        "
+	"        "
+	"        "
+	"        "
+	"01234567"
+	"89      "
+	" ABCDEFG"
+	"HJIKLMNO"
+	"PQRSTUVW"
+	"XYZ     "
+	"        "
+	"        "
+	"        "
+	"        ",
+	//1234567
+	"        "//shift + capslock
+	"        "
+	"        "
+	"        "
+	"        "
+	"        "
+	")!@#$%^&"
+	"*(      "
+	" abcdefg"
+	"hijklmno"
+	"pqrstuvw"
+	"xyz     "
+	"        "
+	"        "
+	"        "
+	"        ",
+};
+#endif
 long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long lParam)
 {
 	switch(message)
@@ -793,55 +882,138 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 
 	case WM_MOUSEMOVE:
 		mx=(short&)lParam, my=((short*)&lParam)[1];
-		if(wnd_on_input(hWnd, message, wParam, lParam))
+		if(wnd_on_mousemove())
 			InvalidateRect(hWnd, nullptr, 0);
 		break;
 
 	case WM_MOUSEWHEEL:
-		if(wnd_on_input(hWnd, message, wParam, lParam))
+		if(wnd_on_mousewheel(((short*)&wParam)[1]>0))
 			InvalidateRect(hWnd, nullptr, 0);
 		break;
 
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK:
-		if(wnd_on_input(hWnd, message, wParam, lParam))
+		if(wnd_on_lbuttondown())
 			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[VK_LBUTTON]=true;
 		break;
 	case WM_LBUTTONUP:
-		if(wnd_on_input(hWnd, message, wParam, lParam))
+		if(wnd_on_lbuttonup())
 			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[VK_LBUTTON]=false;
 		break;
 
 	case WM_RBUTTONDOWN:
 	case WM_RBUTTONDBLCLK:
-		if(wnd_on_input(hWnd, message, wParam, lParam))
+		if(wnd_on_rbuttondown())
 			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[VK_RBUTTON]=true;
 		break;
 	case WM_RBUTTONUP:
-		if(wnd_on_input(hWnd, message, wParam, lParam))
+		if(wnd_on_rbuttonup())
 			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[VK_RBUTTON]=false;
 		break;
 
 	case WM_KEYDOWN:
 	case WM_SYSKEYDOWN:
-		if(wParam==VK_F4&&keyboard[VK_MENU])
 		{
-			if(wnd_on_quit())
-				PostQuitMessage(0);
+			bool redraw=false;
+			if(keyboard[VK_CONTROL])
+			{
+				switch(wParam)
+				{
+				case VK_UP:		redraw=wnd_on_scroll_up_key();				break;
+				case VK_DOWN:	redraw=wnd_on_scroll_down_key();			break;
+				case VK_LEFT:	redraw=wnd_on_skip_word_left();				break;
+				case VK_RIGHT:	redraw=wnd_on_skip_word_right();			break;
+				case VK_HOME:	redraw=wnd_on_goto_file_start();			break;
+				case VK_END:	redraw=wnd_on_goto_file_end();				break;
+				case 'A':		redraw=wnd_on_select_all();					break;
+				case 'C':		redraw=wnd_on_copy();						break;
+				case 'D':		redraw=wnd_on_clear_hist();					break;
+				case 'N':		redraw=wnd_on_new();						break;
+				case 'O':		redraw=wnd_on_open();						break;
+				case 'S':		redraw=wnd_on_save(keyboard[VK_SHIFT]!=0);	break;
+				case 'V':		redraw=wnd_on_paste();						break;
+				case 'Y':		redraw=wnd_on_redo();						break;
+				case 'Z':		redraw=wnd_on_undo();						break;
+				}
+			}
+			else
+			{
+				char shift=keyboard[VK_SHIFT], lowercase=caps_lock==shift;
+				switch(wParam)
+				{
+				case VK_MENU:	redraw=wnd_on_begin_rectsel();	break;
+				case VK_ESCAPE:	redraw=wnd_on_deselect();		break;
+				case VK_F1:		redraw=wnd_on_display_help();	break;
+				case VK_F4:
+					if(keyboard[VK_MENU])
+					{
+						if(wnd_on_quit())
+							PostQuitMessage(0);
+					}
+					else
+						redraw=wnd_on_toggle_profiler();
+					break;
+				case VK_UP:		redraw=wnd_on_cursor_up();		break;
+				case VK_DOWN:	redraw=wnd_on_cursor_down();	break;
+				case VK_LEFT:	redraw=wnd_on_cursor_left();	break;
+				case VK_RIGHT:	redraw=wnd_on_cursor_right();	break;
+				case VK_HOME:	redraw=wnd_on_goto_line_start();break;
+				case VK_END:	redraw=wnd_on_goto_line_end();	break;
+				case VK_DELETE:	redraw=wnd_on_deletechar();		break;
+				case VK_BACK:	redraw=wnd_on_backspace();		break;
+
+				case VK_OEM_1:		redraw=wnd_on_type(shift?':':';');break;
+				case VK_OEM_2:		redraw=wnd_on_type(shift?'?':'/');break;
+				case VK_OEM_3:		redraw=wnd_on_type(shift?'~':'`');break;
+				case VK_OEM_4:		redraw=wnd_on_type(shift?'{':'[');break;
+				case VK_OEM_5:		redraw=wnd_on_type(shift?'|':'\\');break;
+				case VK_OEM_6:		redraw=wnd_on_type(shift?'}':']');break;
+				case VK_OEM_7:		redraw=wnd_on_type(shift?'\"':'\'');break;
+				case VK_OEM_MINUS:	redraw=wnd_on_type(shift?'_':'-');break;
+				case VK_OEM_PLUS:	redraw=wnd_on_type(shift?'+':'=');break;
+				case VK_OEM_COMMA:	redraw=wnd_on_type(shift?'<':',');break;
+				case VK_OEM_PERIOD:	redraw=wnd_on_type(shift?'>':'.');break;
+				case VK_DECIMAL:	redraw=wnd_on_type('.');break;
+				case VK_ADD:		redraw=wnd_on_type('+');break;
+				case VK_SUBTRACT:	redraw=wnd_on_type('-');break;
+				case VK_MULTIPLY:	redraw=wnd_on_type('*');break;
+				case VK_DIVIDE:		redraw=wnd_on_type('/');break;
+				default:
+					if(wParam>='A'&&wParam<='Z')
+						redraw=wnd_on_type(wParam+('a'-'A')*lowercase);
+					else if(wParam>='0'&&wParam<='9')
+					{
+						if(shift)
+							redraw=wnd_on_type(numrow[wParam-'0']);
+						else
+							redraw=wnd_on_type(wParam);
+					}
+					else if(wParam>=VK_NUMPAD0&&wParam<=VK_NUMPAD9)
+						redraw=wnd_on_type(wParam-VK_NUMPAD0);
+					break;
+				}
+			}
+			if(redraw)
+				InvalidateRect(hWnd, nullptr, 0);
 		}
-		if(wnd_on_input(hWnd, message, wParam, lParam))
-			InvalidateRect(hWnd, nullptr, 0);
+		//if(wParam==VK_F4&&keyboard[VK_MENU])
+		//{
+		//	if(wnd_on_quit())
+		//		PostQuitMessage(0);
+		//}
+		//if(wnd_on_input(hWnd, message, wParam, lParam))
+		//	InvalidateRect(hWnd, nullptr, 0);
 		keyboard[wParam]=true;
 		update_main_key_states();
 		break;
 	case WM_KEYUP:
 	case WM_SYSKEYUP:
-		if(wnd_on_input(hWnd, message, wParam, lParam))
-			InvalidateRect(hWnd, nullptr, 0);
+		//if(wnd_on_input(hWnd, message, wParam, lParam))
+		//	InvalidateRect(hWnd, nullptr, 0);
 		keyboard[wParam]=false;
 		update_main_key_states();
 		break;
@@ -892,6 +1064,9 @@ int					__stdcall FontProc(LOGFONTW const *lf, TEXTMETRICW const *tm, unsigned l
 #endif
 int					__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, char *lpCmdLine, int nCmdShow)
 {
+	//char LOL_1[10]={};
+	//wchar_t LOL_2[10]=L"Hello";
+	//int length=WideCharToMultiByte(CP_UTF8, 0, LOL_2, 10, LOL_1, strlen(LOL_1), nullptr, nullptr);
 	prof_start();
 	ghInstance=hInstance;
 	tagWNDCLASSEXA wndClassEx=
@@ -913,7 +1088,7 @@ int					__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, ch
 
 		//init callback
 		GetClientRect(ghWnd, &R);
-		h=R.bottom-R.top, w=R.right-R.left;
+		w=R.right-R.left, h=R.bottom-R.top;
 		ghDC=GetDC(ghWnd);
 #if 0
 		ghMemDC=CreateCompatibleDC(ghDC);
@@ -972,9 +1147,9 @@ int					__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, ch
 	//	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
 	//	prof_add("glHint");
 
-		glGetIntegerv(GL_MAJOR_VERSION, &glMajorVer);//get OpenGL version
-		glGetIntegerv(GL_MINOR_VERSION, &glMinorVer);
-		GLversion=glGetString(GL_VERSION);
+		GLversion=(const char*)glGetString(GL_VERSION);//get OpenGL version
+		//glGetIntegerv(GL_MAJOR_VERSION, &glMajorVer);
+		//glGetIntegerv(GL_MINOR_VERSION, &glMinorVer);
 
 		load_OGL_API();
 		prof_add("load API");
@@ -1017,5 +1192,4 @@ int					__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, ch
 
 	return msg.wParam;
 }
-#elif defined __linux__
 #endif

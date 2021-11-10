@@ -3,7 +3,44 @@
 #define				TT_GL2_VECTOR_H
 #include			<string.h>
 #include			<math.h>
-#include			<tmmintrin.h>
+#ifdef _MSC_VER
+#include			<tmmintrin.h>//SSSE3
+inline int&			m128i_i32(__m128i &v){return v.m128i_i32[0];}
+inline int			m128i_i32(__m128i const &v){return v.m128i_i32[0];}
+inline int&			m128i_i32(__m128i &v, int component){return v.m128i_i32[component];}
+inline int			m128i_i32(__m128i const &v, int component){return v.m128i_i32[component];}
+
+inline float&		m128_f32(__m128 &v){return v.m128_f32[0];}
+inline float		m128_f32(__m128 const &v){return v.m128_f32[0];}
+inline float&		m128_f32(__m128 &v, int component){return v.m128_f32[component];}
+inline float		m128_f32(__m128 const &v, int component){return v.m128_f32[component];}
+
+inline double&		m128d_v0(__m128d &v){return v.m128d_f64[0];}
+inline double		m128d_v0(__m128d const &v){return v.m128d_f64[0];}
+inline double&		m128d_vn(__m128d &v, int component){return v.m128d_f64[component];}
+inline double		m128d_vn(__m128d const &v, int component){return v.m128d_f64[component];}
+#elif defined __GNUC__
+#include			<smmintrin.h>//SSE4.1
+inline int&			m128i_i32(__m128i &v){return *(int*)&v;}
+inline int			m128i_i32(__m128i const &v){return *(int*)&v;}
+inline int&			m128i_i32(__m128i &v, int component){return ((int*)&v)[component];}
+inline int			m128i_i32(__m128i const &v, int component){return ((int*)&v)[component];}
+
+inline float&		m128_f32(__m128 &v){return *(float*)&v;}
+inline float		m128_f32(__m128 const &v){return *(float*)&v;}
+inline float&		m128_f32(__m128 &v, int component){return ((float*)&v)[component];}
+template<int i>inline float m128_f32(__m128 const &v)//https://stackoverflow.com/questions/12624466/get-member-of-m128-by-index
+{
+	__m128 v2=_mm_shuffle_ps(v, v, _MM_SHUFFLE(i, i, i, i));
+	return _mm_cvtss_f32(v2);
+//	return ((float*)&v)[component];
+}
+
+inline double&		m128d_v0(__m128d &v){return *(double*)&v;}
+inline double		m128d_v0(__m128d const &v){return *(double*)&v;}
+inline double&		m128d_vn(__m128d &v, int component){return ((double*)&v)[component];}
+inline double		m128d_vn(__m128d const &v, int component){return ((double*)&v)[component];}
+#endif
 
 //OpenGL error handling
 void 				gl_check(const char *file, int line);

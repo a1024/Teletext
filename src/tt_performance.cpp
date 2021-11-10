@@ -23,6 +23,9 @@
 #ifdef PROFILER_CLIPBOARD
 #include			<sstream>
 #endif
+#ifdef TIMING_USE_clock_gettime
+#include			<time.h>
+#endif
 #ifdef PROFILER_CYCLES
 #define				ELAPSED_FN		elapsed_cycles
 #else
@@ -46,6 +49,10 @@ double				time_sec()
 	t=li.QuadPart;
 	QueryPerformanceCounter(&li);
 	return (double)li.QuadPart/t;
+#elif defined TIMING_USE_clock_gettime
+	struct timespec ts;
+	clock_gettime(CLOCK_REALTIME, &ts);
+	return ts.tv_sec+ts.tv_nsec*1e-9;
 #elif defined TIMING_USE_rdtsc
 	static LARGE_INTEGER li={};
 	QueryPerformanceFrequency(&li);
@@ -86,6 +93,10 @@ double				time_ms()
 	t=li.QuadPart;
 	QueryPerformanceCounter(&li);
 	return (double)li.QuadPart*1000./t;
+#elif defined TIMING_USE_clock_gettime
+	struct timespec ts;
+	clock_gettime(CLOCK_REALTIME, &ts);
+	return ts.tv_sec*1000.+ts.tv_nsec*1e-6;
 #elif defined TIMING_USE_rdtsc
 	static LARGE_INTEGER li={};
 	QueryPerformanceFrequency(&li);

@@ -1,11 +1,15 @@
 #pragma once
 #ifndef TT_H
 #define TT_H
-#ifdef _MSC_VER
+#ifdef _WINDOWS
 #include			<Windows.h>
+#elif defined __linux__
+#include			<X11/Xlib.h>
+#include			<X11/Xutil.h>
+#define				GL_GLEXT_PROTOTYPES
 #endif
-#include			<GL/GL.h>
-#include			<GL/GLU.h>
+#include			<GL/gl.h>
+#include			<GL/glu.h>
 #include			<math.h>
 #include			<string>
 
@@ -111,47 +115,179 @@ void				prof_print();
 #endif
 
 //system
-#ifdef _MSC_VER
+#ifdef _WINDOWS
+#define				ALIGN(AMMOUNT)	__declspec(align(AMMOUNT))
 extern HDC			ghDC;
 extern bool			console_active;
 void				console_show();
 void				console_hide();
 void				console_pause();
 #elif defined __linux__
+#define				sprintf_s snprintf
+#define				vsprintf_s vsnprintf
+#define				_HUGE HUGE_VAL
+#define				ALIGN(AMMOUNT)	__attribute__((aligned(AMMOUNT)))
 #define				console_show()
 #define				console_hide()
 #define				console_pause()
 #endif
-void				messageboxw(const wchar_t *title, const wchar_t *format, ...);
-void				messageboxa(const char *title, const char *format, ...);
-void				copy_to_clipboard(const char *a, int size);
+//void				messageboxw(const wchar_t *title, const wchar_t *format, ...);
+void				messagebox(const char *title, const char *format, ...);
+void				copy_to_clipboard_c(const char *a, int size);
 bool				paste_from_clipboard(char *&str, int &len);//filters out '\r', don't forget to delete[] str
-//#ifdef _MSC_VER
-//inline void		close_clipboard(){CloseClipboard();}
-//#endif
-void				get_window_title_w(wchar_t *str, int size);
-void				set_window_title_w(const wchar_t *str);
-void				set_window_title_a(const char *str);
-//bool				font_set(const wchar_t *name, int size);
-//void				font_use	();
-//void				font_drop	();
-//void				font_get_dimensions(short &x, short &y);
+void				get_window_title(char *str, int size);
+void				set_window_title(const char *str);
+//void				set_window_title(const char *str);
 int					GUINPrint(int x, int y, int w, int h, const char *a, ...);
 long				GUITPrint(int x, int y, const char *a, ...);
 void				GUIPrint(int x, int y, const char *a, ...);
-const wchar_t*		open_file_dialog();
-const wchar_t*		save_file_dialog();
-bool				open_text_file(const wchar_t *filename, std::string &str);
-bool				save_text_file(const wchar_t *filename, std::string &str);
+const char*			open_file_dialog();
+const char*			save_file_dialog();
+bool				open_text_file(const char *filename, std::string &str);
+bool				save_text_file(const char *filename, std::string &str);
 int					ask_to_save();
 void				mouse_capture();
 void				mouse_release();
-void				update_key_state(char key);
-void				update_main_key_states();
-void				update_screen();
+bool				get_key_state(int key);
+//inline bool			get_key_state(int key)
+//{
+//#ifdef _WINDOWS
+//	return GetAsyncKeyState(key)>>15!=0;
+//#elif defined __linux__
+//	XkbGetState();
+//	return false;
+//#else
+//	return false;
+//#endif
+//}
+//void				update_key_state(char key);
+//void				update_main_key_states();
+void				swap_buffers();
+
+//function removers
+//#ifdef __linux__
+//#define messageboxa(...)
+//#define copy_to_clipboard_c(...)
+//#endif
+
+//key macros
+#ifdef _WINDOWS
+
+#define TK_LBUTTON		VK_LBUTTON
+#define TK_RBUTTON		VK_RBUTTON
+#define TK_MBUTTON		VK_MBUTTON
+
+#define TK_ESC			VK_ESCAPE
+#define TK_TAB			VK_TAB
+#define TK_CAPSLOCK		VK_CAPITAL
+#define	TK_LSHIFT		VK_LSHIFT
+#define	TK_RSHIFT		VK_RSHIFT
+#define	TK_LCTRL		VK_LCONTROL
+#define	TK_RCTRL		VK_RCONTROL
+#define	TK_LALT			VK_LMENU
+#define	TK_RALT			VK_RMENU
+#define TK_LSTART		VK_LWIN
+#define TK_RSTART		VK_RWIN
+
+#define TK_DELETE		VK_DELETE
+#define TK_BACKSPACE	VK_BACK
+#define TK_ENTER		VK_RETURN
+
+#define TK_HOME			VK_HOME
+#define TK_END			VK_END
+#define TK_PGUP			VK_PRIOR
+#define	TK_PGDOWN		VK_NEXT
+#define TK_LEFT			VK_LEFT
+#define TK_RIGHT		VK_RIGHT
+#define TK_UP			VK_UP
+#define TK_DOWN			VK_DOWN
+//#define TK_PRINTSCREEN	VK_SNAPSHOT
+
+#define TK_F1			VK_F1
+#define TK_F2			VK_F2
+#define TK_F3			VK_F3
+#define TK_F4			VK_F4
+#define TK_F5			VK_F5
+#define TK_F6			VK_F6
+#define TK_F7			VK_F7
+#define TK_F8			VK_F8
+#define TK_F9			VK_F9
+#define TK_F10			VK_F10
+#define TK_F11			VK_F11
+#define TK_F12			VK_F12
+
+#elif defined __linux__
+
+enum WindowMessages
+{
+	WM_IGNORED,
+
+	WM_MOUSEMOVE,
+	WM_MOUSEWHEEL,
+	WM_LBUTTONDOWN,
+	WM_LBUTTONDBLCLK,
+	WM_LBUTTONUP,
+	WM_RBUTTONDOWN,
+	WM_RBUTTONDBLCLK,
+	WM_RBUTTONUP,
+	WM_KEYDOWN,
+	WM_SYSKEYDOWN,
+	WM_KEYUP,
+	WM_SYSKEYUP,
+};
+
+#define TK_LBUTTON		//???
+#define TK_RBUTTON		//???
+#define TK_MBUTTON		//???
+
+#define TK_ESC			XK_Escape
+#define TK_TAB			XK_Tab
+#define TK_CAPSLOCK		XK_Caps_Lock
+#define TK_NUMLOCK		XK_Num_Lock
+#define	TK_LSHIFT		XK_Shift_L
+#define	TK_RSHIFT		XK_Shift_R
+#define	TK_LCTRL		XK_Control_L
+#define	TK_RCTRL		XK_Control_R
+#define	TK_LALT			XK_Alt_L
+#define	TK_RALT			XK_Alt_R
+#define TK_LSTART		XK_Super_L
+#define TK_RSTART		XK_Super_R
+
+#define	TK_INSERT		XK_Insert
+#define TK_DELETE		XK_Delete
+#define TK_BACKSPACE	XK_BackSpace
+#define TK_ENTER		XK_Return
+
+#define TK_HOME			XK_Home
+#define TK_END			XK_End
+#define TK_PAGEUP		XK_Page_Up
+#define	TK_PAGEDOWN		XK_Page_Down
+#define TK_LEFT			XK_Left
+#define TK_RIGHT		XK_Right
+#define TK_UP			XK_Up
+#define TK_DOWN			XK_Down
+//#define TK_PRINTSCREEN	XK_Print
+
+#define TK_F1			XK_F1
+#define TK_F2			XK_F2
+#define TK_F3			XK_F3
+#define TK_F4			XK_F4
+#define TK_F5			XK_F5
+#define TK_F6			XK_F6
+#define TK_F7			XK_F7
+#define TK_F8			XK_F8
+#define TK_F9			XK_F9
+#define TK_F10			XK_F10
+#define TK_F11			XK_F11
+#define TK_F12			XK_F12
+
+#endif
 
 //OpenGL
 #if 1
+extern const char		*GLversion;
+//extern int		glMajorVer, glMinorVer;
+#ifdef _WINDOWS
 enum				GL_State
 {
 	GL2_NOTHING,
@@ -161,8 +297,6 @@ enum				GL_State
 	GL2_READY,
 };
 extern GL_State		GL2_state;
-extern const unsigned char *GLversion;
-extern int			glMajorVer, glMinorVer;
 #define				GL_FUNC_ADD				0x8006//GL/glew.h
 #define				GL_MIN					0x8007
 #define				GL_MAX					0x8008
@@ -236,6 +370,7 @@ extern void			(__stdcall *glUniform3f)(int location, float v0, float v1, float v
 extern void			(__stdcall *glUniform3fv)(int location, int count, const float *value);
 extern void			(__stdcall *glUniform4f)(int location, float v0, float v1, float v2, float v3);
 void				load_OGL_API();
+#endif
 
 extern unsigned		current_program;
 struct				ShaderVar2
@@ -269,6 +404,7 @@ void				toNDC(float xs, float ys, float &xn, float &yn);//2021-01-14 test: fill 
 #endif
 
 //tt
+extern char			caps_lock;
 extern unsigned		font_txid;
 typedef unsigned long long u64;
 union				U64
@@ -282,7 +418,7 @@ union				U64
 		data|=lo;
 	}
 };
-extern std::wstring	filename;
+extern std::string	filename;
 void				set_text_colors(U64 const &colors);
 int					print_line(short x, short y, const char *msg, int msg_length, short tab_origin, short zoom);
 int					print(short zoom, short tab_origin, short x, short y, const char *format, ...);
@@ -291,7 +427,47 @@ void				wnd_on_create();
 bool				wnd_on_init();//return false for EXIT_FAILURE
 void				wnd_on_resize();
 void				wnd_on_render();
-bool				wnd_on_input(HWND hWnd, int message, int wParam, int lParam);//return true to redraw	TODO: cross-platform
+
+//return true to redraw:
+bool				wnd_on_mousemove();
+bool				wnd_on_mousewheel(bool mw_forward);
+bool				wnd_on_lbuttondown();
+bool				wnd_on_lbuttonup();
+bool				wnd_on_rbuttondown();
+bool				wnd_on_rbuttonup();
+
+bool				wnd_on_display_help();
+bool				wnd_on_toggle_profiler();
+bool				wnd_on_open();
+bool				wnd_on_select_all();
+bool				wnd_on_deselect();
+bool				wnd_on_save(bool save_as);
+bool				wnd_on_clear_hist();
+bool				wnd_on_undo();
+bool				wnd_on_redo();
+bool				wnd_on_copy();
+bool				wnd_on_paste();
+bool				wnd_on_new();
+bool				wnd_on_scroll_up_key();
+bool				wnd_on_scroll_down_key();
+bool				wnd_on_skip_word_left();
+bool				wnd_on_skip_word_right();
+bool				wnd_on_goto_file_start();
+bool				wnd_on_goto_file_end();
+bool				wnd_on_goto_line_start();
+bool				wnd_on_goto_line_end();
+bool				wnd_on_begin_rectsel();
+bool				wnd_on_deletechar();
+bool				wnd_on_backspace();
+bool				wnd_on_cursor_up();
+bool				wnd_on_cursor_down();
+bool				wnd_on_cursor_left();
+bool				wnd_on_cursor_right();
+bool				wnd_on_type(char character);
+//bool				wnd_on_input(int message, int wParam, int lParam);
+
 bool				wnd_on_quit();//return false to deny exit
+
+void				report_errors();
 
 #endif

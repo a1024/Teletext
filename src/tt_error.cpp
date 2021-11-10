@@ -38,7 +38,12 @@ bool 			log_error(const char *file, int line, const char *format, ...)
 	if(firsttime)
 	{
 		memcpy(latest_error_msg, first_error_msg, length);
-		messageboxa("Error", latest_error_msg);//redundant, since report_error/emergencyPrint prints both
+		messagebox("Error", latest_error_msg);//redundant, since report_error/emergencyPrint prints both
 	}
 	return firsttime;
+}
+void			report_errors()
+{
+	if(latest_error_msg)
+		printf("%s\n", latest_error_msg);
 }
