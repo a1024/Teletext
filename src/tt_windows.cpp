@@ -1055,27 +1055,6 @@ int					__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, ch
 		GetClientRect(ghWnd, &R);
 		w=R.right-R.left, h=R.bottom-R.top;
 		ghDC=GetDC(ghWnd);
-#if 0
-		ghMemDC=CreateCompatibleDC(ghDC);
-		BITMAPINFO bmpInfo={{sizeof(BITMAPINFOHEADER), w, -h, 1, 32, BI_RGB, 0, 0, 0, 0, 0}};
-		hBitmap=CreateDIBSection(0, &bmpInfo, DIB_RGB_COLORS, (void**)&rgb, 0, 0);
-		hBitmap=(HBITMAP)SelectObject(ghMemDC, hBitmap);
-
-		tagLOGFONTW lf=//load fonts
-		{
-			0, 0,//h, w
-			100,//escapement (*0.1 degree)
-			0,//orientation
-			0,//weight
-			0, 0, 0,//italic, underline, strikeout
-			0,//charset
-			0, 0, 0,//outprecision, clipprecision, quality
-			0,//pitch and family
-			{L'\0'},//facename
-		};
-		EnumFontFamiliesExW(ghMemDC, &lf, FontProc, 0, 0);
-		std::sort(fonts.begin(), fonts.end());
-#endif
 		
 		//initialize OpenGL
 		tagPIXELFORMATDESCRIPTOR pfd=
@@ -1142,17 +1121,7 @@ int					__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, ch
 		DispatchMessageA(&msg);
 	}
 
-		//finish callback
-#if 0
-		if(hBitmap)
-		{
-			hBitmap=(HBITMAP)SelectObject(ghMemDC, hBitmap);
-			DeleteObject(hBitmap);
-		}
-		if(hFont)
-			DeleteObject(hFont);
-		DeleteDC(ghMemDC);
-#endif
+		//finish
 		ReleaseDC(ghWnd, ghDC);
 
 	return msg.wParam;
