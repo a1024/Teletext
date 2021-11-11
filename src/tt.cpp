@@ -26,6 +26,7 @@ const char			file[]=__FILE__;
 char				g_buf[G_BUF_SIZE]={};
 int					w=0, h=0;
 short				mx=0, my=0, dx=0, dy=0, tab_count=4;
+std::string			exe_dir;
 
 void				display_help()
 {
@@ -354,10 +355,10 @@ int					print_line(short x, short y, const char *msg, int msg_length, short tab_
 	for(int k=0;k<msg_length;++k)
 	{
 		char c=msg[k];
-		if(c=='\t')
-			width=tab_width-mod(x+msg_width-tab_origin, tab_width), c=' ';
-		else if(c>=32&&c<0xFF)
+		if(c>=32&&c<0xFF)
 			width=w2;
+		else if(c=='\t')
+			width=tab_width-mod(x+msg_width-tab_origin, tab_width), c=' ';
 		else
 			width=0;
 		if(width)
@@ -1222,7 +1223,7 @@ bool				wnd_on_init()
 	glGenBuffers(1, &vertex_buffer);
 
 	int iw=0, ih=0, bytespp=0;
-	auto rgb=(int*)stbi_load("font.PNG", &iw, &ih, &bytespp, 4);
+	auto rgb=(int*)stbi_load((exe_dir+"font.PNG").c_str(), &iw, &ih, &bytespp, 4);
 	if(!rgb)
 	{
 		messagebox("Error", "Font texture not found.\nPlace a \'font.PNG\' file with the program.\n");

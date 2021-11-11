@@ -37,7 +37,7 @@ static RECT			R={};
 HDC					ghDC=nullptr;
 static HGLRC		hRC=nullptr;
 #if 0
-//static HDC		ghMemDC=nullptr;
+static HDC			ghMemDC=nullptr;
 static HBITMAP		hBitmap=nullptr;
 int					*rgb=nullptr, rgbn=0;
 static HFONT		hFont=nullptr;
@@ -711,9 +711,9 @@ bool				save_text_file(const char *filename, std::string &str)
 int					ask_to_save()
 {
 	if(filename.size())
-		swprintf_s(g_wbuf, L"Save changes to %s?", filename.c_str());
+		swprintf_s(g_wbuf, g_buf_size, L"Save changes to %s?", filename.c_str());
 	else
-		swprintf_s(g_wbuf, L"Save changes to Untitled?");
+		swprintf_s(g_wbuf, g_buf_size, L"Save changes to Untitled?");
 	int result=MessageBoxW(ghWnd, g_wbuf, L"Paint++", MB_YESNOCANCEL);
 	switch(result)
 	{
@@ -896,6 +896,7 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 				char shift=keyboard[VK_SHIFT], lowercase=caps_lock==shift;
 				switch(wParam)
 				{
+				case VK_CAPITAL:caps_lock=!caps_lock;			break;
 				case VK_MENU:	redraw=wnd_on_begin_rectsel();	break;
 				case VK_ESCAPE:	redraw=wnd_on_deselect();		break;
 				case VK_F1:		redraw=wnd_on_display_help();	break;
@@ -933,6 +934,9 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 				case VK_SUBTRACT:	redraw=wnd_on_type(			'-'			);break;
 				case VK_MULTIPLY:	redraw=wnd_on_type(			'*'			);break;
 				case VK_DIVIDE:		redraw=wnd_on_type(			'/'			);break;
+				case ' ':			redraw=wnd_on_type(			' '			);break;
+				case '\t'			redraw=wnd_on_type(			'\t'		);break;
+				case '\r':			redraw=wnd_on_type(			'\n'		);break;
 				default:
 					if(wParam>='A'&&wParam<='Z')
 						redraw=wnd_on_type(wParam+('a'-'A')*lowercase);
@@ -944,7 +948,7 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 							redraw=wnd_on_type(wParam);
 					}
 					else if(wParam>=VK_NUMPAD0&&wParam<=VK_NUMPAD9)
-						redraw=wnd_on_type(wParam-VK_NUMPAD0);
+						redraw=wnd_on_type(wParam+'0'-VK_NUMPAD0);
 					break;
 				}
 			}

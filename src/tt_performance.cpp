@@ -164,9 +164,9 @@ void				prof_toggle()
 //#endif
 #elif defined PROFILER_CMD
 	if(prof_on)//start
-		log_start(LL_PROGRESS);
+		console_show();
 	else//end
-		log_end();
+		console_hide();
 #endif
 }
 
@@ -227,7 +227,9 @@ void				prof_print()
 		//int success=SetWindowTextA(ghWnd, g_buf);
 		//SYS_ASSERT(success);
 #elif defined PROFILER_CMD
-		printf("\n");
+		static int frameno=0;
+		printf("frame %d:\n", frameno);
+		++frameno;
 		for(int k=0, kEnd=prof.size();k<kEnd;++k)
 		{
 			auto &p=prof[k];

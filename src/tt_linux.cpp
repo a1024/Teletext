@@ -25,6 +25,27 @@ const char			file[]=__FILE__;
 
 	#define			PRINT_TO_CONSOLE
 
+char				keyboard[256]={};
+SDL_Window			*window=nullptr;
+int					exit_failure(const char * msg, ...)
+{
+	if(msg)
+	{
+		va_list args;
+		va_start(args, msg);
+		vprintf(msg, args);
+		va_end(args);
+	}
+	return 1;
+}
+bool				sdl_check(const char *file, int line)
+{
+	log_error(file, line, "%s", SDL_GetError());
+	//printf("%s(%s): %s\n", file, line, SDL_GetError());
+	return false;
+}
+#define				SDL_ASSERT(SUCCESS)		((void)((SUCCESS)!=0||sdl_check(file, __LINE__)))
+
 //void				get_window_title_w(wchar_t *str, int size){}
 //void				set_window_title_w(const wchar_t *str){}
 //void				set_window_title_a(const char *str){}
@@ -33,9 +54,21 @@ const char			file[]=__FILE__;
 //void				GUIPrint(int x, int y, const char *a, ...){}
 bool				get_key_state(int key)
 {
+	switch(key)
+	{
+#define CASE(LABEL)	case SDLK_##LABEL:return keyboard[SDL_SCANCODE_##LABEL];
+	CASE(LCTRL)
+	CASE(RCTRL)
+	CASE(LSHIFT)
+	CASE(RSHIFT)
+	CASE(LALT)
+	CASE(RALT)
+#undef	CASE
+	}
 	//XkbGetState();
 	return false;//
 }
+#if 0
 static Display		*dpy=nullptr;
 static unsigned long win=0;
 const char*			xevent2str(int event_type)
@@ -83,71 +116,48 @@ const char*			xevent2str(int event_type)
 		return "<Undefined>";
 	return a;
 }
-/*void				messageboxw(const wchar_t *title, const wchar_t *format, ...)
-{
-#ifdef PRINT_TO_CONSOLE
-	wprintf(L"%s:\n", title);
-	va_list args;
-	va_start(args, format);
-	vwprintf(format, args);
-	va_end(args);
 #endif
-}//*/
 void				messagebox(const char *title, const char *format, ...)
 {
-#ifdef PRINT_TO_CONSOLE
-	printf("%s:\n", title);
 	va_list args;
 	va_start(args, format);
-	vprintf(format, args);
+	int len=vsnprintf(g_buf, g_buf_size, format, args);
 	va_end(args);
-#endif
+	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, title, g_buf, window);
 }
 void				copy_to_clipboard_c(const char *a, int size)//size not including null terminator
 {
-#ifdef PRINT_TO_CONSOLE
-	printf("Copy to clipboard:\n%.*s\n", size, a);
-#endif
+	int fail=SDL_SetClipboardText(a);	SDL_ASSERT(fail>=0);
 }
 bool				paste_from_clipboard(char *&str, int &len)
 {
-	str=nullptr, len=0;
-/*	OpenClipboard(ghWnd);
-	char *a=(char*)GetClipboardData(CF_OEMTEXT);
-	if(!a)
-	{
-		CloseClipboard();
-		messageboxa("Error", "Failed to paste from clipboard");
+	char *str0=SDL_GetClipboardText();
+	if(!str0)
 		return false;
-	}
-	int len0=strlen(a);
-
+	int len0=strlen(str0);
 	str=new char[len0+1];
 	len=0;
 	for(int k2=0;k2<len0;++k2)
 	{
-		if(a[k2]!='\r')
-			str[len]=a[k2], ++len;
+		if(str0[k2]!='\r')
+			str[len]=str0[k2], ++len;
 	}
 	str[len]='\0';
-
-	CloseClipboard();//*/
 	return true;
 }
 void				get_window_title(char *str, int size)
 {
-	//GetWindowTextW(ghWnd, str, size);
+	auto str0=SDL_GetWindowTitle(window);
+	if(str0)
+	{
+		int len=strlen(str0);
+		memcpy(str, str0, minimum(len+1, size));//with null terminator
+	}
 }
 void				set_window_title(const char *str)
 {
-	//int success=SetWindowTextW(ghWnd, str);
-	//SYS_ASSERT(success);
+	SDL_SetWindowTitle(window, str);
 }
-//void				set_window_title_a(const char *str)
-//{
-//	//int success=SetWindowTextA(ghWnd, str);
-//	//SYS_ASSERT(success);
-//}
 int					GUINPrint(int x, int y, int w, int h, const char *a, ...)//should support newlines
 {
 #ifdef PRINT_TO_CONSOLE
@@ -155,7 +165,7 @@ int					GUINPrint(int x, int y, int w, int h, const char *a, ...)//should suppor
 	va_start(args, a);
 	int printed=vprintf(a, args);
 	va_end(args);
-	printf("\n");
+	//printf("\n");
 	return printed;
 #else
 	return 0;
@@ -176,7 +186,7 @@ long				GUITPrint(int x, int y, const char *a, ...)//return value: 0xHHHHWWWW		w
 	va_start(args, a);
 	int printed=vprintf(a, args);
 	va_end(args);
-	printf("\n");
+	//printf("\n");
 	return printed;
 #else
 	return 0;
@@ -194,7 +204,7 @@ void				GUIPrint(int x, int y, const char *a, ...)//no newlines nor tabs
 	va_start(args, a);
 	int printed=vprintf(a, args);
 	va_end(args);
-	printf("\n");
+	//printf("\n");
 #endif
 
 	//int length=vsprintf_s(g_buf, g_buf_size, a, (char*)(&a+1)), success;
@@ -203,69 +213,45 @@ void				GUIPrint(int x, int y, const char *a, ...)//no newlines nor tabs
 	//	success=TextOutA(ghDC, x, y, g_buf, length);	SYS_ASSERT(success);
 	//}
 }
+//bool				dialog_openfile(const char *default_path, const char *filter_list, std::string &result);
+struct				osdialog_filters
+{
+	const char *name, **patterns;
+	int npatterns;
+};
+bool				osdialog_file(bool open, const char *default_path, const char *filename, osdialog_filters *filters, int nfilters, std::string &result);
 const char*			open_file_dialog()
 {
-	return nullptr;
-#if 0
-	g_wbuf[0]=0;
-	OPENFILENAMEW ofn=
+	const char *all_files[]={"*.*"};
+	osdialog_filters filters[]=
 	{
-		sizeof(OPENFILENAMEW),
-		ghWnd, ghInstance,
-		L"All Files (*.*)\0*.*\0", 0, 0, 1,
-		g_wbuf, g_buf_size,
-		0, 0,//initial filename
-		0,
-		0,//dialog title
-		OFN_CREATEPROMPT|OFN_PATHMUSTEXIST,
-		0,//file offset
-		0,//extension offset
-		L"TXT",//default extension
-		0, 0,//data & hook
-		0,//template name
-		0,//reserved
-		0,//reserved
-		0,//flags ex
+		{"All Files (*.*)", all_files, 1},
 	};
-	int success=GetOpenFileNameW(&ofn);
-	if(!success)
-		return 0;
-	memcpy(g_wbuf, ofn.lpstrFile, wcslen(ofn.lpstrFile)*sizeof(wchar_t));
-	return g_wbuf;
-#endif
+	std::string result;
+	if(!osdialog_file(true, nullptr, nullptr, filters, 1, result))
+		return nullptr;
+	memcpy(g_buf, result.c_str(), result.size()+1);
+	return g_buf;
 }
 const char*			save_file_dialog()
 {
-	return 0;
-#if 0
-	g_wbuf[0]=0;
-	OPENFILENAMEW ofn=
+	const char *ext[]=
 	{
-		sizeof(OPENFILENAMEW),
-		ghWnd, ghInstance,
-		L"Text File (.txt)\0*.txt\0"
-		L"C/C++ Source (.c; .cpp)\0*.txt\0"
-		L"C/C++ Header (.h; .hpp)\0*.txt\0", 0, 0, 1,
-		g_wbuf, g_buf_size,
-		0, 0,//initial filename
-		0,
-		0,//dialog title
-		OFN_CREATEPROMPT|OFN_PATHMUSTEXIST,
-		0,//file offset
-		0,//extension offset
-		L"TXT",//default extension
-		0, 0,//data & hook
-		0,//template name
-		0,//reserved
-		0,//reserved
-		0,//flags ex
+		"*.txt",
+		"*.c", "*.cpp",
+		"*.h", "*.hpp",
 	};
-	int success=GetSaveFileNameW(&ofn);
-	if(!success)
+	osdialog_filters filters[]=
+	{
+		{"Text File (.txt)", ext+0, 1},
+		{"C/C++ Source (.c; .cpp)", ext+1, 2},
+		{"C/C++ Header (.h; .hpp)", ext+3, 2},
+	};
+	std::string result;
+	if(!osdialog_file(false, nullptr, nullptr, filters, 1, result))
 		return nullptr;
-	memcpy(g_wbuf, ofn.lpstrFile, wcslen(ofn.lpstrFile)*sizeof(wchar_t));
-	return g_wbuf;
-#endif
+	memcpy(g_buf, result.c_str(), result.size()+1);
+	return g_buf;
 }
 bool				open_text_file(const char *filename, std::string &str)
 {
@@ -298,28 +284,65 @@ bool				save_text_file(const char *filename, std::string &str)
 }
 int					ask_to_save()
 {
-	return 0;
-/*	if(filename.size())
-		swprintf_s(g_wbuf, L"Save changes to %s?", filename.c_str());
+	if(filename.size())
+		snprintf(g_buf, g_buf_size, "Save changes to %s?", filename.c_str());
 	else
-		swprintf_s(g_wbuf, L"Save changes to Untitled?");
-	int result=MessageBoxW(ghWnd, g_wbuf, L"Paint++", MB_YESNOCANCEL);
-	return result;//*/
+		snprintf(g_buf, g_buf_size, "Save changes to Untitled?");
+	const SDL_MessageBoxButtonData buttons[]=
+	{
+		{0, 0, "no" },
+		{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "yes"},
+		{SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 2, "cancel"},
+	};
+	const SDL_MessageBoxColorScheme colorScheme=
+	{
+		{	//.r, .g, .b
+			{255,   0,   0},//[SDL_MESSAGEBOX_COLOR_BACKGROUND]
+			{  0, 255,   0},//[SDL_MESSAGEBOX_COLOR_TEXT]
+			{255, 255,   0},//[SDL_MESSAGEBOX_COLOR_BUTTON_BORDER]
+			{  0,   0, 255},//[SDL_MESSAGEBOX_COLOR_BUTTON_BACKGROUND]
+			{255,   0, 255},//[SDL_MESSAGEBOX_COLOR_BUTTON_SELECTED]
+		}
+	};
+	SDL_MessageBoxData data=
+	{
+		SDL_MESSAGEBOX_INFORMATION,//.flags
+		nullptr,//.window
+		"example message box",//.title
+		"select a button",//.message
+		SDL_arraysize(buttons),//.numbuttons
+		buttons,//.buttons
+		&colorScheme,//.colorScheme
+	};
+	int choice=0;
+	int success=SDL_ShowMessageBox(&data, &choice);	SDL_ASSERT(success>=0);
+	switch(choice)
+	{
+	case -1:choice=2;break;
+	case 0:choice=1;break;
+	case 1:choice=0;break;
+	case 2:break;
+	}
+	return choice;
 }
 void				mouse_capture()
 {
+	int fail=SDL_CaptureMouse(SDL_TRUE);
+	SDL_ASSERT(!fail);
 }
 void				mouse_release()
 {
+	int fail=SDL_CaptureMouse(SDL_FALSE);
+	SDL_ASSERT(!fail);
 }
 
 void				swap_buffers()
 {
-	glXSwapBuffers(dpy, win);
+	//glXSwapBuffers(dpy, win);
 }
 
-float				level=0, increment=0.1f;
-/*void				render()
+/*float				level=0, increment=0.1f;
+void				render()
 {
 	glClearColor(level, level, level, 1);
 	level+=increment;
@@ -331,21 +354,468 @@ float				level=0, increment=0.1f;
 	swap_buffers();
 }//*/
 
+//GTK
+#if 0
+//callbacks for GTK:
+static void			on_realize(GtkGLArea *glarea)
+{
+	// Make current:
+	gtk_gl_area_make_current(glarea);
+
+	// Print version info:
+	const GLubyte* renderer = glGetString(GL_RENDERER);
+	const GLubyte* version = glGetString(GL_VERSION);
+	printf("Renderer: %s\n", renderer);
+	printf("OpenGL version supported %s\n", version);
+
+	// Enable depth buffer:
+	gtk_gl_area_set_has_depth_buffer(glarea, TRUE);
+
+	// Init program:
+	if(!wnd_on_init())
+		abort();
+
+	// Get frame clock:
+	//GdkGLContext *glcontext = gtk_gl_area_get_context(glarea);
+	//GdkWindow *glwindow = gdk_gl_context_get_window(glcontext);
+	//GdkFrameClock *frame_clock = gdk_window_get_frame_clock(glwindow);
+
+	// Connect update signal:
+	//g_signal_connect_swapped(frame_clock, "update", G_CALLBACK(gtk_gl_area_queue_render), glarea) ;
+
+	// Start updating:
+	//gdk_frame_clock_begin_updating(frame_clock);
+}
+static int				on_render(GtkGLArea *glarea, GdkGLContext *context)
+{
+	wnd_on_render();
+	return 1;
+}
+static void				on_resize(GtkGLArea *area, gint width, gint height)
+{
+	w=width, h=height;
+	wnd_on_resize();
+	//view_set_window(width, height);
+	//background_set_window(width, height);
+}
+static int				on_scroll(GtkWidget* widget, GdkEventScroll *event)
+{
+	switch(event->direction)
+	{
+	case GDK_SCROLL_UP:
+		wnd_on_mousewheel(true);
+		break;
+	case GDK_SCROLL_DOWN:
+		wnd_on_mousewheel(false);
+		break;
+	}
+	return FALSE;
+}
+
+static int				on_button_press(GtkWidget *widget, GdkEventButton *event)
+{
+	GtkAllocation allocation;
+	gtk_widget_get_allocation(widget, &allocation);
+
+	//TODO
+
+/*	if(event->button==1&&!panning)
+	{
+		panning=TRUE;
+		model_pan_start(event->x, allocation.height - event->y);
+	}//*/
+	return FALSE;
+}
+static int				on_button_release(GtkWidget *widget, GdkEventButton *event)
+{
+//	if (event->button == 1)
+//		panning = FALSE;
+	return FALSE;
+}
+static int				on_motion_notify(GtkWidget *widget, GdkEventMotion *event)
+{
+	GtkAllocation allocation;
+	gtk_widget_get_allocation(widget, &allocation);
+
+	//TODO
+
+	//if (panning == TRUE)
+	//	model_pan_move(event->x, allocation.height - event->y);
+
+	return FALSE;
+}
+//end of callbacks
+
+struct Signal
+{
+	const char *signal;
+	GCallback handler;
+	GdkEventMask mask;
+};
+void				connect_signals (GtkWidget *widget, Signal *signals, size_t count)
+{
+	for(int k=0;k<count;++k)
+	{
+		auto s=signals+k;
+		gtk_widget_add_events(widget, s->mask);
+		g_signal_connect(G_OBJECT(widget), s->signal, s->handler, NULL);
+	}
+}
+#endif
+
+#if 0
+void PrintModifiers( SDLMod mod )//Print modifier info
+{
+	printf( "Modifers: " );
+
+	//If there are none then say so and return
+	if( mod == KMOD_NONE ){
+		printf( "None\n" );
+		return;
+	}
+
+	//Check for the presence of each SDLMod value
+	//This looks messy, but there really isn't a clearer way.
+	if( mod & KMOD_NUM ) printf( "NUMLOCK " );
+	if( mod & KMOD_CAPS ) printf( "CAPSLOCK " );
+	if( mod & KMOD_LCTRL ) printf( "LCTRL " );
+	if( mod & KMOD_RCTRL ) printf( "RCTRL " );
+	if( mod & KMOD_RSHIFT ) printf( "RSHIFT " );
+	if( mod & KMOD_LSHIFT ) printf( "LSHIFT " );
+	if( mod & KMOD_RALT ) printf( "RALT " );
+	if( mod & KMOD_LALT ) printf( "LALT " );
+	if( mod & KMOD_CTRL ) printf( "CTRL " );
+	if( mod & KMOD_SHIFT ) printf( "SHIFT " );
+	if( mod & KMOD_ALT ) printf( "ALT " );
+	printf( "\n" );
+}
+void PrintKeyInfo( SDL_KeyboardEvent *key )//Print all information about a key event
+{
+	if(key->type==SDL_KEYUP)//Is it a release or a press?
+		printf( "Release:- " );
+	else
+		printf( "Press:- " );
+
+	printf("Scancode: 0x%02X", key->keysym.scancode);//Print the hardware scancode first
+	printf(", Name: %s", SDL_GetKeyName( key->keysym.sym));//Print the name of the key
+
+	//printf("\n");
+
+	if(key->type==SDL_KEYDOWN)//We want to print the unicode info, but we need to make sure its a press event first (remember, release events don't have unicode info)
+	{
+		//If the Unicode value is less than 0x80 then the
+		//unicode value can be used to get a printable
+		//representation of the key, using (char)unicode.
+		printf(", Unicode: " );
+		if( key->keysym.unicode < 0x80 && key->keysym.unicode > 0 )
+			printf( "%c (0x%04X)", (char)key->keysym.unicode, key->keysym.unicode );
+		else
+			printf( "? (0x%04X)", key->keysym.unicode );
+	}
+	printf("\n");
+	PrintModifiers( key->keysym.mod );//Print modifier info//*/
+}
+#endif
+const char			numrow[]=")!@#$%^&*(";
 int					main(int argc, char **argv)
 {
-	//printf("%ld\n", sizeof(long));//8
+	{
+		exe_dir+=argv[0];
+		int k=exe_dir.size();
+		for(;k>0&&exe_dir[k-1]!='/'&&exe_dir[k-1]!='\\';--k);
+		exe_dir.resize(k);
+	}
+	//SDL2
+#if 1
+	if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS))
+		return exit_failure("Failed to initialize SDL");
+	window=SDL_CreateWindow("Teletext", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE|SDL_WINDOW_MAXIMIZED);
+	if(!window)
+		return exit_failure("Failed to create SDL window\n");
 
-	//char LOL_1[4];
-	//memset(LOL_1, 0, 4);
-	//LOL_1[1]='a';
-	//printf("%s\n", LOL_1);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);//
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);//
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+	SDL_GLContext glContext=SDL_GL_CreateContext(window);
+	glDisable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	//std::string str="Hello";
-	//str+=" World";
-	//for(int k=0;k<(int)str.size();++k)
-	//	printf("%c", str[k]);
+	if(!wnd_on_init())
+		goto quit;
 
-#if 1//https://www.khronos.org/opengl/wiki/Programming_OpenGL_in_Linux:_GLX_and_Xlib
+	for(int loop=1;loop;)
+	{
+		SDL_Event e={};
+		int success=SDL_WaitEvent(&e);	SDL_ASSERT(success);
+	//	printf("Event: %d\n", e.type);//
+		bool redraw=false;
+		switch(e.type)
+		{
+		case SDL_DISPLAYEVENT:
+			break;
+		case SDL_WINDOWEVENT:
+			if(e.window.event==SDL_WINDOWEVENT_SIZE_CHANGED)
+			{
+				SDL_GetWindowSize(window, &w, &h);
+				resize_gl();
+				wnd_on_render();
+			}
+			break;
+		case SDL_MOUSEMOTION:
+			mx=e.motion.x, my=e.motion.y;
+			wnd_on_mousemove();
+			break;
+		case SDL_MOUSEWHEEL:
+			wnd_on_mousewheel(e.wheel.y>0);
+			break;
+		case SDL_MOUSEBUTTONDOWN:
+			if(e.button.button==SDL_BUTTON_LEFT)
+				wnd_on_lbuttondown();
+			else if(e.button.button==SDL_BUTTON_RIGHT)
+				wnd_on_rbuttondown();
+			break;
+		case SDL_MOUSEBUTTONUP:
+			if(e.button.button==SDL_BUTTON_LEFT)
+				wnd_on_lbuttonup();
+			else if(e.button.button==SDL_BUTTON_RIGHT)
+				wnd_on_rbuttonup();
+			break;
+		case SDL_KEYDOWN:
+			{
+				int key=e.key.keysym.scancode;
+				if(is_ctrl_down())
+				{
+					switch(key)
+					{
+					case SDL_SCANCODE_UP:	redraw=wnd_on_scroll_up_key();		break;
+					case SDL_SCANCODE_DOWN:	redraw=wnd_on_scroll_down_key();	break;
+					case SDL_SCANCODE_LEFT:	redraw=wnd_on_skip_word_left();		break;
+					case SDL_SCANCODE_RIGHT:redraw=wnd_on_skip_word_right();	break;
+					case SDL_SCANCODE_HOME:	redraw=wnd_on_goto_file_start();	break;
+					case SDL_SCANCODE_END:	redraw=wnd_on_goto_file_end();		break;
+					case SDL_SCANCODE_A:	redraw=wnd_on_select_all();			break;
+					case SDL_SCANCODE_C:	redraw=wnd_on_copy();				break;
+					case SDL_SCANCODE_D:	redraw=wnd_on_clear_hist();			break;
+					case SDL_SCANCODE_N:	redraw=wnd_on_new();				break;
+					case SDL_SCANCODE_O:	redraw=wnd_on_open();				break;
+					case SDL_SCANCODE_S:	redraw=wnd_on_save(is_shift_down());break;
+					case SDL_SCANCODE_V:	redraw=wnd_on_paste();				break;
+					case SDL_SCANCODE_Y:	redraw=wnd_on_redo();				break;
+					case SDL_SCANCODE_Z:	redraw=wnd_on_undo();				break;
+					}
+				}
+				else
+				{
+					char shift=is_shift_down(), lowercase=caps_lock==shift;
+					switch(key)
+					{
+					case SDL_SCANCODE_CAPSLOCK:	caps_lock=!caps_lock;			break;
+					case SDL_SCANCODE_LALT:
+					case SDL_SCANCODE_RALT:		redraw=wnd_on_begin_rectsel();	break;
+					case SDL_SCANCODE_ESCAPE:	redraw=wnd_on_deselect();		break;
+					case SDL_SCANCODE_F1:		redraw=wnd_on_display_help();	break;
+					case SDL_SCANCODE_F4:
+						if(is_alt_down())
+						{
+							if(wnd_on_quit())
+								goto quit;
+						}
+						else
+							redraw=wnd_on_toggle_profiler();
+						break;
+					case SDL_SCANCODE_UP:		redraw=wnd_on_cursor_up();		break;
+					case SDL_SCANCODE_DOWN:		redraw=wnd_on_cursor_down();	break;
+					case SDL_SCANCODE_LEFT:		redraw=wnd_on_cursor_left();	break;
+					case SDL_SCANCODE_RIGHT:	redraw=wnd_on_cursor_right();	break;
+					case SDL_SCANCODE_HOME:		redraw=wnd_on_goto_line_start();break;
+					case SDL_SCANCODE_END:		redraw=wnd_on_goto_line_end();	break;
+					case SDL_SCANCODE_DELETE:	redraw=wnd_on_deletechar();		break;
+					case SDL_SCANCODE_BACKSPACE:redraw=wnd_on_backspace();		break;
+
+					case SDL_SCANCODE_SEMICOLON:	redraw=wnd_on_type(shift?	':':';'		);break;
+					case SDL_SCANCODE_SLASH:		redraw=wnd_on_type(shift?	'?':'/'		);break;
+					case SDL_SCANCODE_GRAVE:		redraw=wnd_on_type(shift?	'~':'`'		);break;
+					case SDL_SCANCODE_LEFTBRACKET:	redraw=wnd_on_type(shift?	'{':'['		);break;
+					case SDL_SCANCODE_BACKSLASH:	redraw=wnd_on_type(shift?	'|':'\\'	);break;
+					case SDL_SCANCODE_RIGHTBRACKET:	redraw=wnd_on_type(shift?	'}':']'		);break;
+					case SDL_SCANCODE_APOSTROPHE:	redraw=wnd_on_type(shift?	'\"':'\''	);break;
+					case SDL_SCANCODE_MINUS:		redraw=wnd_on_type(shift?	'_':'-'		);break;
+					case SDL_SCANCODE_EQUALS:		redraw=wnd_on_type(shift?	'+':'='		);break;
+					case SDL_SCANCODE_COMMA:		redraw=wnd_on_type(shift?	'<':','		);break;
+					case SDL_SCANCODE_PERIOD:		redraw=wnd_on_type(shift?	'>':'.'		);break;
+					case SDL_SCANCODE_KP_PERIOD:	redraw=wnd_on_type(			'.'			);break;
+					case SDL_SCANCODE_KP_PLUS:		redraw=wnd_on_type(			'+'			);break;
+					case SDL_SCANCODE_KP_MINUS:		redraw=wnd_on_type(			'-'			);break;
+					case SDL_SCANCODE_KP_MULTIPLY:	redraw=wnd_on_type(			'*'			);break;
+					case SDL_SCANCODE_KP_DIVIDE:	redraw=wnd_on_type(			'/'			);break;
+					case SDL_SCANCODE_SPACE:		redraw=wnd_on_type(			' '			);break;
+					case SDL_SCANCODE_TAB:			redraw=wnd_on_type(			'\t'		);break;
+					case SDL_SCANCODE_RETURN:		redraw=wnd_on_type(			'\n'		);break;
+					default:
+						if(key>=SDL_SCANCODE_A&&key<=SDL_SCANCODE_Z)
+						{
+							if(lowercase)
+								redraw=wnd_on_type(key+'a'-SDL_SCANCODE_A);
+							else
+								redraw=wnd_on_type(key+'A'-SDL_SCANCODE_A);
+						}
+						else if(key>=SDL_SCANCODE_1&&key<=SDL_SCANCODE_0)
+						{
+							if(shift)
+								redraw=wnd_on_type(key==SDL_SCANCODE_0?numrow[0]:numrow[key+1-SDL_SCANCODE_1]);
+							else
+								redraw=wnd_on_type(key==SDL_SCANCODE_0?'0':key+'1'-SDL_SCANCODE_1);
+						}
+						else if(key>=SDLK_KP_1&&key<=SDLK_KP_0)
+							redraw=wnd_on_type(key==SDLK_KP_0?'0':key+'1'-SDLK_KP_1);
+						break;
+					}
+				}
+#if 0
+				int key=e.key.keysym.sym;
+				if(is_ctrl_down())
+				{
+					switch(key)
+					{
+					case SDLK_UP:	redraw=wnd_on_scroll_up_key();		break;
+					case SDLK_DOWN:	redraw=wnd_on_scroll_down_key();	break;
+					case SDLK_LEFT:	redraw=wnd_on_skip_word_left();		break;
+					case SDLK_RIGHT:redraw=wnd_on_skip_word_right();	break;
+					case SDLK_HOME:	redraw=wnd_on_goto_file_start();	break;
+					case SDLK_END:	redraw=wnd_on_goto_file_end();		break;
+					case SDLK_a:	redraw=wnd_on_select_all();			break;
+					case SDLK_c:	redraw=wnd_on_copy();				break;
+					case SDLK_d:	redraw=wnd_on_clear_hist();			break;
+					case SDLK_n:	redraw=wnd_on_new();				break;
+					case SDLK_o:	redraw=wnd_on_open();				break;
+					case SDLK_s:	redraw=wnd_on_save(is_shift_down());break;
+					case SDLK_v:	redraw=wnd_on_paste();				break;
+					case SDLK_y:	redraw=wnd_on_redo();				break;
+					case SDLK_z:	redraw=wnd_on_undo();				break;
+					}
+				}
+				else
+				{
+					char shift=is_shift_down(), lowercase=caps_lock==shift;
+					switch(key)
+					{
+					case SDLK_CAPSLOCK:	caps_lock=!caps_lock;						break;
+					case SDLK_LALT:case SDLK_RALT:	redraw=wnd_on_begin_rectsel();	break;
+					case SDLK_ESCAPE:				redraw=wnd_on_deselect();		break;
+					case SDLK_F1:					redraw=wnd_on_display_help();	break;
+					case SDLK_F4:
+						if(is_alt_down())
+						{
+							if(wnd_on_quit())
+								goto quit;
+						}
+						else
+							redraw=wnd_on_toggle_profiler();
+						break;
+					case SDLK_UP:		redraw=wnd_on_cursor_up();		break;
+					case SDLK_DOWN:		redraw=wnd_on_cursor_down();	break;
+					case SDLK_LEFT:		redraw=wnd_on_cursor_left();	break;
+					case SDLK_RIGHT:	redraw=wnd_on_cursor_right();	break;
+					case SDLK_HOME:		redraw=wnd_on_goto_line_start();break;
+					case SDLK_END:		redraw=wnd_on_goto_line_end();	break;
+					case SDLK_DELETE:	redraw=wnd_on_deletechar();		break;
+					case SDLK_BACKSPACE:redraw=wnd_on_backspace();		break;
+
+					case SDLK_SEMICOLON:	redraw=wnd_on_type(shift?	':':';'		);break;
+					case SDLK_SLASH:		redraw=wnd_on_type(shift?	'?':'/'		);break;
+					case SDLK_BACKQUOTE:	redraw=wnd_on_type(shift?	'~':'`'		);break;
+					case SDLK_LEFTBRACKET:	redraw=wnd_on_type(shift?	'{':'['		);break;
+					case SDLK_BACKSLASH:	redraw=wnd_on_type(shift?	'|':'\\'	);break;
+					case SDLK_RIGHTBRACKET:	redraw=wnd_on_type(shift?	'}':']'		);break;
+					case SDLK_QUOTE:		redraw=wnd_on_type(shift?	'\"':'\''	);break;
+					case SDLK_MINUS:		redraw=wnd_on_type(shift?	'_':'-'		);break;
+					case SDLK_EQUALS:		redraw=wnd_on_type(shift?	'+':'='		);break;
+					case SDLK_COMMA:		redraw=wnd_on_type(shift?	'<':','		);break;
+					case SDLK_PERIOD:		redraw=wnd_on_type(shift?	'>':'.'		);break;
+					case SDLK_KP_PERIOD:	redraw=wnd_on_type(			'.'			);break;
+					case SDLK_KP_PLUS:		redraw=wnd_on_type(			'+'			);break;
+					case SDLK_KP_MINUS:		redraw=wnd_on_type(			'-'			);break;
+					case SDLK_KP_MULTIPLY:	redraw=wnd_on_type(			'*'			);break;
+					case SDLK_KP_DIVIDE:	redraw=wnd_on_type(			'/'			);break;
+					case SDLK_SPACE:		redraw=wnd_on_type(			' '			);break;
+					case SDLK_TAB:			redraw=wnd_on_type(			'\t'		);break;
+					case SDLK_RETURN:		redraw=wnd_on_type(			'\n'		);break;
+					default:
+						if(key>='a'&&key<='z')
+							redraw=wnd_on_type(key+('A'-'a')*!lowercase);
+						else if(key>='0'&&key<='9')
+						{
+							if(shift)
+								redraw=wnd_on_type(numrow[key-'0']);
+							else
+								redraw=wnd_on_type(key);
+						}
+						else if(key>=SDLK_KP_0&&key<=SDLK_KP_9)
+							redraw=wnd_on_type(char(key+'0'-SDLK_KP_0));
+						break;
+					}
+				}
+#endif
+				keyboard[e.key.keysym.scancode]=true;
+			}
+			//PrintKeyInfo(&e.key);
+			//printf("Key press detected\n");
+			break;
+		case SDL_KEYUP:
+			keyboard[e.key.keysym.scancode]=false;
+			//PrintKeyInfo(&e.key);
+			//printf("Key release detected\n");
+			break;
+		case SDL_QUIT:
+			loop=0;
+			break;
+		}
+		wnd_on_render();
+		SDL_GL_SwapWindow(window);
+		SDL_Delay(1);
+	}
+quit:
+	SDL_Quit();
+#endif
+	//GTK+
+#if 0//https://github.com/aklomp/gtk3-opengl
+	if(!gtk_init_check(&argc, &argv))
+		return exit_failure("Could not initialize GTK");
+
+	// Create toplevel window, add GtkGLArea:
+	auto window=gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	auto glarea=gtk_gl_area_new();
+	gtk_container_add(GTK_CONTAINER(window), glarea);
+
+	//gdk_gl_context_is_legacy();
+
+	// Connect GTK signals:
+	Signal s1[]=
+	{
+		{"destroy", G_CALLBACK(gtk_main_quit), (GdkEventMask)0},
+	};
+	Signal s2[]=
+	{
+		{"realize",				G_CALLBACK(on_realize),			(GdkEventMask)0			},
+		{"render",				G_CALLBACK(on_render),			(GdkEventMask)0			},
+		{"resize",				G_CALLBACK(on_resize),			(GdkEventMask)0			},
+		{"scroll-event",		G_CALLBACK(on_scroll),			GDK_SCROLL_MASK			},
+		{"button-press-event",	G_CALLBACK(on_button_press),	GDK_BUTTON_PRESS_MASK	},
+		{"button-release-event",G_CALLBACK(on_button_release),	GDK_BUTTON_RELEASE_MASK	},
+		{"motion-notify-event",	G_CALLBACK(on_motion_notify),	GDK_BUTTON1_MOTION_MASK	},
+	};
+	connect_signals(window, s1, SIZEOF(s1));
+	connect_signals(glarea, s2, SIZEOF(s2));
+	gtk_widget_show_all(window);
+	gtk_main();
+#endif
+
+	//Xlib
+#if 0//https://www.khronos.org/opengl/wiki/Programming_OpenGL_in_Linux:_GLX_and_Xlib
 	dpy=XOpenDisplay(nullptr);
 	if(!dpy)
 	{
@@ -378,6 +848,7 @@ int					main(int argc, char **argv)
 	glEnable(GL_BLEND);									GL_CHECK();
 	glBlendEquation(GL_FUNC_ADD);						GL_CHECK();
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);	GL_CHECK();
+
 	if(!wnd_on_init())
 		return 1;
 
@@ -432,7 +903,7 @@ int					main(int argc, char **argv)
 	XDestroyWindow(dpy, win);
 	XCloseDisplay(dpy);
 #endif
-
+	//Xlib tutorial
 #if 0//https://gist.github.com/whosaysni/5733660
 	auto dpy=XOpenDisplay(nullptr);
 	auto screen=DefaultScreen(dpy);

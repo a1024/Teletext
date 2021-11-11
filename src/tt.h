@@ -4,8 +4,8 @@
 #ifdef _WINDOWS
 #include			<Windows.h>
 #elif defined __linux__
-#include			<X11/Xlib.h>
-#include			<X11/Xutil.h>
+#include			<SDL2/SDL.h>
+//#include			<gtk/gtk.h>
 #define				GL_GLEXT_PROTOTYPES
 #endif
 #include			<GL/gl.h>
@@ -25,45 +25,7 @@ extern short		mx, my, dx, dy;
 extern int			*rgb, rgbn;
 extern char			keyboard[256];
 extern int			font_idx, font_size;
-
-//math
-inline int			mod(int x, int n)
-{
-	x%=n;
-	x+=n&-(x<0);
-	return x;
-}
-inline int			floor_log2(unsigned n)
-{
-	int logn=0;
-	int sh=(((short*)&n)[1]!=0)<<4;	logn^=sh, n>>=sh;	//21.54
-		sh=(((char*)&n)[1]!=0)<<3;	logn^=sh, n>>=sh;
-		sh=((n&0x000000F0)!=0)<<2;	logn^=sh, n>>=sh;
-		sh=((n&0x0000000C)!=0)<<1;	logn^=sh, n>>=sh;
-		sh=((n&0x00000002)!=0);		logn^=sh;
-	return logn;
-}
-inline int			minimum(int a, int b){return (a+b-abs(a-b))>>1;}
-inline int			maximum(int a, int b){return (a+b+abs(a-b))>>1;}
-//inline float		maximum(float x, float y){return (x+y+abs(x-y))*0.5f;}
-inline char			maximum(char x1, char x2, char x3, char x4, char x5, char x6)
-{
-	int m1=(x1+x2+abs(x1-x2)), m2=(x3+x4+abs(x3-x4)), m3=(x5+x6+abs(x5-x6));
-	int m4=(m1+m2+abs(m1-m2)), m5=m3<<1;
-	return (m4+m5+abs(m4-m5))>>3;
-}
-inline int			clamp(int lo, int x, int hi)
-{
-	hi<<=1;
-	int temp=x+lo+abs(x-lo);
-	return (temp+hi-abs(temp-hi))>>2;
-}
-inline float		clamp(float lo, float x, float hi)
-{
-	hi+=hi;
-	float temp=x+lo+abs(x-lo);
-	return (temp+hi-abs(temp-hi))*0.25f;
-}
+extern std::string	exe_dir;
 
 //error handling
 bool 				log_error(const char *file, int line, const char *format, ...);
@@ -73,8 +35,8 @@ bool 				log_error(const char *file, int line, const char *format, ...);
 #if 1
 //[PROFILER SETTINGS]
 
-	#define PROF_INITIAL_STATE	true
-//	#define PROF_INITIAL_STATE	false
+	#define PROF_INITIAL_STATE	false
+//	#define PROF_INITIAL_STATE	true
 
 //comment or uncomment
 //	#define PROFILER_CYCLES
@@ -114,6 +76,47 @@ void				prof_add_loop(int idx);//call on each part of loop body
 void				prof_print();
 #endif
 
+//math
+#if 1
+inline int			mod(int x, int n)
+{
+	x%=n;
+	x+=n&-(x<0);
+	return x;
+}
+inline int			floor_log2(unsigned n)
+{
+	int logn=0;
+	int sh=(((short*)&n)[1]!=0)<<4;	logn^=sh, n>>=sh;	//21.54
+		sh=(((char*)&n)[1]!=0)<<3;	logn^=sh, n>>=sh;
+		sh=((n&0x000000F0)!=0)<<2;	logn^=sh, n>>=sh;
+		sh=((n&0x0000000C)!=0)<<1;	logn^=sh, n>>=sh;
+		sh=((n&0x00000002)!=0);		logn^=sh;
+	return logn;
+}
+inline int			minimum(int a, int b){return (a+b-abs(a-b))>>1;}
+inline int			maximum(int a, int b){return (a+b+abs(a-b))>>1;}
+//inline float		maximum(float x, float y){return (x+y+abs(x-y))*0.5f;}
+inline char			maximum(char x1, char x2, char x3, char x4, char x5, char x6)
+{
+	int m1=(x1+x2+abs(x1-x2)), m2=(x3+x4+abs(x3-x4)), m3=(x5+x6+abs(x5-x6));
+	int m4=(m1+m2+abs(m1-m2)), m5=m3<<1;
+	return (m4+m5+abs(m4-m5))>>3;
+}
+inline int			clamp(int lo, int x, int hi)
+{
+	hi<<=1;
+	int temp=x+lo+abs(x-lo);
+	return (temp+hi-abs(temp-hi))>>2;
+}
+inline float		clamp(float lo, float x, float hi)
+{
+	hi+=hi;
+	float temp=x+lo+abs(x-lo);
+	return (temp+hi-abs(temp-hi))*0.25f;
+}
+#endif
+
 //system
 #ifdef _WINDOWS
 #define				ALIGN(AMMOUNT)	__declspec(align(AMMOUNT))
@@ -145,10 +148,13 @@ const char*			open_file_dialog();
 const char*			save_file_dialog();
 bool				open_text_file(const char *filename, std::string &str);
 bool				save_text_file(const char *filename, std::string &str);
-int					ask_to_save();
+int					ask_to_save();//returns 0: yes, 1: no, 2: cancel
 void				mouse_capture();
 void				mouse_release();
 bool				get_key_state(int key);
+#define				is_ctrl_down()	(get_key_state(TK_LCTRL)||get_key_state(TK_RCTRL))
+#define				is_shift_down()	(get_key_state(TK_LSHIFT)||get_key_state(TK_RSHIFT))
+#define				is_alt_down()	(get_key_state(TK_LALT)||get_key_state(TK_RALT))
 //inline bool			get_key_state(int key)
 //{
 //#ifdef _WINDOWS
@@ -218,7 +224,7 @@ void				swap_buffers();
 
 #elif defined __linux__
 
-enum WindowMessages
+/*enum WindowMessages
 {
 	WM_IGNORED,
 
@@ -234,8 +240,103 @@ enum WindowMessages
 	WM_SYSKEYDOWN,
 	WM_KEYUP,
 	WM_SYSKEYUP,
-};
+};//*/
 
+#define TK_LBUTTON		//???
+#define TK_RBUTTON		//???
+#define TK_MBUTTON		//???
+
+#define TK_ESC			SDLK_ESCAPE
+#define TK_TAB			SDLK_TAB
+#define TK_CAPSLOCK		SDLK_CAPSLOCK
+#define TK_NUMLOCK		SDLK_NUMLOCK
+#define	TK_LSHIFT		SDLK_LSHIFT
+#define	TK_RSHIFT		SDLK_RSHIFT
+#define	TK_LCTRL		SDLK_LCTRL
+#define	TK_RCTRL		SDLK_RCTRL
+#define	TK_LALT			SDLK_LALT
+#define	TK_RALT			SDLK_RALT
+#define TK_LSTART		SDLK_LSUPER
+#define TK_RSTART		SDLK_RSUPER
+
+#define	TK_INSERT		SDLK_INSERT
+#define TK_DELETE		SDLK_DELETE
+#define TK_BACKSPACE	SDLK_BACKSPACE
+#define TK_ENTER		SDLK_RETURN
+
+#define TK_HOME			SDLK_HOME
+#define TK_END			SDLK_END
+#define TK_PAGEUP		SDLK_PAGEUP
+#define	TK_PAGEDOWN		SDLK_PPAGEDOWN
+#define TK_LEFT			SDLK_LEFT
+#define TK_RIGHT		SDLK_RIGHT
+#define TK_UP			SDLK_UP
+#define TK_DOWN			SDLK_DOWN
+//#define TK_PRINTSCREEN	SDLK_PRINT
+
+#define TK_F1			SDLK_F1
+#define TK_F2			SDLK_F2
+#define TK_F3			SDLK_F3
+#define TK_F4			SDLK_F4
+#define TK_F5			SDLK_F5
+#define TK_F6			SDLK_F6
+#define TK_F7			SDLK_F7
+#define TK_F8			SDLK_F8
+#define TK_F9			SDLK_F9
+#define TK_F10			SDLK_F10
+#define TK_F11			SDLK_F11
+#define TK_F12			SDLK_F12
+
+//GTK
+#if 0
+#define TK_LBUTTON		//???
+#define TK_RBUTTON		//???
+#define TK_MBUTTON		//???
+
+#define TK_ESC			GDK_KEY_Escape
+#define TK_TAB			GDK_KEY_Tab
+#define TK_CAPSLOCK		GDK_KEY_Caps_Lock
+#define TK_NUMLOCK		GDK_KEY_Num_Lock
+#define	TK_LSHIFT		GDK_KEY_Shift_L
+#define	TK_RSHIFT		GDK_KEY_Shift_R
+#define	TK_LCTRL		GDK_KEY_Control_L
+#define	TK_RCTRL		GDK_KEY_Control_R
+#define	TK_LALT			GDK_KEY_Alt_L
+#define	TK_RALT			GDK_KEY_Alt_R
+#define TK_LSTART		GDK_KEY_Super_L
+#define TK_RSTART		GDK_KEY_Super_R
+
+#define	TK_INSERT		GDK_KEY_Insert
+#define TK_DELETE		GDK_KEY_Delete
+#define TK_BACKSPACE	GDK_KEY_BackSpace
+#define TK_ENTER		GDK_KEY_Return
+
+#define TK_HOME			GDK_KEY_Home
+#define TK_END			GDK_KEY_End
+#define TK_PAGEUP		GDK_KEY_Page_Up
+#define	TK_PAGEDOWN		GDK_KEY_Page_Down
+#define TK_LEFT			GDK_KEY_Left
+#define TK_RIGHT		GDK_KEY_Right
+#define TK_UP			GDK_KEY_Up
+#define TK_DOWN			GDK_KEY_Down
+//#define TK_PRINTSCREEN	GDK_KEY_Print
+
+#define TK_F1			GDK_KEY_F1
+#define TK_F2			GDK_KEY_F2
+#define TK_F3			GDK_KEY_F3
+#define TK_F4			GDK_KEY_F4
+#define TK_F5			GDK_KEY_F5
+#define TK_F6			GDK_KEY_F6
+#define TK_F7			GDK_KEY_F7
+#define TK_F8			GDK_KEY_F8
+#define TK_F9			GDK_KEY_F9
+#define TK_F10			GDK_KEY_F10
+#define TK_F11			GDK_KEY_F11
+#define TK_F12			GDK_KEY_F12
+#endif//GTK
+
+//Xlib
+#if 0
 #define TK_LBUTTON		//???
 #define TK_RBUTTON		//???
 #define TK_MBUTTON		//???
@@ -280,8 +381,9 @@ enum WindowMessages
 #define TK_F10			XK_F10
 #define TK_F11			XK_F11
 #define TK_F12			XK_F12
+#endif//Xlib
 
-#endif
+#endif//__linux__
 
 //OpenGL
 #if 1
