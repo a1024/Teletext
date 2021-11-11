@@ -935,7 +935,7 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 				case VK_MULTIPLY:	redraw=wnd_on_type(			'*'			);break;
 				case VK_DIVIDE:		redraw=wnd_on_type(			'/'			);break;
 				case ' ':			redraw=wnd_on_type(			' '			);break;
-				case '\t'			redraw=wnd_on_type(			'\t'		);break;
+				case '\t':			redraw=wnd_on_type(			'\t'		);break;
 				case '\r':			redraw=wnd_on_type(			'\n'		);break;
 				default:
 					if(wParam>='A'&&wParam<='Z')
@@ -1023,6 +1023,16 @@ int					__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, ch
 	//wchar_t LOL_2[10]=L"Hello";
 	//int length=WideCharToMultiByte(CP_UTF8, 0, LOL_2, 10, LOL_1, strlen(LOL_1), nullptr, nullptr);
 	prof_start();
+	{
+		int len=GetModuleFileNameW(nullptr, g_wbuf, g_buf_size);
+		int len2=WideCharToMultiByte(CP_UTF8, 0, g_wbuf, len, g_buf, g_buf_size, nullptr, nullptr);
+		int k=len2-1;
+		for(;k>0&&g_buf[k-1]!='/'&&g_buf[k-1]!='\\';--k);
+		exe_dir.assign(g_buf, g_buf+k);
+		for(k=0;k<(int)exe_dir.size();++k)
+			if(exe_dir[k]=='\\')
+				exe_dir[k]='/';
+	}
 	ghInstance=hInstance;
 	tagWNDCLASSEXA wndClassEx=
 	{
