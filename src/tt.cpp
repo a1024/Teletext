@@ -352,6 +352,11 @@ int					print_line(short x, short y, const char *msg, int msg_length, short tab_
 	if(y+height<0||y>=h)
 		return calc_width(x, y, msg, msg_length, tab_origin, zoom);
 	vrtx.resize(msg_length<<4);//vx, vy, txx, txy		x4 vertices/char
+	int rx1=0, ry1=0, rdx=0, rdy=0;
+	get_current_region(rx1, ry1, rdx, rdy);
+	float CX1=2.f/rdx, CX0=CX1*(x-rx1)-1;
+	rect[1]=1-(y-ry1)*2.f/rdy;
+	rect[3]=1-(y+height-ry1)*2.f/rdy;
 	for(int k=0;k<msg_length;++k)
 	{
 		char c=msg[k];
@@ -365,9 +370,18 @@ int					print_line(short x, short y, const char *msg, int msg_length, short tab_
 		{
 			if(x+msg_width+width>=0&&x+msg_width<w)
 			{
-				toNDC_nobias(float(x+msg_width		), float(y			), rect[0], rect[1]);
-				toNDC_nobias(float(x+msg_width+width), float(y+height	), rect[2], rect[3]);//y2<y1
-				idx=k<<4;
+				rect[0]=CX1*msg_width+CX0;//xn1
+				msg_width+=width;
+				rect[2]=CX1*msg_width+CX0;//xn2
+
+				//rect[0]=(x+msg_width-rx1)*2.f/rdx-1;//xn1
+				//rect[1]=1-(y-ry1)*2.f/rdy;//yn1
+				//rect[2]=(x+msg_width+width-rx1)*2.f/rdx-1;//xn2
+				//rect[3]=1-(y+height-ry1)*2.f/rdy;//yn2
+
+				//toNDC_nobias(float(x+msg_width		), float(y			), rect[0], rect[1]);
+				//toNDC_nobias(float(x+msg_width+width), float(y+height	), rect[2], rect[3]);//y2<y1
+				idx=printable_count<<4;
 				txc=font_coords+c-32;
 				vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
 				vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
@@ -376,7 +390,8 @@ int					print_line(short x, short y, const char *msg, int msg_length, short tab_
 
 				++printable_count;
 			}
-			msg_width+=width;
+			else
+				msg_width+=width;
 		}
 	}
 	if(printable_count)
@@ -455,9 +470,10 @@ int					print_line_rect(short x, short y, const char *msg, int msg_length, short
 	return msg_width;
 }
 
-//U64				colors_text=0xFFABABABFF000000;//black on white
-U64					colors_text=0xFF000000FFABABAB;//dark mode
-U64					colors_selection=0xFFFF0000FFABABAB;
+//U64				colors_text=0xFFABABABFF000000;//black on white		0xBKBKBKBK_TXTXTXTX
+U64					colors_text=0x20ABABABFFABABAB;//dark mode
+//U64				colors_text=0xFF000000FFABABAB;//dark mode, opaque black on black?
+U64					colors_selection=0xA0FF0000FFABABAB;
 int					color_cursorlinebk=0xFF202020;
 U64					colors_cursorline=(u64)color_cursorlinebk<<32|0xFFABABAB;
 short				font_zoom=1;//font pixel size
@@ -1259,6 +1275,105 @@ bool				wnd_on_init()
 	return true;
 }
 void				wnd_on_resize(){}
+void				print_text(int tab_origin, int x0, int x, int y, const char *msg, int msg_length, short zoom, int *final_x=nullptr, int *final_y=nullptr)
+{
+	if(msg_length<1)
+		return;
+	float ndc[4]={};//x1, x2, y1, y2
+	QuadCoords *txc=nullptr;
+	int width, idx, printable_count=0, tab_width=tab_count*dx*zoom, dxpx=dx*zoom, dypx=dy*zoom;
+	int rx1=0, ry1=0, rdx=0, rdy=0;
+	get_current_region(rx1, ry1, rdx, rdy);
+	float
+		CX1=2.f/rdx, CX0=CX1*(x-rx1)-1,
+		CY1=-2.f/rdy, CY0=1-CY1*ry1;
+	float currentX=x0, currentY=y, nextY=y+dypx;
+	ndc[2]=CY1*currentY+CY0;
+	ndc[3]=CY1*nextY+CY0;
+	//ndc[2]=1-(y-ry1)*2.f/rdy;
+	//ndc[3]=1-(y+height-ry1)*2.f/rdy;
+	if(currentY>=ry1+rdy)//first line is below region bottom
+		return;
+	int k=0;
+	if(nextY<ry1)//first line is above region top
+	{
+		for(;k<msg_length;++k)
+		{
+			if(msg[k]=='\n')
+			{
+				currentY=nextY, nextY+=dypx;
+				if(nextY>=ry1)
+				{
+					currentX=x;
+					ndc[2]=CY1*currentY+CY0;
+					ndc[3]=CY1*nextY+CY0;
+					break;
+				}
+			}
+		}
+		if(k>=msg_length)//nothing left to print
+			return;
+	}
+	vrtx.resize((w+dxpx)*(h+dypx)/(dxpx*dypx)<<4);//nchars in grid	*	{vx, vy, txx, txy		x4 vertices/char}	~= 5MB at FHD screen
+	for(;k<msg_length;++k)
+	{
+		char c=msg[k];
+		if(c>=32&&c<0xFF)
+			width=dxpx;
+		else if(c=='\t')
+			width=tab_width-mod(currentX-tab_origin, tab_width), c=' ';
+		else
+		{
+			if(c=='\n')
+			{
+				currentX=x, currentY=nextY, nextY+=dypx;
+				if(currentY>=ry1+rdy)//following lines are below region bottom
+					break;
+				ndc[2]=CY1*currentY+CY0;
+				ndc[3]=CY1*nextY+CY0;
+			}
+			width=0;
+		}
+		if(width)
+		{
+			if(currentX+width>=0&&currentX<w)
+			{
+				ndc[0]=CX1*currentX+CX0;//xn1
+				currentX+=width;
+				ndc[1]=CX1*currentX+CX0;//xn2
+				idx=printable_count<<4;
+				if(idx>=(int)vrtx.size())
+					vrtx.resize(vrtx.size()+(vrtx.size()>>1));//grow by x1.5
+				txc=font_coords+c-32;
+				vrtx[idx   ]=ndc[0], vrtx[idx+ 1]=ndc[2],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
+				vrtx[idx+ 4]=ndc[0], vrtx[idx+ 5]=ndc[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
+				vrtx[idx+ 8]=ndc[1], vrtx[idx+ 9]=ndc[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
+				vrtx[idx+12]=ndc[1], vrtx[idx+13]=ndc[2],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
+
+				++printable_count;
+			}
+			else
+				currentX+=width;
+		}
+	}
+	if(printable_count)
+	{
+		setGLProgram(shader_text.program);
+		select_texture(font_txid, ns_text::u_atlas);
+		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
+		glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
+		glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);			GL_CHECK();
+
+		glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+		glDrawArrays(GL_QUADS, 0, printable_count<<2);	GL_CHECK();//draw the quads: 4 vertices per character quad
+		glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+	}
+	if(final_x)
+		*final_x=currentX;
+	if(final_y)
+		*final_y=currentY;
+	//return nextY-y;
+}
 void				wnd_on_render()
 {
 	prof_add("Render entry");
@@ -1329,9 +1444,9 @@ void				wnd_on_render()
 
 	//sprintf_s(g_buf, g_buf_size, "cc(%d, %d), sc(%d, %d)", ccx, ccy, scx, scy);//
 	//set_window_title_a(g_buf);//
-	int y=0;
 	if(rectsel)//rectangular selection
 	{
+		draw_rectangle_i(0, w, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
 		int rx1, rx2, ry1, ry2;//rect coordinates in characters
 		if(scx<ccx)
 			rx1=scx, rx2=ccx;
@@ -1343,7 +1458,7 @@ void				wnd_on_render()
 			ry1=ccy, ry2=scy;
 		int px1=rx1*dxpx, px2=rx2*dxpx, py1=ry1*dypx, py2=ry2*dypx;
 		draw_rectangle_i(px1-wpx, px2-wpx, py1-wpy, py2+dypx-wpy, colors_selection.hi);
-		for(int start=0, line_start=0, lineno=0, x=0, k=0;;++k)
+		for(int start=0, line_start=0, lineno=0, x=0, y=0, k=0;;++k)
 		{
 			if(lineno>=ry1&&lineno<=ry2)
 			{
@@ -1397,12 +1512,21 @@ void				wnd_on_render()
 	}
 	else if(cursor!=selcur)//normal selection
 	{
+		draw_rectangle_i(0, w, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
 		int selstart, selend;
 		if(cursor<selcur)
 			selstart=cursor, selend=selcur;
 		else
 			selstart=selcur, selend=cursor;
-		for(int start=0, line_start=0, x=0, k=0;;++k)
+		
+		int x=-wpx, y=-wpy;
+		print_text(-wpx, x, -wpx, y, arr, selstart, font_zoom, &x, &y);
+		set_text_colors(colors_selection);
+		print_text(-wpx, x, -wpx, y, arr+selstart, selend-selstart, font_zoom, &x, &y);
+		set_text_colors(colors_text);
+		print_text(-wpx, x, -wpx, y, arr+selend, textlen-selend, font_zoom, &x, &y);
+
+	/*	for(int start=0, line_start=0, x=0, y=0, k=0;;++k)
 		{
 			if(k==selstart)
 			{
@@ -1431,13 +1555,26 @@ void				wnd_on_render()
 				line_start=start=k+1;
 				x=0;
 			}
-		}
+		}//*/
 		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
 	}
 	else//no selection
 	{
 		draw_rectangle_i(0, w, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
-		for(int start=0, line_start=0, lineno=0, x=0, k=0;;++k)
+		print_text(-wpx, -wpx, -wpx, -wpy, arr, textlen, font_zoom);
+#if 0
+		int linestart=find_line_start(cursor), lineend=find_line_end(cursor);
+		int height=0;
+		height+=print_text(-wpx, -wpx, -wpx, height-wpy, arr, linestart-(linestart>0), font_zoom);
+	//	height+=print_text(-wpx, -wpx, -wpx, height-wpy, arr, linestart-(linestart>0&&arr[linestart-1]=='\n'), font_zoom);
+	//	height+=print_text(-wpx, -wpx, -wpx, height-wpy, arr, linestart, font_zoom);
+		set_text_colors(colors_cursorline);
+		height+=print_text(-wpx, -wpx, -wpx, height-wpy, arr+linestart, lineend-linestart, font_zoom);
+		set_text_colors(colors_text);
+		height+=print_text(-wpx, -wpx, -wpx, height-wpy, arr+lineend+(lineend>0), textlen-(lineend+-(lineend>0)), font_zoom);
+#endif
+		//print_text(arr, textlen, dxpx, dypx);
+	/*	for(int start=0, line_start=0, lineno=0, x=0, y=0, k=0;;++k)
 		{
 			if(k>=textlen||text[k]=='\n')
 			{
@@ -1457,7 +1594,7 @@ void				wnd_on_render()
 				x=0;
 				++lineno;
 			}
-		}
+		}//*/
 		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
 	}
 	prof_add("text");

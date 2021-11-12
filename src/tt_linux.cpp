@@ -210,9 +210,10 @@ bool				open_text_file(const char *filename, std::string &str)
 	int bytesize=ftell(file);
 	fseek(file, 0, SEEK_SET);
 	str.resize(bytesize);
-	fread(&str[0], 1, bytesize, file);
+	int read=fread(&str[0], 1, bytesize, file);
 	fclose(file);
-	str.resize(strlen(str.c_str()));//remove extra null terminators at the end
+	str.resize(read);
+	//str.resize(strlen(str.c_str()));//remove extra null terminators at the end
 	return true;
 }
 bool				save_text_file(const char *filename, std::string &str)
@@ -235,39 +236,35 @@ int					ask_to_save()
 		snprintf(g_buf, g_buf_size, "Save changes to Untitled?");
 	const SDL_MessageBoxButtonData buttons[]=
 	{
-		{0, 0, "no" },
-		{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "yes"},
-		{SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 2, "cancel"},
+		{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 0, "Yes"},
+		{0, 1, "No" },
+		{SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 2, "Cancel"},
 	};
-	const SDL_MessageBoxColorScheme colorScheme=
-	{
-		{	//.r, .g, .b
-			{255,   0,   0},//[SDL_MESSAGEBOX_COLOR_BACKGROUND]
-			{  0, 255,   0},//[SDL_MESSAGEBOX_COLOR_TEXT]
-			{255, 255,   0},//[SDL_MESSAGEBOX_COLOR_BUTTON_BORDER]
-			{  0,   0, 255},//[SDL_MESSAGEBOX_COLOR_BUTTON_BACKGROUND]
-			{255,   0, 255},//[SDL_MESSAGEBOX_COLOR_BUTTON_SELECTED]
-		}
-	};
+	//const SDL_MessageBoxColorScheme colorScheme=
+	//{
+	//	{	//.r, .g, .b
+	//		{255,   0,   0},//[SDL_MESSAGEBOX_COLOR_BACKGROUND]
+	//		{  0, 255,   0},//[SDL_MESSAGEBOX_COLOR_TEXT]
+	//		{255, 255,   0},//[SDL_MESSAGEBOX_COLOR_BUTTON_BORDER]
+	//		{  0,   0, 255},//[SDL_MESSAGEBOX_COLOR_BUTTON_BACKGROUND]
+	//		{255,   0, 255},//[SDL_MESSAGEBOX_COLOR_BUTTON_SELECTED]
+	//	}
+	//};
 	SDL_MessageBoxData data=
 	{
 		SDL_MESSAGEBOX_INFORMATION,//.flags
 		nullptr,//.window
-		"example message box",//.title
-		"select a button",//.message
+		"",//.title
+		g_buf,//.message
 		SDL_arraysize(buttons),//.numbuttons
 		buttons,//.buttons
-		&colorScheme,//.colorScheme
+		nullptr,
+	//	&colorScheme,//.colorScheme
 	};
 	int choice=0;
 	int success=SDL_ShowMessageBox(&data, &choice);	SDL_ASSERT(success>=0);
-	switch(choice)
-	{
-	case -1:choice=2;break;
-	case 0:choice=1;break;
-	case 1:choice=0;break;
-	case 2:break;
-	}
+	if(choice==-1)
+		choice=2;
 	return choice;
 }
 void				mouse_capture()
@@ -286,6 +283,7 @@ void				swap_buffers()
 	//glXSwapBuffers(dpy, win);
 }
 const char			numrow[]=")!@#$%^&*(";
+SDL_Event			events[2048];
 int					main(int argc, char **argv)
 {
 	{
@@ -315,151 +313,169 @@ int					main(int argc, char **argv)
 	if(!wnd_on_init())
 		goto quit;
 
-	for(int loop=1;loop;)
+	for(;;)
 	{
-		SDL_Event e={};
-		int success=SDL_WaitEvent(&e);	SDL_ASSERT(success);
-	//	printf("Event: %d\n", e.type);//
-		bool redraw=false;
-		switch(e.type)
-		{
-		case SDL_DISPLAYEVENT:
-			break;
-		case SDL_WINDOWEVENT:
-			if(e.window.event==SDL_WINDOWEVENT_SIZE_CHANGED)
-			{
-				SDL_GetWindowSize(window, &w, &h);
-				resize_gl();
-				wnd_on_render();
-			}
-			break;
-		case SDL_MOUSEMOTION:
-			mx=e.motion.x, my=e.motion.y;
-			wnd_on_mousemove();
-			break;
-		case SDL_MOUSEWHEEL:
-			wnd_on_mousewheel(e.wheel.y>0);
-			break;
-		case SDL_MOUSEBUTTONDOWN:
-			if(e.button.button==SDL_BUTTON_LEFT)
-				wnd_on_lbuttondown();
-			else if(e.button.button==SDL_BUTTON_RIGHT)
-				wnd_on_rbuttondown();
-			break;
-		case SDL_MOUSEBUTTONUP:
-			if(e.button.button==SDL_BUTTON_LEFT)
-				wnd_on_lbuttonup();
-			else if(e.button.button==SDL_BUTTON_RIGHT)
-				wnd_on_rbuttonup();
-			break;
-		case SDL_KEYDOWN:
-			{
-				int key=e.key.keysym.scancode;
-				if(is_ctrl_down())
-				{
-					switch(key)
-					{
-					case SDL_SCANCODE_UP:	redraw=wnd_on_scroll_up_key();		break;
-					case SDL_SCANCODE_DOWN:	redraw=wnd_on_scroll_down_key();	break;
-					case SDL_SCANCODE_LEFT:	redraw=wnd_on_skip_word_left();		break;
-					case SDL_SCANCODE_RIGHT:redraw=wnd_on_skip_word_right();	break;
-					case SDL_SCANCODE_HOME:	redraw=wnd_on_goto_file_start();	break;
-					case SDL_SCANCODE_END:	redraw=wnd_on_goto_file_end();		break;
-					case SDL_SCANCODE_A:	redraw=wnd_on_select_all();			break;
-					case SDL_SCANCODE_C:	redraw=wnd_on_copy();				break;
-					case SDL_SCANCODE_D:	redraw=wnd_on_clear_hist();			break;
-					case SDL_SCANCODE_N:	redraw=wnd_on_new();				break;
-					case SDL_SCANCODE_O:	redraw=wnd_on_open();				break;
-					case SDL_SCANCODE_S:	redraw=wnd_on_save(is_shift_down());break;
-					case SDL_SCANCODE_V:	redraw=wnd_on_paste();				break;
-					case SDL_SCANCODE_Y:	redraw=wnd_on_redo();				break;
-					case SDL_SCANCODE_Z:	redraw=wnd_on_undo();				break;
-					}
-				}
-				else
-				{
-					char shift=is_shift_down(), lowercase=caps_lock==shift;
-					switch(key)
-					{
-					case SDL_SCANCODE_CAPSLOCK:	caps_lock=!caps_lock;			break;
-					case SDL_SCANCODE_LALT:
-					case SDL_SCANCODE_RALT:		redraw=wnd_on_begin_rectsel();	break;
-					case SDL_SCANCODE_ESCAPE:	redraw=wnd_on_deselect();		break;
-					case SDL_SCANCODE_F1:		redraw=wnd_on_display_help();	break;
-					case SDL_SCANCODE_F4:
-						if(is_alt_down())
-						{
-							if(wnd_on_quit())
-								goto quit;
-						}
-						else
-							redraw=wnd_on_toggle_profiler();
-						break;
-					case SDL_SCANCODE_UP:		redraw=wnd_on_cursor_up();		break;
-					case SDL_SCANCODE_DOWN:		redraw=wnd_on_cursor_down();	break;
-					case SDL_SCANCODE_LEFT:		redraw=wnd_on_cursor_left();	break;
-					case SDL_SCANCODE_RIGHT:	redraw=wnd_on_cursor_right();	break;
-					case SDL_SCANCODE_HOME:		redraw=wnd_on_goto_line_start();break;
-					case SDL_SCANCODE_END:		redraw=wnd_on_goto_line_end();	break;
-					case SDL_SCANCODE_DELETE:	redraw=wnd_on_deletechar();		break;
-					case SDL_SCANCODE_BACKSPACE:redraw=wnd_on_backspace();		break;
+		int success=SDL_WaitEvent(events);	SDL_ASSERT(success);
+		SDL_PumpEvents();
+		int nevents=1+SDL_PeepEvents(events+1, 2047, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT);
 
-					case SDL_SCANCODE_SEMICOLON:	redraw=wnd_on_type(shift?	':':';'		);break;
-					case SDL_SCANCODE_SLASH:		redraw=wnd_on_type(shift?	'?':'/'		);break;
-					case SDL_SCANCODE_GRAVE:		redraw=wnd_on_type(shift?	'~':'`'		);break;
-					case SDL_SCANCODE_LEFTBRACKET:	redraw=wnd_on_type(shift?	'{':'['		);break;
-					case SDL_SCANCODE_BACKSLASH:	redraw=wnd_on_type(shift?	'|':'\\'	);break;
-					case SDL_SCANCODE_RIGHTBRACKET:	redraw=wnd_on_type(shift?	'}':']'		);break;
-					case SDL_SCANCODE_APOSTROPHE:	redraw=wnd_on_type(shift?	'\"':'\''	);break;
-					case SDL_SCANCODE_MINUS:		redraw=wnd_on_type(shift?	'_':'-'		);break;
-					case SDL_SCANCODE_EQUALS:		redraw=wnd_on_type(shift?	'+':'='		);break;
-					case SDL_SCANCODE_COMMA:		redraw=wnd_on_type(shift?	'<':','		);break;
-					case SDL_SCANCODE_PERIOD:		redraw=wnd_on_type(shift?	'>':'.'		);break;
-					case SDL_SCANCODE_KP_PERIOD:	redraw=wnd_on_type(			'.'			);break;
-					case SDL_SCANCODE_KP_PLUS:		redraw=wnd_on_type(			'+'			);break;
-					case SDL_SCANCODE_KP_MINUS:		redraw=wnd_on_type(			'-'			);break;
-					case SDL_SCANCODE_KP_MULTIPLY:	redraw=wnd_on_type(			'*'			);break;
-					case SDL_SCANCODE_KP_DIVIDE:	redraw=wnd_on_type(			'/'			);break;
-					case SDL_SCANCODE_SPACE:		redraw=wnd_on_type(			' '			);break;
-					case SDL_SCANCODE_TAB:			redraw=wnd_on_type(			'\t'		);break;
-					case SDL_SCANCODE_RETURN:		redraw=wnd_on_type(			'\n'		);break;
-					default:
-						if(key>=SDL_SCANCODE_A&&key<=SDL_SCANCODE_Z)
-						{
-							if(lowercase)
-								redraw=wnd_on_type(key+'a'-SDL_SCANCODE_A);
-							else
-								redraw=wnd_on_type(key+'A'-SDL_SCANCODE_A);
-						}
-						else if(key>=SDL_SCANCODE_1&&key<=SDL_SCANCODE_0)
-						{
-							if(shift)
-								redraw=wnd_on_type(key==SDL_SCANCODE_0?numrow[0]:numrow[key+1-SDL_SCANCODE_1]);
-							else
-								redraw=wnd_on_type(key==SDL_SCANCODE_0?'0':key+'1'-SDL_SCANCODE_1);
-						}
-						else if(key>=SDLK_KP_1&&key<=SDLK_KP_0)
-							redraw=wnd_on_type(key==SDLK_KP_0?'0':key+'1'-SDLK_KP_1);
-						break;
-					}
+		//SDL_PumpEvents();
+		//int nevents=SDL_PeepEvents(events, 2048, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT);
+
+	//	int success=SDL_WaitEvent(&e);	SDL_ASSERT(success);
+	//	int success=SDL_PollEvent(&e);	SDL_ASSERT(success);
+
+		bool redraw=false;
+		for(int ke=0;ke<nevents;++ke)
+		{
+			auto e=events+ke;
+			//printf("Event: %d\n", e->type);//
+			switch(e->type)
+			{
+			case SDL_DISPLAYEVENT:
+				break;
+			case SDL_WINDOWEVENT:
+				if(e->window.event==SDL_WINDOWEVENT_SIZE_CHANGED)
+				{
+					redraw=true;
+					SDL_GetWindowSize(window, &w, &h);
+					resize_gl();
 				}
-				keyboard[e.key.keysym.scancode]=true;
+				break;
+			case SDL_MOUSEMOTION:
+				for(;ke+1<nevents&&events[ke+1].type==e->type;++ke);
+				e=events+ke;
+				mx=e->motion.x, my=e->motion.y;
+				redraw|=wnd_on_mousemove();
+				break;
+			case SDL_MOUSEWHEEL:
+				redraw|=wnd_on_mousewheel(e->wheel.y>0);
+				break;
+			case SDL_MOUSEBUTTONDOWN:
+				if(e->button.button==SDL_BUTTON_LEFT)
+					redraw|=wnd_on_lbuttondown();
+				else if(e->button.button==SDL_BUTTON_RIGHT)
+					redraw|=wnd_on_rbuttondown();
+				break;
+			case SDL_MOUSEBUTTONUP:
+				if(e->button.button==SDL_BUTTON_LEFT)
+					redraw|=wnd_on_lbuttonup();
+				else if(e->button.button==SDL_BUTTON_RIGHT)
+					redraw|=wnd_on_rbuttonup();
+				break;
+			case SDL_KEYDOWN:
+				{
+					int key=e->key.keysym.scancode;
+					if(is_ctrl_down())
+					{
+						switch(key)
+						{
+						case SDL_SCANCODE_UP:	redraw|=wnd_on_scroll_up_key();		break;
+						case SDL_SCANCODE_DOWN:	redraw|=wnd_on_scroll_down_key();	break;
+						case SDL_SCANCODE_LEFT:	redraw|=wnd_on_skip_word_left();		break;
+						case SDL_SCANCODE_RIGHT:redraw|=wnd_on_skip_word_right();	break;
+						case SDL_SCANCODE_HOME:	redraw|=wnd_on_goto_file_start();	break;
+						case SDL_SCANCODE_END:	redraw|=wnd_on_goto_file_end();		break;
+						case SDL_SCANCODE_A:	redraw|=wnd_on_select_all();			break;
+						case SDL_SCANCODE_C:	redraw|=wnd_on_copy();				break;
+						case SDL_SCANCODE_D:	redraw|=wnd_on_clear_hist();			break;
+						case SDL_SCANCODE_N:	redraw|=wnd_on_new();				break;
+						case SDL_SCANCODE_O:	redraw|=wnd_on_open();				break;
+						case SDL_SCANCODE_S:	redraw|=wnd_on_save(is_shift_down());break;
+						case SDL_SCANCODE_V:	redraw|=wnd_on_paste();				break;
+						case SDL_SCANCODE_Y:	redraw|=wnd_on_redo();				break;
+						case SDL_SCANCODE_Z:	redraw|=wnd_on_undo();				break;
+						}
+					}
+					else
+					{
+						char shift=is_shift_down(), lowercase=caps_lock==shift;
+						switch(key)
+						{
+						case SDL_SCANCODE_CAPSLOCK:	caps_lock=!caps_lock;			break;
+						case SDL_SCANCODE_LALT:
+						case SDL_SCANCODE_RALT:		redraw|=wnd_on_begin_rectsel();	break;
+						case SDL_SCANCODE_ESCAPE:	redraw|=wnd_on_deselect();		break;
+						case SDL_SCANCODE_F1:		redraw|=wnd_on_display_help();	break;
+						case SDL_SCANCODE_F4:
+							if(is_alt_down())
+							{
+								if(wnd_on_quit())
+									goto quit;
+							}
+							else
+								redraw|=wnd_on_toggle_profiler();
+							break;
+						case SDL_SCANCODE_UP:		redraw|=wnd_on_cursor_up();		break;
+						case SDL_SCANCODE_DOWN:		redraw|=wnd_on_cursor_down();	break;
+						case SDL_SCANCODE_LEFT:		redraw|=wnd_on_cursor_left();	break;
+						case SDL_SCANCODE_RIGHT:	redraw|=wnd_on_cursor_right();	break;
+						case SDL_SCANCODE_HOME:		redraw|=wnd_on_goto_line_start();break;
+						case SDL_SCANCODE_END:		redraw|=wnd_on_goto_line_end();	break;
+						case SDL_SCANCODE_DELETE:	redraw|=wnd_on_deletechar();		break;
+						case SDL_SCANCODE_BACKSPACE:redraw|=wnd_on_backspace();		break;
+
+						case SDL_SCANCODE_SEMICOLON:	redraw|=wnd_on_type(shift?	':':';'		);break;
+						case SDL_SCANCODE_SLASH:		redraw|=wnd_on_type(shift?	'?':'/'		);break;
+						case SDL_SCANCODE_GRAVE:		redraw|=wnd_on_type(shift?	'~':'`'		);break;
+						case SDL_SCANCODE_LEFTBRACKET:	redraw|=wnd_on_type(shift?	'{':'['		);break;
+						case SDL_SCANCODE_BACKSLASH:	redraw|=wnd_on_type(shift?	'|':'\\'	);break;
+						case SDL_SCANCODE_RIGHTBRACKET:	redraw|=wnd_on_type(shift?	'}':']'		);break;
+						case SDL_SCANCODE_APOSTROPHE:	redraw|=wnd_on_type(shift?	'\"':'\''	);break;
+						case SDL_SCANCODE_MINUS:		redraw|=wnd_on_type(shift?	'_':'-'		);break;
+						case SDL_SCANCODE_EQUALS:		redraw|=wnd_on_type(shift?	'+':'='		);break;
+						case SDL_SCANCODE_COMMA:		redraw|=wnd_on_type(shift?	'<':','		);break;
+						case SDL_SCANCODE_PERIOD:		redraw|=wnd_on_type(shift?	'>':'.'		);break;
+						case SDL_SCANCODE_KP_PERIOD:	redraw|=wnd_on_type(			'.'			);break;
+						case SDL_SCANCODE_KP_PLUS:		redraw|=wnd_on_type(			'+'			);break;
+						case SDL_SCANCODE_KP_MINUS:		redraw|=wnd_on_type(			'-'			);break;
+						case SDL_SCANCODE_KP_MULTIPLY:	redraw|=wnd_on_type(			'*'			);break;
+						case SDL_SCANCODE_KP_DIVIDE:	redraw|=wnd_on_type(			'/'			);break;
+						case SDL_SCANCODE_SPACE:		redraw|=wnd_on_type(			' '			);break;
+						case SDL_SCANCODE_TAB:			redraw|=wnd_on_type(			'\t'		);break;
+						case SDL_SCANCODE_RETURN:		redraw|=wnd_on_type(			'\n'		);break;
+						default:
+							if(key>=SDL_SCANCODE_A&&key<=SDL_SCANCODE_Z)
+							{
+								if(lowercase)
+									redraw|=wnd_on_type(key+'a'-SDL_SCANCODE_A);
+								else
+									redraw|=wnd_on_type(key+'A'-SDL_SCANCODE_A);
+							}
+							else if(key>=SDL_SCANCODE_1&&key<=SDL_SCANCODE_0)
+							{
+								if(shift)
+									redraw|=wnd_on_type(key==SDL_SCANCODE_0?numrow[0]:numrow[key+1-SDL_SCANCODE_1]);
+								else
+									redraw|=wnd_on_type(key==SDL_SCANCODE_0?'0':key+'1'-SDL_SCANCODE_1);
+							}
+							else if(key>=SDLK_KP_1&&key<=SDLK_KP_0)
+								redraw|=wnd_on_type(key==SDLK_KP_0?'0':key+'1'-SDLK_KP_1);
+							break;
+						}
+					}
+					keyboard[e->key.keysym.scancode]=true;
+				}
+				//PrintKeyInfo(&e->key);
+				//printf("Key press detected\n");
+				break;
+			case SDL_KEYUP:
+				keyboard[e->key.keysym.scancode]=false;
+				//PrintKeyInfo(&e->key);
+				//printf("Key release detected\n");
+				break;
+			case SDL_QUIT:
+				if(wnd_on_quit())
+					goto quit;
+				break;
 			}
-			//PrintKeyInfo(&e.key);
-			//printf("Key press detected\n");
-			break;
-		case SDL_KEYUP:
-			keyboard[e.key.keysym.scancode]=false;
-			//PrintKeyInfo(&e.key);
-			//printf("Key release detected\n");
-			break;
-		case SDL_QUIT:
-			loop=0;
-			break;
 		}
-		wnd_on_render();
-		SDL_GL_SwapWindow(window);
-		SDL_Delay(1);
+		if(redraw)
+		{
+			wnd_on_render();
+			SDL_GL_SwapWindow(window);
+			//SDL_Delay(1);
+		}
 	}
 quit:
 	SDL_Quit();

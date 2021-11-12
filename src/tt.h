@@ -501,6 +501,7 @@ void				send_texture_pot(unsigned gl_texture, int *rgb, int txw, int txh);
 void				select_texture(unsigned tx_id, int u_location);
 void				set_region_immediate(int x1, int x2, int y1, int y2);
 void				resize_gl();
+void				get_current_region(int &x1, int &y1, int &dx, int &dy);
 void				toNDC_nobias(float xs, float ys, float &xn, float &yn);
 void				toNDC(float xs, float ys, float &xn, float &yn);//2021-01-14 test: fill the screen with horizontal or vertical lines
 #endif

@@ -322,6 +322,13 @@ void				resize_gl()
 	glViewport(0, 0, w, h);//x, y, w, h
 	current_region.set(0, 0, w, h);//x1, y1, x2, y2
 }
+void				get_current_region(int &x1, int &y1, int &dx, int &dy)
+{
+	x1=current_region.x1;
+	y1=current_region.y1;
+	dx=current_region.dx;
+	dy=current_region.dy;
+}
 void				toNDC_nobias(float xs, float ys, float &xn, float &yn)
 {
 	xn=(xs-current_region.x1)*2.f/current_region.dx-1;//draw_rectangle_hollow: missing pixel in top-right corner
