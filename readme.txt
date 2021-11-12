@@ -23,7 +23,7 @@ TODO:
 - Config file
 - Multiple tabs
 - Save on write
-- Port to Linux
 
 DONE:
 - Rectangular selection
+- Port to Linux
