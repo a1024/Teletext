@@ -14,6 +14,7 @@ r	g	b	r	g	b
 
 
 TODO:
+- Tab GUI
 - Indentation with tab/shift tab
 - Wrap option
 - Status bar
@@ -21,9 +22,9 @@ TODO:
 - Find & replace
 - Optional syntax highlighting for C/C++
 - Config file
-- Multiple tabs
 - Save on write
 
 DONE:
 - Rectangular selection
 - Port to Linux
+- Multiple tabs

@@ -148,240 +148,33 @@ const char*			open_file_dialog();
 const char*			save_file_dialog();
 bool				open_text_file(const char *filename, std::string &str);
 bool				save_text_file(const char *filename, std::string &str);
-int					ask_to_save();//returns 0: yes, 1: no, 2: cancel
+int					ask_to_save(std::string &filename);//returns 0: yes, 1: no, 2: cancel
 void				mouse_capture();
 void				mouse_release();
 bool				get_key_state(int key);
 #define				is_ctrl_down()	(get_key_state(TK_LCTRL)||get_key_state(TK_RCTRL))
 #define				is_shift_down()	(get_key_state(TK_LSHIFT)||get_key_state(TK_RSHIFT))
 #define				is_alt_down()	(get_key_state(TK_LALT)||get_key_state(TK_RALT))
-//inline bool			get_key_state(int key)
-//{
-//#ifdef _WINDOWS
-//	return GetAsyncKeyState(key)>>15!=0;
-//#elif defined __linux__
-//	XkbGetState();
-//	return false;
-//#else
-//	return false;
-//#endif
-//}
-//void				update_key_state(char key);
-//void				update_main_key_states();
 void				swap_buffers();
-
-//function removers
-//#ifdef __linux__
-//#define messageboxa(...)
-//#define copy_to_clipboard_c(...)
-//#endif
 
 //key macros
 #ifdef _WINDOWS
 
-#define TK_LBUTTON		VK_LBUTTON
-#define TK_RBUTTON		VK_RBUTTON
-#define TK_MBUTTON		VK_MBUTTON
-
-#define TK_ESC			VK_ESCAPE
-#define TK_TAB			VK_TAB
-#define TK_CAPSLOCK		VK_CAPITAL
 #define	TK_LSHIFT		VK_LSHIFT
 #define	TK_RSHIFT		VK_RSHIFT
 #define	TK_LCTRL		VK_LCONTROL
 #define	TK_RCTRL		VK_RCONTROL
 #define	TK_LALT			VK_LMENU
 #define	TK_RALT			VK_RMENU
-#define TK_LSTART		VK_LWIN
-#define TK_RSTART		VK_RWIN
-
-#define TK_DELETE		VK_DELETE
-#define TK_BACKSPACE	VK_BACK
-#define TK_ENTER		VK_RETURN
-
-#define TK_HOME			VK_HOME
-#define TK_END			VK_END
-#define TK_PGUP			VK_PRIOR
-#define	TK_PGDOWN		VK_NEXT
-#define TK_LEFT			VK_LEFT
-#define TK_RIGHT		VK_RIGHT
-#define TK_UP			VK_UP
-#define TK_DOWN			VK_DOWN
-//#define TK_PRINTSCREEN	VK_SNAPSHOT
-
-#define TK_F1			VK_F1
-#define TK_F2			VK_F2
-#define TK_F3			VK_F3
-#define TK_F4			VK_F4
-#define TK_F5			VK_F5
-#define TK_F6			VK_F6
-#define TK_F7			VK_F7
-#define TK_F8			VK_F8
-#define TK_F9			VK_F9
-#define TK_F10			VK_F10
-#define TK_F11			VK_F11
-#define TK_F12			VK_F12
 
 #elif defined __linux__
 
-/*enum WindowMessages
-{
-	WM_IGNORED,
-
-	WM_MOUSEMOVE,
-	WM_MOUSEWHEEL,
-	WM_LBUTTONDOWN,
-	WM_LBUTTONDBLCLK,
-	WM_LBUTTONUP,
-	WM_RBUTTONDOWN,
-	WM_RBUTTONDBLCLK,
-	WM_RBUTTONUP,
-	WM_KEYDOWN,
-	WM_SYSKEYDOWN,
-	WM_KEYUP,
-	WM_SYSKEYUP,
-};//*/
-
-#define TK_LBUTTON		//???
-#define TK_RBUTTON		//???
-#define TK_MBUTTON		//???
-
-#define TK_ESC			SDLK_ESCAPE
-#define TK_TAB			SDLK_TAB
-#define TK_CAPSLOCK		SDLK_CAPSLOCK
-#define TK_NUMLOCK		SDLK_NUMLOCK
-#define	TK_LSHIFT		SDLK_LSHIFT
-#define	TK_RSHIFT		SDLK_RSHIFT
-#define	TK_LCTRL		SDLK_LCTRL
-#define	TK_RCTRL		SDLK_RCTRL
-#define	TK_LALT			SDLK_LALT
-#define	TK_RALT			SDLK_RALT
-#define TK_LSTART		SDLK_LSUPER
-#define TK_RSTART		SDLK_RSUPER
-
-#define	TK_INSERT		SDLK_INSERT
-#define TK_DELETE		SDLK_DELETE
-#define TK_BACKSPACE	SDLK_BACKSPACE
-#define TK_ENTER		SDLK_RETURN
-
-#define TK_HOME			SDLK_HOME
-#define TK_END			SDLK_END
-#define TK_PAGEUP		SDLK_PAGEUP
-#define	TK_PAGEDOWN		SDLK_PPAGEDOWN
-#define TK_LEFT			SDLK_LEFT
-#define TK_RIGHT		SDLK_RIGHT
-#define TK_UP			SDLK_UP
-#define TK_DOWN			SDLK_DOWN
-//#define TK_PRINTSCREEN	SDLK_PRINT
-
-#define TK_F1			SDLK_F1
-#define TK_F2			SDLK_F2
-#define TK_F3			SDLK_F3
-#define TK_F4			SDLK_F4
-#define TK_F5			SDLK_F5
-#define TK_F6			SDLK_F6
-#define TK_F7			SDLK_F7
-#define TK_F8			SDLK_F8
-#define TK_F9			SDLK_F9
-#define TK_F10			SDLK_F10
-#define TK_F11			SDLK_F11
-#define TK_F12			SDLK_F12
-
-//GTK
-#if 0
-#define TK_LBUTTON		//???
-#define TK_RBUTTON		//???
-#define TK_MBUTTON		//???
-
-#define TK_ESC			GDK_KEY_Escape
-#define TK_TAB			GDK_KEY_Tab
-#define TK_CAPSLOCK		GDK_KEY_Caps_Lock
-#define TK_NUMLOCK		GDK_KEY_Num_Lock
-#define	TK_LSHIFT		GDK_KEY_Shift_L
-#define	TK_RSHIFT		GDK_KEY_Shift_R
-#define	TK_LCTRL		GDK_KEY_Control_L
-#define	TK_RCTRL		GDK_KEY_Control_R
-#define	TK_LALT			GDK_KEY_Alt_L
-#define	TK_RALT			GDK_KEY_Alt_R
-#define TK_LSTART		GDK_KEY_Super_L
-#define TK_RSTART		GDK_KEY_Super_R
-
-#define	TK_INSERT		GDK_KEY_Insert
-#define TK_DELETE		GDK_KEY_Delete
-#define TK_BACKSPACE	GDK_KEY_BackSpace
-#define TK_ENTER		GDK_KEY_Return
-
-#define TK_HOME			GDK_KEY_Home
-#define TK_END			GDK_KEY_End
-#define TK_PAGEUP		GDK_KEY_Page_Up
-#define	TK_PAGEDOWN		GDK_KEY_Page_Down
-#define TK_LEFT			GDK_KEY_Left
-#define TK_RIGHT		GDK_KEY_Right
-#define TK_UP			GDK_KEY_Up
-#define TK_DOWN			GDK_KEY_Down
-//#define TK_PRINTSCREEN	GDK_KEY_Print
-
-#define TK_F1			GDK_KEY_F1
-#define TK_F2			GDK_KEY_F2
-#define TK_F3			GDK_KEY_F3
-#define TK_F4			GDK_KEY_F4
-#define TK_F5			GDK_KEY_F5
-#define TK_F6			GDK_KEY_F6
-#define TK_F7			GDK_KEY_F7
-#define TK_F8			GDK_KEY_F8
-#define TK_F9			GDK_KEY_F9
-#define TK_F10			GDK_KEY_F10
-#define TK_F11			GDK_KEY_F11
-#define TK_F12			GDK_KEY_F12
-#endif//GTK
-
-//Xlib
-#if 0
-#define TK_LBUTTON		//???
-#define TK_RBUTTON		//???
-#define TK_MBUTTON		//???
-
-#define TK_ESC			XK_Escape
-#define TK_TAB			XK_Tab
-#define TK_CAPSLOCK		XK_Caps_Lock
-#define TK_NUMLOCK		XK_Num_Lock
-#define	TK_LSHIFT		XK_Shift_L
-#define	TK_RSHIFT		XK_Shift_R
-#define	TK_LCTRL		XK_Control_L
-#define	TK_RCTRL		XK_Control_R
-#define	TK_LALT			XK_Alt_L
-#define	TK_RALT			XK_Alt_R
-#define TK_LSTART		XK_Super_L
-#define TK_RSTART		XK_Super_R
-
-#define	TK_INSERT		XK_Insert
-#define TK_DELETE		XK_Delete
-#define TK_BACKSPACE	XK_BackSpace
-#define TK_ENTER		XK_Return
-
-#define TK_HOME			XK_Home
-#define TK_END			XK_End
-#define TK_PAGEUP		XK_Page_Up
-#define	TK_PAGEDOWN		XK_Page_Down
-#define TK_LEFT			XK_Left
-#define TK_RIGHT		XK_Right
-#define TK_UP			XK_Up
-#define TK_DOWN			XK_Down
-//#define TK_PRINTSCREEN	XK_Print
-
-#define TK_F1			XK_F1
-#define TK_F2			XK_F2
-#define TK_F3			XK_F3
-#define TK_F4			XK_F4
-#define TK_F5			XK_F5
-#define TK_F6			XK_F6
-#define TK_F7			XK_F7
-#define TK_F8			XK_F8
-#define TK_F9			XK_F9
-#define TK_F10			XK_F10
-#define TK_F11			XK_F11
-#define TK_F12			XK_F12
-#endif//Xlib
+#define	TK_LSHIFT		SDL_SCANCODE_LSHIFT
+#define	TK_RSHIFT		SDL_SCANCODE_RSHIFT
+#define	TK_LCTRL		SDL_SCANCODE_LCTRL
+#define	TK_RCTRL		SDL_SCANCODE_RCTRL
+#define	TK_LALT			SDL_SCANCODE_LALT
+#define	TK_RALT			SDL_SCANCODE_RALT
 
 #endif//__linux__
 
@@ -521,7 +314,6 @@ union				U64
 		data|=lo;
 	}
 };
-extern std::string	filename;
 void				set_text_colors(U64 const &colors);
 int					print_line(short x, short y, const char *msg, int msg_length, short tab_origin, short zoom);
 int					print(short zoom, short tab_origin, short x, short y, const char *format, ...);
@@ -568,6 +360,9 @@ bool				wnd_on_cursor_left();
 bool				wnd_on_cursor_right();
 bool				wnd_on_type(char character);
 //bool				wnd_on_input(int message, int wParam, int lParam);
+
+bool				wnd_on_next_tab();
+bool				wnd_on_prev_tab();
 
 bool				wnd_on_quit();//return false to deny exit
 

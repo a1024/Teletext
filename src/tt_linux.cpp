@@ -48,7 +48,8 @@ bool				sdl_check(const char *file, int line)
 
 bool				get_key_state(int key)
 {
-	switch(key)
+	return keyboard[key];
+/*	switch(key)
 	{
 #define CASE(LABEL)	case SDLK_##LABEL:return keyboard[SDL_SCANCODE_##LABEL];
 	CASE(LCTRL)
@@ -59,8 +60,7 @@ bool				get_key_state(int key)
 	CASE(RALT)
 #undef	CASE
 	}
-	//XkbGetState();
-	return false;//
+	return false;//*/
 }
 void				messagebox(const char *title, const char *format, ...)
 {
@@ -228,12 +228,12 @@ bool				save_text_file(const char *filename, std::string &str)
 	fclose(file);
 	return true;
 }
-int					ask_to_save()
+int					ask_to_save(std::string &filename)
 {
 	if(filename.size())
-		snprintf(g_buf, g_buf_size, "Save changes to %s?", filename.c_str());
+		snprintf(g_buf, g_buf_size, "Save changes to \'%s\'?", filename.c_str());
 	else
-		snprintf(g_buf, g_buf_size, "Save changes to Untitled?");
+		snprintf(g_buf, g_buf_size, "Save changes to \'Untitled\'?");
 	const SDL_MessageBoxButtonData buttons[]=
 	{
 		{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 0, "Yes"},
@@ -370,6 +370,12 @@ int					main(int argc, char **argv)
 					{
 						switch(key)
 						{
+						case SDL_SCANCODE_TAB:
+							if(keyboard[VK_SHIFT])
+								redraw|=wnd_on_prev_tab();
+							else
+								redraw|=wnd_on_next_tab();
+							break;
 						case SDL_SCANCODE_UP:	redraw|=wnd_on_scroll_up_key();		break;
 						case SDL_SCANCODE_DOWN:	redraw|=wnd_on_scroll_down_key();	break;
 						case SDL_SCANCODE_LEFT:	redraw|=wnd_on_skip_word_left();		break;

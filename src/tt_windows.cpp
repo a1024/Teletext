@@ -36,71 +36,7 @@ static HWND			ghWnd=nullptr;
 static RECT			R={};
 HDC					ghDC=nullptr;
 static HGLRC		hRC=nullptr;
-#if 0
-static HDC			ghMemDC=nullptr;
-static HBITMAP		hBitmap=nullptr;
-int					*rgb=nullptr, rgbn=0;
-static HFONT		hFont=nullptr;
-#endif
 char				keyboard[256]={};
-
-#if 0
-struct				Font
-{
-	int type;
-	LOGFONTW lf;
-	TEXTMETRICW tm;
-	std::vector<int> sizes;//if empty, use truetypesizes
-	Font():type(-1){}
-	Font(int type, LOGFONTW const *lf, TEXTMETRICW const *tm):type(type)
-	{
-		memcpy(&this->lf, lf, sizeof LOGFONTW);
-		memcpy(&this->tm, tm, sizeof TEXTMETRICW);
-
-		static const wchar_t *bitmapfontnames[]=
-		{
-			L"Courier",
-			L"Fixedsys",
-			L"MS Sans Serif",
-			L"MS Serif",
-			L"Small Fonts",
-			L"System",
-		};
-		enum BitmapFont{BF_COURIER, BF_FIXEDSYS, BF_MS_SANS_SERIF, BF_MS_SERIF, BF_SMALL_FONTS, BF_SYSTEM,		NBITMAPFONTS};
-		static const int
-			courier		[]={10, 12, 15},					courier_size	=sizeof courier>>2,
-			fixedsys	[]={9},								fixedsys_size	=sizeof fixedsys>>2,
-			mssansserif	[]={8, 10, 12, 14, 18, 24},			mssansserif_size=sizeof mssansserif>>2,
-			msserif		[]={6, 7, 8, 10, 12, 14, 18, 24},	msserif_size	=sizeof msserif>>2,
-			smallfonts	[]={2, 3, 4, 5, 6, 7, 8},			smallfonts_size	=sizeof smallfonts>>2,
-			system		[]={10},							system_size		=sizeof system>>2;
-		for(int k=0;k<NBITMAPFONTS;++k)
-		{
-			if(!wcscmp(lf->lfFaceName, bitmapfontnames[k]))//match
-			{
-				const int *sizes=nullptr;
-				int size=0;
-				switch(k)
-				{
-				case BF_COURIER:		sizes=courier,		size=courier_size;		break;
-				case BF_FIXEDSYS:		sizes=fixedsys,		size=fixedsys_size;		break;
-				case BF_MS_SANS_SERIF:	sizes=mssansserif,	size=mssansserif_size;	break;
-				case BF_MS_SERIF:		sizes=msserif,		size=msserif_size;		break;
-				case BF_SMALL_FONTS:	sizes=smallfonts,	size=smallfonts_size;	break;
-				case BF_SYSTEM:			sizes=system,		size=system_size;		break;
-				}
-				this->sizes.assign(sizes, sizes+size);
-				break;
-			}
-		}
-	}
-};
-bool				operator<(Font const &a, Font const &b){return wcscmp(a.lf.lfFaceName, b.lf.lfFaceName)<0;}
-const int			truetypesizes[]={8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72};
-const int			truetypesizes_size=sizeof(truetypesizes)>>2;
-std::vector<Font>	fonts;
-bool				bold=false, italic=false, underline=false;
-#endif
 
 //OS-dependent error handling:
 const char*			wm2str(int message)
@@ -559,13 +495,7 @@ void				get_window_title(char *str, int size)
 		return;
 	}
 	str[len]='\0';
-	//GetWindowTextA(ghWnd, str, size);
 }
-//void				set_window_title(const char *str)
-//{
-//	int success=SetWindowTextA(ghWnd, str);
-//	SYS_ASSERT(success);
-//}
 void				set_window_title(const char *str)
 {
 	int len=MultiByteToWideChar(CP_UTF8, 0, str, strlen(str), g_wbuf, g_buf_size);	SYS_ASSERT(len);
@@ -573,7 +503,6 @@ void				set_window_title(const char *str)
 		return;
 	g_wbuf[len]='\0';
 	int success=SetWindowTextW(ghWnd, g_wbuf);	SYS_ASSERT(success);
-	//int success=SetWindowTextA(ghWnd, str);	SYS_ASSERT(success);
 }
 int					GUINPrint(int x, int y, int w, int h, const char *a, ...)
 {
@@ -616,7 +545,7 @@ const char*			open_file_dialog()
 		OFN_CREATEPROMPT|OFN_PATHMUSTEXIST,
 		0,//file offset
 		0,//extension offset
-		L"TXT",//default extension
+		L"txt",//default extension
 		0, 0,//data & hook
 		0,//template name
 		0,//reserved
@@ -637,28 +566,33 @@ const char*			open_file_dialog()
 	//memcpy(g_wbuf, ofn.lpstrFile, wcslen(ofn.lpstrFile)*sizeof(wchar_t));
 	//return g_wbuf;
 }
+const wchar_t		initialname[]=L"Untitled.txt";
 const char*			save_file_dialog()
 {
-	g_wbuf[0]=0;
+	memcpy(g_wbuf, initialname, sizeof(initialname));
+	//g_wbuf[0]=0;
 	OPENFILENAMEW ofn=
 	{
-		sizeof(OPENFILENAMEW),
-		ghWnd, ghInstance,
-		L"Text File (.txt)\0*.txt\0"
-		L"C/C++ Source (.c; .cpp)\0*.txt\0"
-		L"C/C++ Header (.h; .hpp)\0*.txt\0", 0, 0, 1,
-		g_wbuf, g_buf_size,
+		sizeof(OPENFILENAMEW), ghWnd, ghInstance,
+		
+		L"Text File (.txt)\0*.txt\0"	//<- filter
+		L"C++ Source (.cpp; .cc; .cxx)\0*.cpp\0"
+		L"C Source (.c)\0*.c\0"
+		L"C/C++ Header (.h; .hpp)\0*.h\0",
+	//	L"No Extension\0*\0",
+		
+		0, 0,//custom filter & count
+		1,								//<- initial filter index
+		g_wbuf, g_buf_size,				//<- output filename
 		0, 0,//initial filename
 		0,
 		0,//dialog title
-		OFN_CREATEPROMPT|OFN_PATHMUSTEXIST,
-		0,//file offset
-		0,//extension offset
-		L"TXT",//default extension
+		OFN_NOTESTFILECREATE|OFN_PATHMUSTEXIST|OFN_EXTENSIONDIFFERENT|OFN_OVERWRITEPROMPT,
+		0, 8,							//<- file offset & extension offset
+		L"txt",							//<- default extension (if user didn't type one)
 		0, 0,//data & hook
 		0,//template name
-		0,//reserved
-		0,//reserved
+		0, 0,//reserved
 		0,//flags ex
 	};
 	int success=GetSaveFileNameW(&ofn);
@@ -708,12 +642,16 @@ bool				save_text_file(const char *filename, std::string &str)
 	fclose(file);
 	return true;
 }
-int					ask_to_save()
+int					ask_to_save(std::string &filename)
 {
+	int len=0;
 	if(filename.size())
-		swprintf_s(g_wbuf, g_buf_size, L"Save changes to %s?", filename.c_str());
+		len=sprintf_s(g_buf, g_buf_size, "Save changes to \'%s\'?", filename.c_str());
 	else
-		swprintf_s(g_wbuf, g_buf_size, L"Save changes to Untitled?");
+		len=sprintf_s(g_buf, g_buf_size, "Save changes to \'Untitled\'?");
+	len=MultiByteToWideChar(CP_UTF8, 0, g_buf, len, g_wbuf, g_buf_size);	SYS_ASSERT(len);
+	g_wbuf[len]='\0';
+	++len;
 	int result=MessageBoxW(ghWnd, g_wbuf, L"Paint++", MB_YESNOCANCEL);
 	switch(result)
 	{
@@ -744,41 +682,6 @@ void				update_main_key_states()
 	get_key_state(VK_CONTROL);
 }
 
-#if 0
-static void			font_change(int font_idx, int size)
-{
-	auto &font=fonts[font_idx];
-	auto &lf=font.lf;
-	if(hFont)
-		DeleteObject(hFont);
-	int nHeight=-MulDiv(size, GetDeviceCaps(ghMemDC, LOGPIXELSY), 72);
-	hFont=CreateFontW(nHeight, 0, lf.lfEscapement, lf.lfOrientation, lf.lfWeight, italic, underline, lf.lfStrikeOut, lf.lfCharSet, lf.lfOutPrecision, lf.lfClipPrecision, lf.lfQuality, lf.lfPitchAndFamily, lf.lfFaceName);
-}
-void				font_use	(){hFont=(HFONT)SelectObject(ghMemDC, hFont);}
-void				font_drop	(){hFont=(HFONT)SelectObject(ghMemDC, hFont);}
-bool				font_set(const wchar_t *name, int size)
-{
-	for(int k=0;k<(int)fonts.size();++k)
-	{
-		auto &font=fonts[k];
-		if(!wcscmp(name, font.lf.lfFaceName))
-		{
-			font_idx=k;
-			font_change(font_idx, size);
-			return true;
-		}
-	}
-	LOG_ERROR("Font not found: \'%S\'", name);
-	return false;
-}
-void				font_get_dimensions(short &x, short &y)
-{
-	SIZE size={};
-	int success=GetTextExtentExPointW(ghMemDC, L"A", 1, 0, 0, 0, &size);
-	x=(short)size.cx, y=(short)size.cy;
-}
-#endif
-
 bool				resize_window()
 {
 	int w0=w, h0=h;
@@ -792,7 +695,6 @@ bool				resize_window()
 void				swap_buffers()
 {
 	SwapBuffers(ghDC);
-	//BitBlt(ghDC, 0, 0, w, h, ghMemDC, 0, 0, SRCCOPY);
 }
 const char			numrow[]=")!@#$%^&*(";
 long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long lParam)
@@ -808,24 +710,6 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 			resize_gl();
 			wnd_on_render();
 		}
-		/*{
-			GetClientRect(ghWnd, &R);
-			int h2=R.bottom-R.top, w2=R.right-R.left;
-			if(h!=h2||w!=w2)
-			{
-				if(!h2)
-					h2=1;
-				h=h2, w=w2, rgbn=w*h;
-				if(hBitmap)
-				{
-					hBitmap=(HBITMAP)SelectObject(ghMemDC, hBitmap);
-					DeleteObject(hBitmap);
-				}
-				BITMAPINFO bmpInfo={{sizeof(BITMAPINFOHEADER), w, -h, 1, 32, BI_RGB, 0, 0, 0, 0, 0}};
-				hBitmap=CreateDIBSection(0, &bmpInfo, DIB_RGB_COLORS, (void**)&rgb, 0, 0);
-				hBitmap=(HBITMAP)SelectObject(ghMemDC, hBitmap);
-			}
-		}//*/
 		break;
 	case WM_PAINT:
 		wnd_on_render();
@@ -874,21 +758,27 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 			{
 				switch(wParam)
 				{
-				case VK_UP:		redraw=wnd_on_scroll_up_key();				break;
-				case VK_DOWN:	redraw=wnd_on_scroll_down_key();			break;
-				case VK_LEFT:	redraw=wnd_on_skip_word_left();				break;
-				case VK_RIGHT:	redraw=wnd_on_skip_word_right();			break;
-				case VK_HOME:	redraw=wnd_on_goto_file_start();			break;
-				case VK_END:	redraw=wnd_on_goto_file_end();				break;
-				case 'A':		redraw=wnd_on_select_all();					break;
-				case 'C':		redraw=wnd_on_copy();						break;
-				case 'D':		redraw=wnd_on_clear_hist();					break;
-				case 'N':		redraw=wnd_on_new();						break;
-				case 'O':		redraw=wnd_on_open();						break;
-				case 'S':		redraw=wnd_on_save(keyboard[VK_SHIFT]!=0);	break;
-				case 'V':		redraw=wnd_on_paste();						break;
-				case 'Y':		redraw=wnd_on_redo();						break;
-				case 'Z':		redraw=wnd_on_undo();						break;
+				case VK_TAB:
+					if(keyboard[VK_SHIFT])
+						redraw|=wnd_on_prev_tab();
+					else
+						redraw|=wnd_on_next_tab();
+					break;
+				case VK_UP:		redraw|=wnd_on_scroll_up_key();				break;
+				case VK_DOWN:	redraw|=wnd_on_scroll_down_key();			break;
+				case VK_LEFT:	redraw|=wnd_on_skip_word_left();			break;
+				case VK_RIGHT:	redraw|=wnd_on_skip_word_right();			break;
+				case VK_HOME:	redraw|=wnd_on_goto_file_start();			break;
+				case VK_END:	redraw|=wnd_on_goto_file_end();				break;
+				case 'A':		redraw|=wnd_on_select_all();				break;
+				case 'C':		redraw|=wnd_on_copy();						break;
+				case 'D':		redraw|=wnd_on_clear_hist();				break;
+				case 'N':		redraw|=wnd_on_new();						break;
+				case 'O':		redraw|=wnd_on_open();						break;
+				case 'S':		redraw|=wnd_on_save(keyboard[VK_SHIFT]!=0);	break;
+				case 'V':		redraw|=wnd_on_paste();						break;
+				case 'Y':		redraw|=wnd_on_redo();						break;
+				case 'Z':		redraw|=wnd_on_undo();						break;
 				}
 			}
 			else
@@ -897,9 +787,9 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 				switch(wParam)
 				{
 				case VK_CAPITAL:caps_lock=!caps_lock;			break;
-				case VK_MENU:	redraw=wnd_on_begin_rectsel();	break;
-				case VK_ESCAPE:	redraw=wnd_on_deselect();		break;
-				case VK_F1:		redraw=wnd_on_display_help();	break;
+				case VK_MENU:	redraw|=wnd_on_begin_rectsel();	break;
+				case VK_ESCAPE:	redraw|=wnd_on_deselect();		break;
+				case VK_F1:		redraw|=wnd_on_display_help();	break;
 				case VK_F4:
 					if(keyboard[VK_MENU])
 					{
@@ -907,48 +797,48 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 							PostQuitMessage(0);
 					}
 					else
-						redraw=wnd_on_toggle_profiler();
+						redraw|=wnd_on_toggle_profiler();
 					break;
-				case VK_UP:		redraw=wnd_on_cursor_up();		break;
-				case VK_DOWN:	redraw=wnd_on_cursor_down();	break;
-				case VK_LEFT:	redraw=wnd_on_cursor_left();	break;
-				case VK_RIGHT:	redraw=wnd_on_cursor_right();	break;
-				case VK_HOME:	redraw=wnd_on_goto_line_start();break;
-				case VK_END:	redraw=wnd_on_goto_line_end();	break;
-				case VK_DELETE:	redraw=wnd_on_deletechar();		break;
-				case VK_BACK:	redraw=wnd_on_backspace();		break;
+				case VK_UP:		redraw|=wnd_on_cursor_up();			break;
+				case VK_DOWN:	redraw|=wnd_on_cursor_down();		break;
+				case VK_LEFT:	redraw|=wnd_on_cursor_left();		break;
+				case VK_RIGHT:	redraw|=wnd_on_cursor_right();		break;
+				case VK_HOME:	redraw|=wnd_on_goto_line_start();	break;
+				case VK_END:	redraw|=wnd_on_goto_line_end();		break;
+				case VK_DELETE:	redraw|=wnd_on_deletechar();		break;
+				case VK_BACK:	redraw|=wnd_on_backspace();			break;
 
-				case VK_OEM_1:		redraw=wnd_on_type(shift?	':':';'		);break;
-				case VK_OEM_2:		redraw=wnd_on_type(shift?	'?':'/'		);break;
-				case VK_OEM_3:		redraw=wnd_on_type(shift?	'~':'`'		);break;
-				case VK_OEM_4:		redraw=wnd_on_type(shift?	'{':'['		);break;
-				case VK_OEM_5:		redraw=wnd_on_type(shift?	'|':'\\'	);break;
-				case VK_OEM_6:		redraw=wnd_on_type(shift?	'}':']'		);break;
-				case VK_OEM_7:		redraw=wnd_on_type(shift?	'\"':'\''	);break;
-				case VK_OEM_MINUS:	redraw=wnd_on_type(shift?	'_':'-'		);break;
-				case VK_OEM_PLUS:	redraw=wnd_on_type(shift?	'+':'='		);break;
-				case VK_OEM_COMMA:	redraw=wnd_on_type(shift?	'<':','		);break;
-				case VK_OEM_PERIOD:	redraw=wnd_on_type(shift?	'>':'.'		);break;
-				case VK_DECIMAL:	redraw=wnd_on_type(			'.'			);break;
-				case VK_ADD:		redraw=wnd_on_type(			'+'			);break;
-				case VK_SUBTRACT:	redraw=wnd_on_type(			'-'			);break;
-				case VK_MULTIPLY:	redraw=wnd_on_type(			'*'			);break;
-				case VK_DIVIDE:		redraw=wnd_on_type(			'/'			);break;
-				case ' ':			redraw=wnd_on_type(			' '			);break;
-				case '\t':			redraw=wnd_on_type(			'\t'		);break;
-				case '\r':			redraw=wnd_on_type(			'\n'		);break;
+				case VK_OEM_1:		redraw|=wnd_on_type(shift?	':':';'		);break;
+				case VK_OEM_2:		redraw|=wnd_on_type(shift?	'?':'/'		);break;
+				case VK_OEM_3:		redraw|=wnd_on_type(shift?	'~':'`'		);break;
+				case VK_OEM_4:		redraw|=wnd_on_type(shift?	'{':'['		);break;
+				case VK_OEM_5:		redraw|=wnd_on_type(shift?	'|':'\\'	);break;
+				case VK_OEM_6:		redraw|=wnd_on_type(shift?	'}':']'		);break;
+				case VK_OEM_7:		redraw|=wnd_on_type(shift?	'\"':'\''	);break;
+				case VK_OEM_MINUS:	redraw|=wnd_on_type(shift?	'_':'-'		);break;
+				case VK_OEM_PLUS:	redraw|=wnd_on_type(shift?	'+':'='		);break;
+				case VK_OEM_COMMA:	redraw|=wnd_on_type(shift?	'<':','		);break;
+				case VK_OEM_PERIOD:	redraw|=wnd_on_type(shift?	'>':'.'		);break;
+				case VK_DECIMAL:	redraw|=wnd_on_type(		'.'			);break;
+				case VK_ADD:		redraw|=wnd_on_type(		'+'			);break;
+				case VK_SUBTRACT:	redraw|=wnd_on_type(		'-'			);break;
+				case VK_MULTIPLY:	redraw|=wnd_on_type(		'*'			);break;
+				case VK_DIVIDE:		redraw|=wnd_on_type(		'/'			);break;
+				case ' ':			redraw|=wnd_on_type(		' '			);break;
+				case '\t':			redraw|=wnd_on_type(		'\t'		);break;
+				case '\r':			redraw|=wnd_on_type(		'\n'		);break;
 				default:
 					if(wParam>='A'&&wParam<='Z')
-						redraw=wnd_on_type(wParam+('a'-'A')*lowercase);
+						redraw|=wnd_on_type(wParam+('a'-'A')*lowercase);
 					else if(wParam>='0'&&wParam<='9')
 					{
 						if(shift)
-							redraw=wnd_on_type(numrow[wParam-'0']);
+							redraw|=wnd_on_type(numrow[wParam-'0']);
 						else
-							redraw=wnd_on_type(wParam);
+							redraw|=wnd_on_type(wParam);
 					}
 					else if(wParam>=VK_NUMPAD0&&wParam<=VK_NUMPAD9)
-						redraw=wnd_on_type(wParam+'0'-VK_NUMPAD0);
+						redraw|=wnd_on_type(wParam+'0'-VK_NUMPAD0);
 					break;
 				}
 			}
