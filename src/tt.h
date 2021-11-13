@@ -295,6 +295,7 @@ void				select_texture(unsigned tx_id, int u_location);
 void				set_region_immediate(int x1, int x2, int y1, int y2);
 void				resize_gl();
 void				get_current_region(int &x1, int &y1, int &dx, int &dy);
+void				get_current_region_abs(int &x1, int &x2, int &y1, int &y2);
 void				toNDC_nobias(float xs, float ys, float &xn, float &yn);
 void				toNDC(float xs, float ys, float &xn, float &yn);//2021-01-14 test: fill the screen with horizontal or vertical lines
 #endif
@@ -342,7 +343,7 @@ bool				wnd_on_undo();
 bool				wnd_on_redo();
 bool				wnd_on_copy();
 bool				wnd_on_paste();
-bool				wnd_on_new();
+//bool				wnd_on_new();
 bool				wnd_on_scroll_up_key();
 bool				wnd_on_scroll_down_key();
 bool				wnd_on_skip_word_left();
@@ -361,6 +362,7 @@ bool				wnd_on_cursor_right();
 bool				wnd_on_type(char character);
 //bool				wnd_on_input(int message, int wParam, int lParam);
 
+bool				wnd_on_newtab();
 bool				wnd_on_next_tab();
 bool				wnd_on_prev_tab();
 

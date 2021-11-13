@@ -773,9 +773,10 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 				case 'A':		redraw|=wnd_on_select_all();				break;
 				case 'C':		redraw|=wnd_on_copy();						break;
 				case 'D':		redraw|=wnd_on_clear_hist();				break;
-				case 'N':		redraw|=wnd_on_new();						break;
+				case 'N':		redraw|=wnd_on_newtab();					break;
 				case 'O':		redraw|=wnd_on_open();						break;
 				case 'S':		redraw|=wnd_on_save(keyboard[VK_SHIFT]!=0);	break;
+				case 'T':		redraw|=wnd_on_newtab();					break;
 				case 'V':		redraw|=wnd_on_paste();						break;
 				case 'Y':		redraw|=wnd_on_redo();						break;
 				case 'Z':		redraw|=wnd_on_undo();						break;
@@ -869,33 +870,6 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 			PostQuitMessage(0);
 		else
 			return 0;
-#if 0
-		if(modified)
-		{
-			int result=ask_to_save();
-			switch(result)
-			{
-			case IDYES:
-				if(filepath.size())
-				{
-					save_media(filepath);
-					PostQuitMessage(0);
-				}
-				else if(save_media_as())
-					PostQuitMessage(0);
-				else
-					return 0;
-				break;
-			case IDNO:
-				PostQuitMessage(0);
-				break;
-			case IDCANCEL:
-				return 0;
-			}
-		}
-		else
-			PostQuitMessage(0);
-#endif
 		break;
 	}
 	return DefWindowProcA(hWnd, message, wParam, lParam);

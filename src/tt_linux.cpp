@@ -376,21 +376,22 @@ int					main(int argc, char **argv)
 							else
 								redraw|=wnd_on_next_tab();
 							break;
-						case SDL_SCANCODE_UP:	redraw|=wnd_on_scroll_up_key();		break;
-						case SDL_SCANCODE_DOWN:	redraw|=wnd_on_scroll_down_key();	break;
+						case SDL_SCANCODE_UP:	redraw|=wnd_on_scroll_up_key();			break;
+						case SDL_SCANCODE_DOWN:	redraw|=wnd_on_scroll_down_key();		break;
 						case SDL_SCANCODE_LEFT:	redraw|=wnd_on_skip_word_left();		break;
-						case SDL_SCANCODE_RIGHT:redraw|=wnd_on_skip_word_right();	break;
-						case SDL_SCANCODE_HOME:	redraw|=wnd_on_goto_file_start();	break;
-						case SDL_SCANCODE_END:	redraw|=wnd_on_goto_file_end();		break;
+						case SDL_SCANCODE_RIGHT:redraw|=wnd_on_skip_word_right();		break;
+						case SDL_SCANCODE_HOME:	redraw|=wnd_on_goto_file_start();		break;
+						case SDL_SCANCODE_END:	redraw|=wnd_on_goto_file_end();			break;
 						case SDL_SCANCODE_A:	redraw|=wnd_on_select_all();			break;
-						case SDL_SCANCODE_C:	redraw|=wnd_on_copy();				break;
+						case SDL_SCANCODE_C:	redraw|=wnd_on_copy();					break;
 						case SDL_SCANCODE_D:	redraw|=wnd_on_clear_hist();			break;
-						case SDL_SCANCODE_N:	redraw|=wnd_on_new();				break;
-						case SDL_SCANCODE_O:	redraw|=wnd_on_open();				break;
-						case SDL_SCANCODE_S:	redraw|=wnd_on_save(is_shift_down());break;
-						case SDL_SCANCODE_V:	redraw|=wnd_on_paste();				break;
-						case SDL_SCANCODE_Y:	redraw|=wnd_on_redo();				break;
-						case SDL_SCANCODE_Z:	redraw|=wnd_on_undo();				break;
+						case SDL_SCANCODE_N:	redraw|=wnd_on_newtab();				break;
+						case SDL_SCANCODE_O:	redraw|=wnd_on_open();					break;
+						case SDL_SCANCODE_S:	redraw|=wnd_on_save(is_shift_down());	break;
+						case SDL_SCANCODE_T:	redraw|=wnd_on_newtab();				break;
+						case SDL_SCANCODE_V:	redraw|=wnd_on_paste();					break;
+						case SDL_SCANCODE_Y:	redraw|=wnd_on_redo();					break;
+						case SDL_SCANCODE_Z:	redraw|=wnd_on_undo();					break;
 						}
 					}
 					else
@@ -412,14 +413,14 @@ int					main(int argc, char **argv)
 							else
 								redraw|=wnd_on_toggle_profiler();
 							break;
-						case SDL_SCANCODE_UP:		redraw|=wnd_on_cursor_up();		break;
-						case SDL_SCANCODE_DOWN:		redraw|=wnd_on_cursor_down();	break;
-						case SDL_SCANCODE_LEFT:		redraw|=wnd_on_cursor_left();	break;
-						case SDL_SCANCODE_RIGHT:	redraw|=wnd_on_cursor_right();	break;
-						case SDL_SCANCODE_HOME:		redraw|=wnd_on_goto_line_start();break;
-						case SDL_SCANCODE_END:		redraw|=wnd_on_goto_line_end();	break;
+						case SDL_SCANCODE_UP:		redraw|=wnd_on_cursor_up();			break;
+						case SDL_SCANCODE_DOWN:		redraw|=wnd_on_cursor_down();		break;
+						case SDL_SCANCODE_LEFT:		redraw|=wnd_on_cursor_left();		break;
+						case SDL_SCANCODE_RIGHT:	redraw|=wnd_on_cursor_right();		break;
+						case SDL_SCANCODE_HOME:		redraw|=wnd_on_goto_line_start();	break;
+						case SDL_SCANCODE_END:		redraw|=wnd_on_goto_line_end();		break;
 						case SDL_SCANCODE_DELETE:	redraw|=wnd_on_deletechar();		break;
-						case SDL_SCANCODE_BACKSPACE:redraw|=wnd_on_backspace();		break;
+						case SDL_SCANCODE_BACKSPACE:redraw|=wnd_on_backspace();			break;
 
 						case SDL_SCANCODE_SEMICOLON:	redraw|=wnd_on_type(shift?	':':';'		);break;
 						case SDL_SCANCODE_SLASH:		redraw|=wnd_on_type(shift?	'?':'/'		);break;

@@ -14,13 +14,15 @@ r	g	b	r	g	b
 
 
 TODO:
-- Tab GUI
+- Tab bar/sidebar
+- Split view
 - Indentation with tab/shift tab
 - Wrap option
 - Status bar
 - Go to previous/next cursor location
 - Find & replace
 - Optional syntax highlighting for C/C++
+- State file
 - Config file
 - Save on write
 
