@@ -1728,14 +1728,22 @@ bool				wnd_on_lbuttondown()
 	int x1=0, x2=w, y1=0, y2=h;
 	switch(tabbar_position)
 	{
+	case TABBAR_TOP:
+		break;
 	case TABBAR_LEFT:
-		if(mx<tabbar_dx)
+		if(w>tabbar_dx)
 		{
-			//tabs_switchto(my/(dy*font_zoom));
-			tabs_switchto(my/dy);
-			return true;
+			if(mx<tabbar_dx)
+			{
+				//tabs_switchto(clamp(0, my/(dy*font_zoom), openfiles.size()-1));
+				tabs_switchto(clamp(0, my/dy, openfiles.size()-1));
+				return true;
+			}
+			x1=tabbar_dx, x2=w, y1=0, y2=h;
 		}
-		x1=tabbar_dx, x2=w, y1=0, y2=h;
+		break;
+	case TABBAR_RIGHT:
+	case TABBAR_BOTTOM:
 		break;
 	}
 	if(vscroll.dwidth)
@@ -2225,6 +2233,38 @@ bool				wnd_on_newtab()
 	tabs_switchto(openfiles.size()-1);
 	return true;
 }
+bool				wnd_on_closetab()
+{
+	if(tabs_ismodified())
+	{
+		switch(ask_to_save(*filename))
+		{
+		case 0://yes
+			{
+				auto str=save_file_dialog();
+				if(str&&save_text_file(str, *text))
+				{
+					*filename=str;
+					set_title();
+				}
+			}
+			openfiles.erase(openfiles.begin()+current_file);
+			break;
+		case 1://no
+			openfiles.erase(openfiles.begin()+current_file);
+			tabs_switchto(openfiles.size()-1);
+			break;
+		case 2://cancel
+			return false;
+		}
+	}
+	else
+	{
+		openfiles.erase(openfiles.begin()+current_file);
+		tabs_switchto(openfiles.size()-1);
+	}
+	return true;
+}
 bool				wnd_on_next_tab()
 {
 	if(openfiles.size()>1)
@@ -2254,6 +2294,7 @@ bool				wnd_on_quit()//return false to deny exit
 			switch(ask_to_save(*filename))
 			{
 			case 0://yes
+				//if(filename->size())//X
 				{
 					auto str=save_file_dialog();
 					if(str&&save_text_file(str, *text))
@@ -2262,6 +2303,8 @@ bool				wnd_on_quit()//return false to deny exit
 						set_title();
 					}
 				}
+				//else
+				//	save_text_file(filename->c_str(), *text);
 				return false;
 			case 1://no
 				break;

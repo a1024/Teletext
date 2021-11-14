@@ -778,6 +778,7 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 				case 'S':		redraw|=wnd_on_save(keyboard[VK_SHIFT]!=0);	break;
 				case 'T':		redraw|=wnd_on_newtab();					break;
 				case 'V':		redraw|=wnd_on_paste();						break;
+				case 'W':		redraw|=wnd_on_closetab();					break;
 				case 'Y':		redraw|=wnd_on_redo();						break;
 				case 'Z':		redraw|=wnd_on_undo();						break;
 				}

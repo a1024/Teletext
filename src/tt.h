@@ -363,6 +363,7 @@ bool				wnd_on_type(char character);
 //bool				wnd_on_input(int message, int wParam, int lParam);
 
 bool				wnd_on_newtab();
+bool				wnd_on_closetab();
 bool				wnd_on_next_tab();
 bool				wnd_on_prev_tab();
 
