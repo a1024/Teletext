@@ -371,27 +371,30 @@ int					main(int argc, char **argv)
 						switch(key)
 						{
 						case SDL_SCANCODE_TAB:
-							if(keyboard[VK_SHIFT])
+							if(is_shift_down())
 								redraw|=wnd_on_prev_tab();
 							else
 								redraw|=wnd_on_next_tab();
 							break;
-						case SDL_SCANCODE_UP:	redraw|=wnd_on_scroll_up_key();			break;
-						case SDL_SCANCODE_DOWN:	redraw|=wnd_on_scroll_down_key();		break;
-						case SDL_SCANCODE_LEFT:	redraw|=wnd_on_skip_word_left();		break;
-						case SDL_SCANCODE_RIGHT:redraw|=wnd_on_skip_word_right();		break;
-						case SDL_SCANCODE_HOME:	redraw|=wnd_on_goto_file_start();		break;
-						case SDL_SCANCODE_END:	redraw|=wnd_on_goto_file_end();			break;
-						case SDL_SCANCODE_A:	redraw|=wnd_on_select_all();			break;
-						case SDL_SCANCODE_C:	redraw|=wnd_on_copy();					break;
-						case SDL_SCANCODE_D:	redraw|=wnd_on_clear_hist();			break;
-						case SDL_SCANCODE_N:	redraw|=wnd_on_newtab();				break;
-						case SDL_SCANCODE_O:	redraw|=wnd_on_open();					break;
-						case SDL_SCANCODE_S:	redraw|=wnd_on_save(is_shift_down());	break;
-						case SDL_SCANCODE_T:	redraw|=wnd_on_newtab();				break;
-						case SDL_SCANCODE_V:	redraw|=wnd_on_paste();					break;
-						case SDL_SCANCODE_Y:	redraw|=wnd_on_redo();					break;
-						case SDL_SCANCODE_Z:	redraw|=wnd_on_undo();					break;
+						case SDL_SCANCODE_EQUALS:	redraw|=wnd_on_zoomin();				break;
+						case SDL_SCANCODE_MINUS:	redraw|=wnd_on_zoomout();				break;
+						case SDL_SCANCODE_UP:		redraw|=wnd_on_scroll_up_key();			break;
+						case SDL_SCANCODE_DOWN:		redraw|=wnd_on_scroll_down_key();		break;
+						case SDL_SCANCODE_LEFT:		redraw|=wnd_on_skip_word_left();		break;
+						case SDL_SCANCODE_RIGHT:	redraw|=wnd_on_skip_word_right();		break;
+						case SDL_SCANCODE_HOME:		redraw|=wnd_on_goto_file_start();		break;
+						case SDL_SCANCODE_END:		redraw|=wnd_on_goto_file_end();			break;
+						case SDL_SCANCODE_A:		redraw|=wnd_on_select_all();			break;
+						case SDL_SCANCODE_C:		redraw|=wnd_on_copy();					break;
+						case SDL_SCANCODE_D:		redraw|=wnd_on_clear_hist();			break;
+						case SDL_SCANCODE_N:		redraw|=wnd_on_newtab();				break;
+						case SDL_SCANCODE_O:		redraw|=wnd_on_open();					break;
+						case SDL_SCANCODE_S:		redraw|=wnd_on_save(is_shift_down());	break;
+						case SDL_SCANCODE_T:		redraw|=wnd_on_newtab();				break;
+						case SDL_SCANCODE_V:		redraw|=wnd_on_paste();					break;
+						case SDL_SCANCODE_W:		redraw|=wnd_on_closetab();				break;
+						case SDL_SCANCODE_Y:		redraw|=wnd_on_redo();					break;
+						case SDL_SCANCODE_Z:		redraw|=wnd_on_undo();					break;
 						}
 					}
 					else
@@ -433,14 +436,14 @@ int					main(int argc, char **argv)
 						case SDL_SCANCODE_EQUALS:		redraw|=wnd_on_type(shift?	'+':'='		);break;
 						case SDL_SCANCODE_COMMA:		redraw|=wnd_on_type(shift?	'<':','		);break;
 						case SDL_SCANCODE_PERIOD:		redraw|=wnd_on_type(shift?	'>':'.'		);break;
-						case SDL_SCANCODE_KP_PERIOD:	redraw|=wnd_on_type(			'.'			);break;
-						case SDL_SCANCODE_KP_PLUS:		redraw|=wnd_on_type(			'+'			);break;
-						case SDL_SCANCODE_KP_MINUS:		redraw|=wnd_on_type(			'-'			);break;
-						case SDL_SCANCODE_KP_MULTIPLY:	redraw|=wnd_on_type(			'*'			);break;
-						case SDL_SCANCODE_KP_DIVIDE:	redraw|=wnd_on_type(			'/'			);break;
-						case SDL_SCANCODE_SPACE:		redraw|=wnd_on_type(			' '			);break;
-						case SDL_SCANCODE_TAB:			redraw|=wnd_on_type(			'\t'		);break;
-						case SDL_SCANCODE_RETURN:		redraw|=wnd_on_type(			'\n'		);break;
+						case SDL_SCANCODE_KP_PERIOD:	redraw|=wnd_on_type(		'.'			);break;
+						case SDL_SCANCODE_KP_PLUS:		redraw|=wnd_on_type(		'+'			);break;
+						case SDL_SCANCODE_KP_MINUS:		redraw|=wnd_on_type(		'-'			);break;
+						case SDL_SCANCODE_KP_MULTIPLY:	redraw|=wnd_on_type(		'*'			);break;
+						case SDL_SCANCODE_KP_DIVIDE:	redraw|=wnd_on_type(		'/'			);break;
+						case SDL_SCANCODE_SPACE:		redraw|=wnd_on_type(		' '			);break;
+						case SDL_SCANCODE_TAB:			redraw|=wnd_on_type(		'\t'		);break;
+						case SDL_SCANCODE_RETURN:		redraw|=wnd_on_type(		'\n'		);break;
 						default:
 							if(key>=SDL_SCANCODE_A&&key<=SDL_SCANCODE_Z)
 							{

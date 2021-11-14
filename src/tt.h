@@ -327,6 +327,8 @@ void				wnd_on_render();
 //return true to redraw:
 bool				wnd_on_mousemove();
 bool				wnd_on_mousewheel(bool mw_forward);
+bool				wnd_on_zoomin();
+bool				wnd_on_zoomout();
 bool				wnd_on_lbuttondown();
 bool				wnd_on_lbuttonup();
 bool				wnd_on_rbuttondown();
@@ -343,7 +345,6 @@ bool				wnd_on_undo();
 bool				wnd_on_redo();
 bool				wnd_on_copy();
 bool				wnd_on_paste();
-//bool				wnd_on_new();
 bool				wnd_on_scroll_up_key();
 bool				wnd_on_scroll_down_key();
 bool				wnd_on_skip_word_left();

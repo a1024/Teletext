@@ -19,7 +19,7 @@
 #define				STB_IMAGE_IMPLEMENTATION
 #include			"stb_image.h"//https://github.com/nothings/stb
 
-//	#define			HELP_SHOWALL
+	#define			HELP_SHOWALL
 
 const char			file[]=__FILE__;
 char				g_buf[G_BUF_SIZE]={};
@@ -29,6 +29,46 @@ std::string			exe_dir;
 
 void				display_help()
 {
+#ifdef __linux__
+	messagebox("Controls",
+		"Ctrl+O:         Open\n"//TODO: config file
+		"Ctrl+S:         Save\n"
+		"Ctrl+Shift+S:   Save as\n"
+		"Ctrl+Z:         Undo\n"
+		"Ctrl+Y:         Redo\n"
+		"Ctrl+X:         Cut\n"
+		"Ctrl+C:         Copy\n"
+		"Ctrl+V:         Paste\n"
+		"\n"
+		"Ctrl+N/T:       New tab\n"
+		"Ctrl+W:         Close tab\n"
+#ifdef HELP_SHOWALL
+		"Ctrl+Shift+T:   Reopen closed tab\n"
+#endif
+		"Ctrl+Tab:       Next tab\n"
+		"Ctrl+Shift+Tab: Previous tab\n"
+		"\n"
+		"Ctrl+Up/Down:           Scroll\n"
+		"Ctrl+Left/Right:        Skip word\n"
+#ifdef HELP_SHOWALL
+		"Alt+Left:               Previous location\n"
+		"Alt+Right:              Next location\n"
+		"Ctrl+F:                 Find\n"
+		"Ctrl+R:                 Replace\n"
+#endif
+		"Ctrl+=:                 Zoom in\n"
+		"Ctrl+-:                 Zoom out\n"
+		"\n"
+		"Shift+Arrows/Home/End:  Select\n"
+		"Ctrl+Mouse1:            Select word\n"
+		"Ctrl+A:                 Select all\n"
+		"Alt+Drag:               Rectangular selection\n"
+		"Shift+Drag:             Resize selection\n"
+		"Ctrl+Shift+Left/Right:  Select words\n"
+		"Escape:                 Deselect\n"
+		"\n"
+		"F4:             Toggle benchmark");
+#else
 	messagebox("Controls",
 		"Ctrl+O:\t\tOpen\n"//TODO: config file
 		"Ctrl+S:\t\tSave\n"
@@ -57,6 +97,7 @@ void				display_help()
 #endif
 		"\n"
 		"Shift+Arrows/Home/End:\tSelect\n"
+		"Ctrl+Mouse1:\t\tSelect word\n"
 		"Ctrl+A:\t\t\tSelect all\n"
 		"Alt+Drag:\t\t\tRectangular selection\n"
 		"Shift+Drag:\t\tResize selection\n"
@@ -64,6 +105,7 @@ void				display_help()
 		"Escape:\t\t\tDeselect\n"
 		"\n"
 		"F4:\tToggle benchmark");
+#endif
 }
 
 void				copy_to_clipboard(std::string const &str){copy_to_clipboard_c(str.c_str(), str.size());}
@@ -470,6 +512,12 @@ struct				SmallRect
 	SmallRect():x1(0), y1(0), x2(0), y2(0){}
 	void set(short x1, short x2, short y1, short y2){this->x1=x1, this->x2=x2, this->y1=y1, this->y2=y2;}
 };
+struct				Rect
+{
+	int x1, y1, x2, y2;
+	Rect():x1(0), y1(0), x2(0), y2(0){}
+	void set(int x1, int x2, int y1, int y2){this->x1=x1, this->x2=x2, this->y1=y1, this->y2=y2;}
+};
 SmallRect			window_tabbar, window_editor;
 struct				Cursor
 {
@@ -479,6 +527,37 @@ struct				Cursor
 		scx, scy;//selcur coordinates in the text buffer, in character units
 	Cursor():rectsel(false), cursor(0), selcur(0), ccx(0), ccy(0), scx(0), scy(0){}
 	void deselect(){rectsel=false, selcur=cursor, scx=ccx, scy=ccy;}
+	void reset()
+	{
+		rectsel=false;
+		cursor=selcur=0;
+		ccx=ccy=0;
+		scx=scy=0;
+	}
+	Rect get_rectsel()
+	{
+		Rect r;
+		if(scx<ccx)
+			r.x1=scx, r.x2=ccx;
+		else
+			r.x1=ccx, r.x2=scx;
+		if(scy<ccy)
+			r.y1=scy, r.y2=ccy;
+		else
+			r.y1=ccx, r.y2=scy;
+		return r;
+	}
+	void get_rectsel(int &x1, int &x2, int &y1, int &y2)
+	{
+		if(scx<ccx)
+			x1=scx, x2=ccx;
+		else
+			x1=ccx, x2=scx;
+		if(scy<ccy)
+			y1=scy, y2=ccy;
+		else
+			y1=ccx, y2=scy;
+	}
 };
 short				font_zoom=1;//font pixel size
 int					wpx=0, wpy=0,//window position inside the text buffer, in pixels
@@ -526,6 +605,24 @@ struct				ActionFragment
 	ActionFragment(ActionFragment const &af):idx(af.idx), str(af.str){}
 	ActionFragment(ActionFragment &&af):idx(af.idx), str((std::string&&)af.str){}
 	ActionFragment(int idx, const char *a, int len):idx(idx), str(a, len){}
+	ActionFragment& operator=(ActionFragment const &af)
+	{
+		if(&af!=this)
+		{
+			idx=af.idx;
+			str=af.str;
+		}
+		return *this;
+	}
+	ActionFragment& operator=(ActionFragment &&af)
+	{
+		if(&af!=this)
+		{
+			idx=af.idx;
+			str=std::move(af.str);
+		}
+		return *this;
+	}
 };
 typedef std::vector<ActionFragment> ActionData;
 struct				HistoryAction
@@ -545,6 +642,26 @@ struct				HistoryAction
 		data.push_back(ActionFragment(idx, a, len));
 	}
 	HistoryAction(ActionType type, ActionData &&data, int scx0, int ccx0, int scy0, int ccy0):type(type), data((ActionData&&)data), scx0(scx0), ccx0(ccx0), scy0(scy0), ccy0(ccy0){}//rectangular editing
+	HistoryAction& operator=(HistoryAction const &h)
+	{
+		if(&h!=this)
+		{
+			type=h.type;
+			data=h.data;
+			scx0=h.scx0, ccx0=h.ccx0, scy0=h.scy0, ccy0=h.ccy0;
+		}
+		return *this;
+	}
+	HistoryAction& operator=(HistoryAction &&h)
+	{
+		if(&h!=this)
+		{
+			type=h.type;
+			data=std::move(h.data);
+			scx0=h.scx0, ccx0=h.ccx0, scy0=h.scy0, ccy0=h.ccy0;
+		}
+		return *this;
+	}
 };
 typedef std::vector<HistoryAction> History;
 
@@ -606,6 +723,43 @@ struct				TextFile
 	TextFile(TextFile &&f):m_filename(std::move(f.m_filename)), m_text(std::move(f.m_text)),
 		m_wcx(f.m_wcx), m_wcy(f.m_wcy), m_cur(f.m_cur),
 		m_history(std::move(f.m_history)), m_histpos_saved(f.m_histpos_saved), m_histpos(f.m_histpos){}
+	TextFile& operator=(TextFile const &f)
+	{
+		if(&f!=this)
+		{
+			m_filename=f.m_filename;
+			m_text=f.m_text;
+			m_wcx=f.m_wcx, m_wcy=f.m_wcy;
+			m_cur=f.m_cur;
+			m_history=f.m_history;
+			m_histpos_saved=f.m_histpos_saved;
+			m_histpos=f.m_histpos;
+		}
+		return *this;
+	}
+	TextFile& operator=(TextFile &&f)
+	{
+		if(&f!=this)
+		{
+			m_filename=std::move(f.m_filename);
+			m_text=std::move(f.m_text);
+			m_wcx=f.m_wcx, m_wcy=f.m_wcy;
+			m_cur=f.m_cur;
+			m_history=std::move(f.m_history);
+			m_histpos_saved=f.m_histpos_saved;
+			m_histpos=f.m_histpos;
+		}
+		return *this;
+	}
+	void clear()
+	{
+		m_filename.clear();
+		m_text.clear();
+		m_wcx=0, m_wcy=0;
+		m_cur.reset();
+		m_history.clear();
+		m_histpos_saved=m_histpos=-1;
+	}
 };
 std::vector<TextFile> openfiles;//TODO: count untitled files
 int					current_file=0;
@@ -631,14 +785,14 @@ void				set_title()
 	int printed=0;
 
 	if(tabs_ismodified())
-		printed+=sprintf_s(g_buf+printed, g_buf_size-printed, "*", filename->c_str());
+		printed+=sprintf_s(g_buf+printed, g_buf_size-printed, "*");
 
-	printed+=sprintf_s(g_buf+printed, g_buf_size-printed, "%d/%d - ", current_file+1, openfiles.size());
+	printed+=sprintf_s(g_buf+printed, g_buf_size-printed, "%d/%d - ", current_file+1, (int)openfiles.size());
 
 	if(filename->size())
 		printed+=sprintf_s(g_buf+printed, g_buf_size-printed, "%s - ", filename->c_str());
 
-	printed+=sprintf_s(g_buf+printed, g_buf_size-printed, "Teletext", current_file+1, openfiles.size());
+	printed+=sprintf_s(g_buf+printed, g_buf_size-printed, "Teletext");
 	set_window_title(g_buf);
 }
 void				tabs_switchto(int k, bool change_title=true)
@@ -860,14 +1014,15 @@ void				hist_clear()
 int					calc_ranges(Ranges &ranges)
 {
 	int rx1, rx2, ry1, ry2;//rect coordinates in character units
-	if(cur->scx<cur->ccx)
-		rx1=cur->scx, rx2=cur->ccx;
-	else
-		rx1=cur->ccx, rx2=cur->scx;
-	if(cur->scy<cur->ccy)
-		ry1=cur->scy, ry2=cur->ccy;
-	else
-		ry1=cur->ccy, ry2=cur->scy;
+	cur->get_rectsel(rx1, rx2, ry1, ry2);
+	//if(cur->scx<cur->ccx)
+	//	rx1=cur->scx, rx2=cur->ccx;
+	//else
+	//	rx1=cur->ccx, rx2=cur->scx;
+	//if(cur->scy<cur->ccy)
+	//	ry1=cur->scy, ry2=cur->ccy;
+	//else
+	//	ry1=cur->ccy, ry2=cur->scy;
 	ranges.resize(ry2+1-ry1);
 	int linestart=0, linecols=0, lineno=0, r_idx=0, k=0, extent=0;
 	Range *r=nullptr;
@@ -1529,14 +1684,15 @@ void				wnd_on_render()
 	{
 		draw_rectangle_i(x1, x2, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
 		int rx1, rx2, ry1, ry2;//rect coordinates in characters
-		if(cur->scx<cur->ccx)
-			rx1=cur->scx, rx2=cur->ccx;
-		else
-			rx1=cur->ccx, rx2=cur->scx;
-		if(cur->scy<cur->ccy)
-			ry1=cur->scy, ry2=cur->ccy;
-		else
-			ry1=cur->ccy, ry2=cur->scy;
+		cur->get_rectsel(rx1, rx2, ry1, ry2);
+		//if(cur->scx<cur->ccx)
+		//	rx1=cur->scx, rx2=cur->ccx;
+		//else
+		//	rx1=cur->ccx, rx2=cur->scx;
+		//if(cur->scy<cur->ccy)
+		//	ry1=cur->scy, ry2=cur->ccy;
+		//else
+		//	ry1=cur->ccy, ry2=cur->scy;
 		int px1=x1+rx1*dxpx, px2=x1+rx2*dxpx, py1=y1+ry1*dypx, py2=y1+ry2*dypx;
 		draw_rectangle_i(px1-wpx, px2-wpx, py1-wpy, py2+dypx-wpy, colors_selection.hi);//selection rectangle
 		for(int start=0, line_start=0, lineno=0, x=x1, y=y1, k=0;;++k)
@@ -1704,10 +1860,42 @@ bool				wnd_on_mousewheel(bool mw_forward)
 	}
 	return true;
 }
+bool				wnd_on_zoomin()
+{
+	if(font_zoom<32)
+	{
+		font_zoom<<=1, wpx<<=1, wpy<<=1;
+		return true;
+	}
+	return false;
+}
+bool				wnd_on_zoomout()
+{
+	if(font_zoom>1)
+	{
+		font_zoom>>=1, wpx>>=1, wpy>>=1;
+		return true;
+	}
+	return false;
+}
 inline void			lbutton_down_text()
 {
-	//if(get_key_state(TK_CONTROL))
-	if(cur->rectsel=is_alt_down())
+	if(is_ctrl_down())//select word
+	{
+		//drag=DRAG_SELECT;
+		cursor_at_mouse();
+		cur->selcur=cur->cursor;
+		char initial=group_char(AT(cur->cursor));
+
+		for(;cur->selcur&&group_char(AT(cur->selcur-1))==initial;--cur->selcur);
+
+		++cur->cursor;
+		for(;cur->cursor<(int)text->size()&&group_char(AT(cur->cursor))==initial;++cur->cursor);
+
+		calc_cursor_coords(0);
+		
+	}
+	else if(cur->rectsel=is_alt_down())//rectsel
 	{
 		int xpos=0, ypos=0;
 		if(cursor_at_mouse_rect(xpos, ypos))
@@ -1715,7 +1903,7 @@ inline void			lbutton_down_text()
 		if(!is_shift_down())
 			cur->scx=cur->ccx, cur->scy=cur->ccy;
 	}
-	else
+	else//place cursor / normal selection
 	{
 		drag=DRAG_SELECT;
 		cursor_at_mouse();
@@ -1728,22 +1916,14 @@ bool				wnd_on_lbuttondown()
 	int x1=0, x2=w, y1=0, y2=h;
 	switch(tabbar_position)
 	{
-	case TABBAR_TOP:
-		break;
 	case TABBAR_LEFT:
-		if(w>tabbar_dx)
+		if(mx<tabbar_dx)
 		{
-			if(mx<tabbar_dx)
-			{
-				//tabs_switchto(clamp(0, my/(dy*font_zoom), openfiles.size()-1));
-				tabs_switchto(clamp(0, my/dy, openfiles.size()-1));
-				return true;
-			}
-			x1=tabbar_dx, x2=w, y1=0, y2=h;
+			//tabs_switchto(my/(dy*font_zoom));
+			tabs_switchto(my/dy);
+			return true;
 		}
-		break;
-	case TABBAR_RIGHT:
-	case TABBAR_BOTTOM:
+		x1=tabbar_dx, x2=w, y1=0, y2=h;
 		break;
 	}
 	if(vscroll.dwidth)
@@ -1871,14 +2051,15 @@ bool				wnd_on_copy()
 		{
 			std::string str;
 			int rx1, rx2, ry1, ry2;//rect coordinates in character units
-			if(cur->scx<cur->ccx)
-				rx1=cur->scx, rx2=cur->ccx;
-			else
-				rx1=cur->ccx, rx2=cur->scx;
-			if(cur->scy<cur->ccy)
-				ry1=cur->scy, ry2=cur->ccy;
-			else
-				ry1=cur->ccy, ry2=cur->scy;
+			cur->get_rectsel(rx1, rx2, ry1, ry2);
+			//if(cur->scx<cur->ccx)
+			//	rx1=cur->scx, rx2=cur->ccx;
+			//else
+			//	rx1=cur->ccx, rx2=cur->scx;
+			//if(cur->scy<cur->ccy)
+			//	ry1=cur->scy, ry2=cur->ccy;
+			//else
+			//	ry1=cur->ccy, ry2=cur->scy;
 			str.reserve((rx2-rx1)*(ry2-ry1));
 			for(int k=0, linecols=0, lineno=0;k<(int)text->size();++k)
 			{
@@ -1939,12 +2120,6 @@ bool				wnd_on_paste()
 	calc_cursor_coords(0);
 	return true;
 }
-//bool				wnd_on_new()
-//{
-//	hist_clear();
-//	text->clear();
-//	return true;
-//}
 bool				wnd_on_scroll_up_key()
 {
 	wpy-=dy*font_zoom;
@@ -2248,21 +2423,20 @@ bool				wnd_on_closetab()
 					set_title();
 				}
 			}
-			openfiles.erase(openfiles.begin()+current_file);
 			break;
 		case 1://no
-			openfiles.erase(openfiles.begin()+current_file);
-			tabs_switchto(openfiles.size()-1);
 			break;
 		case 2://cancel
 			return false;
 		}
 	}
-	else
+	if(openfiles.size()>1)
 	{
 		openfiles.erase(openfiles.begin()+current_file);
-		tabs_switchto(openfiles.size()-1);
+		tabs_switchto(current_file-(current_file>=(int)openfiles.size()));
 	}
+	else
+		openfiles[current_file].clear();
 	return true;
 }
 bool				wnd_on_next_tab()
@@ -2294,7 +2468,6 @@ bool				wnd_on_quit()//return false to deny exit
 			switch(ask_to_save(*filename))
 			{
 			case 0://yes
-				//if(filename->size())//X
 				{
 					auto str=save_file_dialog();
 					if(str&&save_text_file(str, *text))
@@ -2303,8 +2476,6 @@ bool				wnd_on_quit()//return false to deny exit
 						set_title();
 					}
 				}
-				//else
-				//	save_text_file(filename->c_str(), *text);
 				return false;
 			case 1://no
 				break;

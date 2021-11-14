@@ -764,23 +764,25 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 					else
 						redraw|=wnd_on_next_tab();
 					break;
-				case VK_UP:		redraw|=wnd_on_scroll_up_key();				break;
-				case VK_DOWN:	redraw|=wnd_on_scroll_down_key();			break;
-				case VK_LEFT:	redraw|=wnd_on_skip_word_left();			break;
-				case VK_RIGHT:	redraw|=wnd_on_skip_word_right();			break;
-				case VK_HOME:	redraw|=wnd_on_goto_file_start();			break;
-				case VK_END:	redraw|=wnd_on_goto_file_end();				break;
-				case 'A':		redraw|=wnd_on_select_all();				break;
-				case 'C':		redraw|=wnd_on_copy();						break;
-				case 'D':		redraw|=wnd_on_clear_hist();				break;
-				case 'N':		redraw|=wnd_on_newtab();					break;
-				case 'O':		redraw|=wnd_on_open();						break;
-				case 'S':		redraw|=wnd_on_save(keyboard[VK_SHIFT]!=0);	break;
-				case 'T':		redraw|=wnd_on_newtab();					break;
-				case 'V':		redraw|=wnd_on_paste();						break;
-				case 'W':		redraw|=wnd_on_closetab();					break;
-				case 'Y':		redraw|=wnd_on_redo();						break;
-				case 'Z':		redraw|=wnd_on_undo();						break;
+				case VK_OEM_PLUS:	redraw|=wnd_on_zoomin();					break;
+				case VK_OEM_MINUS:	redraw|=wnd_on_zoomout();					break;
+				case VK_UP:			redraw|=wnd_on_scroll_up_key();				break;
+				case VK_DOWN:		redraw|=wnd_on_scroll_down_key();			break;
+				case VK_LEFT:		redraw|=wnd_on_skip_word_left();			break;
+				case VK_RIGHT:		redraw|=wnd_on_skip_word_right();			break;
+				case VK_HOME:		redraw|=wnd_on_goto_file_start();			break;
+				case VK_END:		redraw|=wnd_on_goto_file_end();				break;
+				case 'A':			redraw|=wnd_on_select_all();				break;
+				case 'C':			redraw|=wnd_on_copy();						break;
+				case 'D':			redraw|=wnd_on_clear_hist();				break;
+				case 'N':			redraw|=wnd_on_newtab();					break;
+				case 'O':			redraw|=wnd_on_open();						break;
+				case 'S':			redraw|=wnd_on_save(keyboard[VK_SHIFT]!=0);	break;
+				case 'T':			redraw|=wnd_on_newtab();					break;
+				case 'V':			redraw|=wnd_on_paste();						break;
+				case 'W':			redraw|=wnd_on_closetab();					break;
+				case 'Y':			redraw|=wnd_on_redo();						break;
+				case 'Z':			redraw|=wnd_on_undo();						break;
 				}
 			}
 			else
