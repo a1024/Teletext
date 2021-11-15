@@ -267,15 +267,24 @@ int					messagebox_yesnocancel(const char *msg, int msg_len)
 		choice=2;
 	return choice;
 }
+static bool			mouse_captured=false;
 void				mouse_capture()
 {
-	int fail=SDL_CaptureMouse(SDL_TRUE);
-	SDL_ASSERT(!fail);
+	if(!mouse_captured)
+	{
+		mouse_captured=true;
+		int fail=SDL_CaptureMouse(SDL_TRUE);
+		SDL_ASSERT(!fail);
+	}
 }
 void				mouse_release()
 {
-	int fail=SDL_CaptureMouse(SDL_FALSE);
-	SDL_ASSERT(!fail);
+	if(mouse_captured)
+	{
+		mouse_captured=false;
+		int fail=SDL_CaptureMouse(SDL_FALSE);
+		SDL_ASSERT(!fail);
+	}
 }
 
 void				swap_buffers()
@@ -340,6 +349,7 @@ int					main(int argc, char **argv)
 					redraw=true;
 					SDL_GetWindowSize(window, &w, &h);
 					resize_gl();
+					wnd_on_resize();
 				}
 				break;
 			case SDL_MOUSEMOTION:

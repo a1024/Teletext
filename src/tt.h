@@ -134,14 +134,12 @@ void				console_pause();
 #define				console_hide()
 #define				console_pause()
 #endif
-//void				messageboxw(const wchar_t *title, const wchar_t *format, ...);
 void				messagebox(const char *title, const char *format, ...);
 void				copy_to_clipboard_c(const char *a, int size);
 bool				paste_from_clipboard(char *&str, int &len);//filters out '\r', don't forget to delete[] str
 int					messagebox_yesnocancel(const char *msg, int msg_len);//returns 0: yes, 1: no, 2: cancel
 void				get_window_title(char *str, int size);
 void				set_window_title(const char *str);
-//void				set_window_title(const char *str);
 int					GUINPrint(int x, int y, int w, int h, const char *a, ...);
 long				GUITPrint(int x, int y, const char *a, ...);
 void				GUIPrint(int x, int y, const char *a, ...);
@@ -316,8 +314,8 @@ union				U64
 	}
 };
 void				set_text_colors(U64 const &colors);
-int					print_line(short x, short y, const char *msg, int msg_length, short tab_origin, short zoom);
-int					print(short zoom, short tab_origin, short x, short y, const char *format, ...);
+int					print_line(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom);
+int					print(short zoom, int tab_origin, int x, int y, const char *format, ...);
 
 void				wnd_on_create();
 bool				wnd_on_init();//return false for EXIT_FAILURE

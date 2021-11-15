@@ -660,13 +660,22 @@ int					messagebox_yesnocancel(const char *msg, int msg_len)
 	return -1;
 }
 
+static bool			mouse_captured=false;
 void				mouse_capture()
 {
-	SetCapture(ghWnd);
+	if(!mouse_captured)
+	{
+		mouse_captured=true;
+		SetCapture(ghWnd);
+	}
 }
 void				mouse_release()
 {
-	int success=ReleaseCapture();	SYS_ASSERT(success);
+	if(mouse_captured)
+	{
+		mouse_captured=false;
+		int success=ReleaseCapture();	SYS_ASSERT(success);
+	}
 }
 bool				get_key_state(int key)
 {
@@ -706,7 +715,8 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 		if(resize_window())
 		{
 			resize_gl();
-			wnd_on_render();
+			wnd_on_resize();
+			//wnd_on_render();
 		}
 		break;
 	case WM_PAINT:
