@@ -14,7 +14,9 @@ r	g	b	r	g	b
 
 
 TODO:
+- Drag selection
 - Split view
+- Compare files
 - Indentation with tab/shift tab
 - Wrap option
 - Status bar

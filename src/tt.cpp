@@ -1738,7 +1738,7 @@ int					tab_drag_get_h_idx()
 	for(int left=0, right=0;k<tabbar_tabs.size();++k)
 	{
 		left=right, right=tabbar_tabs[k].right;
-		if(mx<((left+right)>>1))
+		if(tabbar_wpx+mx<((left+right)>>1))
 			break;
 	}
 	return k;
@@ -1932,53 +1932,43 @@ void				wnd_on_render()
 	if(drag==DRAG_TAB)
 	{
 		int marker_size=10;
+		int xtip=0, ytip=0;
+		const char *buf=nullptr;
+		int len=0;
+		int msg_width=tabbar_printname(0, 0, drag_tab_idx, true, true, &buf, &len);
 		switch(tabbar_position)
 		{
 		case TABBAR_TOP:
 		case TABBAR_BOTTOM:
 			{
 				int k=tab_drag_get_h_idx();
-				//int k=0;
-				//for(int left=0, right=0;k<tabbar_tabs.size();++k)
-				//{
-				//	left=right, right=tabbar_tabs[k].right;
-				//	if(mx<((left+right)>>1))
-				//		break;
-				//}
 				int xmarker=k?tabbar_tabs[k-1].right:0;
 				int my1, my2;
 				if(tabbar_position==TABBAR_TOP)
-					my1=(dy<<1)+1, my2=my1+marker_size;
+					my1=(dy<<1)+1, my2=my1+marker_size, xtip=mx, ytip=my+20;
 				else
-					my1=h-(dy<<1)-1, my2=my1-marker_size;
-				draw_line_i(xmarker, my1, xmarker-marker_size, my2, 0xFFFFFFFF);
-				draw_line_i(xmarker, my1, xmarker+marker_size, my2, 0xFFFFFFFF);
+					my1=h-(dy<<1)-1, my2=my1-marker_size, xtip=mx, ytip=my-dy-20;
+				draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx-marker_size, my2, 0xFFFFFFFF);
+				draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx+marker_size, my2, 0xFFFFFFFF);
 			}
 			break;
 		case TABBAR_LEFT:
 		case TABBAR_RIGHT:
 			{
 				int ymarker=tab_drag_get_v_idx()*dy;
-				//int ymarker=tabbar_wpy+my+(dy>>1);
-				//ymarker-=mod(ymarker, dy);
-				//if(ymarker>tabbar_tabs.size()*dy)
-				//	ymarker=tabbar_tabs.size()*dy;
 				int mx1, mx2;
 				if(tabbar_position==TABBAR_LEFT)
-					mx1=tabbar_dx+1, mx2=mx1+marker_size;
+					mx1=tabbar_dx+1, mx2=mx1+marker_size, xtip=mx+20, ytip=my;
 				else
-					mx1=w-tabbar_dx-1, mx2=mx1-marker_size;
-				draw_line_i(mx1, ymarker, mx2, ymarker-marker_size, 0xFFFFFFFF);
-				draw_line_i(mx1, ymarker, mx2, ymarker+marker_size, 0xFFFFFFFF);
+					mx1=w-tabbar_dx-1, mx2=mx1-marker_size, xtip=mx-msg_width-20, ytip=my;
+				draw_line_i(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy-marker_size, 0xFFFFFFFF);
+				draw_line_i(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy+marker_size, 0xFFFFFFFF);
 			}
 			break;
 		}
-		const char *buf=nullptr;
-		int len=0;
-		int msg_width=tabbar_printname(0, 0, drag_tab_idx, true, true, &buf, &len);
-		draw_rectangle_i(mx-2, mx+msg_width+2, my+20, my+22+dy+2, 0x40FFFFFF);
+		draw_rectangle_i(xtip, xtip+msg_width+4, ytip, ytip+dy+4, 0x40FFFFFF);
 		set_text_colors(colors_selection);
-		print_line(mx, my+22, buf, len, 0, 1);
+		print_line(xtip+2, ytip+2, buf, len, 0, 1);
 		set_text_colors(colors_text);
 	}
 
@@ -2043,7 +2033,7 @@ bool				wnd_on_mousewheel(bool mw_forward)
 		switch(tabbar_position)
 		{
 		case TABBAR_TOP:
-			if(h>(dy<<1)&&my<(dy<<1)&&tabbar_tabs.back().right>w)
+			if(h>(dy<<1)&&(my<(dy<<1)||drag==DRAG_TAB)&&tabbar_tabs.back().right>w)
 			{
 				//int k=tabbar_get_horizontal_idx(1);//npp: skip one tab
 				if(mw_forward)//predictable
@@ -2054,7 +2044,7 @@ bool				wnd_on_mousewheel(bool mw_forward)
 			}
 			break;
 		case TABBAR_BOTTOM:
-			if(h>(dy<<1)&&my>h-(dy<<1)&&tabbar_tabs.back().right>w)
+			if(h>(dy<<1)&&(my>h-(dy<<1)||drag==DRAG_TAB)&&tabbar_tabs.back().right>w)
 			{
 				if(mw_forward)
 					tabbar_wpx-=dx<<3;
@@ -2063,7 +2053,7 @@ bool				wnd_on_mousewheel(bool mw_forward)
 			}
 			break;
 		case TABBAR_LEFT:
-			if(w>tabbar_dx&&mx<tabbar_dx&&(int)openfiles.size()*dy>h)
+			if(w>tabbar_dx&&(mx<tabbar_dx||drag==DRAG_TAB)&&(int)openfiles.size()*dy>h)
 			{
 				if(mw_forward)
 					tabbar_wpy-=dy*3;
@@ -2072,7 +2062,7 @@ bool				wnd_on_mousewheel(bool mw_forward)
 			}
 			break;
 		case TABBAR_RIGHT:
-			if(w>tabbar_dx&&mx>w-tabbar_dx&&(int)openfiles.size()*dy>h)
+			if(w>tabbar_dx&&(mx>w-tabbar_dx||drag==DRAG_TAB)&&(int)openfiles.size()*dy>h)
 			{
 				if(mw_forward)
 					tabbar_wpy-=dy*3;
@@ -2724,6 +2714,7 @@ bool				wnd_on_newtab()
 			}
 			else
 				messagebox("Information", "Cannot reopen \'%s\'.", file.filename.c_str());
+			closedfiles.pop_back();
 		}
 	}
 	else//new tab
@@ -2796,7 +2787,9 @@ bool				wnd_on_closetab()
 			closedfiles.push_back(ClosedFile(current_file, *filename));
 		openfiles.erase(openfiles.begin()+current_file);
 		tabbar_calc_positions();
-		tabs_switchto(openfiles.size()-1);
+		if(current_file>openfiles.size()-1)
+			current_file=openfiles.size()-1;
+		tabs_switchto(current_file);
 		tabbar_scroll_to(current_file);
 	}
 	return true;
