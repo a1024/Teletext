@@ -367,6 +367,7 @@ bool				wnd_on_newtab();
 bool				wnd_on_closetab();
 bool				wnd_on_next_tab();
 bool				wnd_on_prev_tab();
+bool				wnd_on_barorient();
 
 bool				wnd_on_quit();//return false to deny exit
 

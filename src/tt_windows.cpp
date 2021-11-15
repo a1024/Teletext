@@ -14,8 +14,6 @@
 //You should have received a copy of the GNU General Public License
 //along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//TODO: UTF8 everywhere
-
 #ifdef _WINDOWS
 #include			"tt.h"
 #include			<stdio.h>
@@ -777,6 +775,7 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 				case 'D':			redraw|=wnd_on_clear_hist();				break;
 				case 'N':			redraw|=wnd_on_newtab();					break;
 				case 'O':			redraw|=wnd_on_open();						break;
+				case 'R':			redraw|=wnd_on_barorient();					break;
 				case 'S':			redraw|=wnd_on_save(keyboard[VK_SHIFT]!=0);	break;
 				case 'T':			redraw|=wnd_on_newtab();					break;
 				case 'V':			redraw|=wnd_on_paste();						break;
@@ -877,18 +876,8 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 	}
 	return DefWindowProcA(hWnd, message, wParam, lParam);
 }
-#if 0
-int					__stdcall FontProc(LOGFONTW const *lf, TEXTMETRICW const *tm, unsigned long FontType, long lParam)
-{
-	fonts.push_back(Font(FontType, lf, tm));
-	return true;//nonzero to continue enumeration
-}
-#endif
 int					__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, char *lpCmdLine, int nCmdShow)
 {
-	//char LOL_1[10]={};
-	//wchar_t LOL_2[10]=L"Hello";
-	//int length=WideCharToMultiByte(CP_UTF8, 0, LOL_2, 10, LOL_1, strlen(LOL_1), nullptr, nullptr);
 	prof_start();
 	{
 		int len=GetModuleFileNameW(nullptr, g_wbuf, g_buf_size);

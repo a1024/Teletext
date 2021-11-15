@@ -315,7 +315,7 @@ ivec4				region, current_region;//x1, y1, x2, y2
 void				set_region_immediate(int x1, int x2, int y1, int y2)
 {
 	current_region.set(x1, y1, x2-x1, y2-y1);
-	glViewport(current_region.x1, current_region.y1, current_region.dx, current_region.dy);
+	glViewport(current_region.x1, h-(current_region.y1+current_region.dy), current_region.dx, current_region.dy);
 	//region.set(x1, y1, x2-x1, y2-y1);
 	//glViewport(region.x1, region.y1, region.dx, region.dy);
 }
