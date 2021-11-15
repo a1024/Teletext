@@ -640,17 +640,17 @@ bool				save_text_file(const char *filename, std::string &str)
 	fclose(file);
 	return true;
 }
-int					ask_to_save(std::string &filename)
+int					messagebox_yesnocancel(const char *msg, int msg_len)
 {
-	int len=0;
-	if(filename.size())
-		len=sprintf_s(g_buf, g_buf_size, "Save changes to \'%s\'?", filename.c_str());
-	else
-		len=sprintf_s(g_buf, g_buf_size, "Save changes to \'Untitled\'?");
-	len=MultiByteToWideChar(CP_UTF8, 0, g_buf, len, g_wbuf, g_buf_size);	SYS_ASSERT(len);
+	//int len=0;
+	//if(filename.size())
+	//	len=sprintf_s(g_buf, g_buf_size, "Save changes to \'%s\'?", filename.c_str());
+	//else
+	//	len=sprintf_s(g_buf, g_buf_size, "Save changes to \'Untitled\'?");
+	int len=MultiByteToWideChar(CP_UTF8, 0, msg, msg_len, g_wbuf, g_buf_size);	SYS_ASSERT(len);
 	g_wbuf[len]='\0';
 	++len;
-	int result=MessageBoxW(ghWnd, g_wbuf, L"Paint++", MB_YESNOCANCEL);
+	int result=MessageBoxW(ghWnd, g_wbuf, L"Teletext", MB_YESNOCANCEL);
 	switch(result)
 	{
 	case IDYES:		return 0;

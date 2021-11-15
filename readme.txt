@@ -14,7 +14,7 @@ r	g	b	r	g	b
 
 
 TODO:
-- Tab bar/sidebar
+- Drag tab to reorder
 - Split view
 - Indentation with tab/shift tab
 - Wrap option
@@ -30,3 +30,4 @@ DONE:
 - Rectangular selection
 - Port to Linux
 - Multiple tabs
+- Tab bar/sidebar

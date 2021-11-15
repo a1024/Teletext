@@ -228,12 +228,12 @@ bool				save_text_file(const char *filename, std::string &str)
 	fclose(file);
 	return true;
 }
-int					ask_to_save(std::string &filename)
+int					messagebox_yesnocancel(const char *msg, int msg_len)
 {
-	if(filename.size())
-		snprintf(g_buf, g_buf_size, "Save changes to \'%s\'?", filename.c_str());
-	else
-		snprintf(g_buf, g_buf_size, "Save changes to \'Untitled\'?");
+	//if(filename.size())
+	//	snprintf(g_buf, g_buf_size, "Save changes to \'%s\'?", filename.c_str());
+	//else
+	//	snprintf(g_buf, g_buf_size, "Save changes to \'Untitled\'?");
 	const SDL_MessageBoxButtonData buttons[]=
 	{
 		{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 0, "Yes"},
@@ -254,8 +254,8 @@ int					ask_to_save(std::string &filename)
 	{
 		SDL_MESSAGEBOX_INFORMATION,//.flags
 		nullptr,//.window
-		"",//.title
-		g_buf,//.message
+		"Teletext",//.title
+		msg,//.message
 		SDL_arraysize(buttons),//.numbuttons
 		buttons,//.buttons
 		nullptr,

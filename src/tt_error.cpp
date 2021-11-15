@@ -45,5 +45,10 @@ bool 			log_error(const char *file, int line, const char *format, ...)
 void			report_errors()
 {
 	if(latest_error_msg[0])
+	{
+#ifdef _WIN32
+		console_show();
+#endif
 		printf("%s\n", latest_error_msg);
+	}
 }

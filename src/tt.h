@@ -138,6 +138,7 @@ void				console_pause();
 void				messagebox(const char *title, const char *format, ...);
 void				copy_to_clipboard_c(const char *a, int size);
 bool				paste_from_clipboard(char *&str, int &len);//filters out '\r', don't forget to delete[] str
+int					messagebox_yesnocancel(const char *msg, int msg_len);//returns 0: yes, 1: no, 2: cancel
 void				get_window_title(char *str, int size);
 void				set_window_title(const char *str);
 //void				set_window_title(const char *str);
@@ -148,7 +149,6 @@ const char*			open_file_dialog();
 const char*			save_file_dialog();
 bool				open_text_file(const char *filename, std::string &str);
 bool				save_text_file(const char *filename, std::string &str);
-int					ask_to_save(std::string &filename);//returns 0: yes, 1: no, 2: cancel
 void				mouse_capture();
 void				mouse_release();
 bool				get_key_state(int key);
@@ -336,7 +336,6 @@ bool				wnd_on_rbuttonup();
 
 bool				wnd_on_display_help();
 bool				wnd_on_toggle_profiler();
-bool				wnd_on_open();
 bool				wnd_on_select_all();
 bool				wnd_on_deselect();
 bool				wnd_on_save(bool save_as);
@@ -361,9 +360,9 @@ bool				wnd_on_cursor_down();
 bool				wnd_on_cursor_left();
 bool				wnd_on_cursor_right();
 bool				wnd_on_type(char character);
-//bool				wnd_on_input(int message, int wParam, int lParam);
 
 bool				wnd_on_newtab();
+bool				wnd_on_open();
 bool				wnd_on_closetab();
 bool				wnd_on_next_tab();
 bool				wnd_on_prev_tab();

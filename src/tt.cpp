@@ -42,9 +42,7 @@ void				display_help()
 		"\n"
 		"Ctrl+N/T:       New tab\n"
 		"Ctrl+W:         Close tab\n"
-#ifdef HELP_SHOWALL
 		"Ctrl+Shift+T:   Reopen closed tab\n"
-#endif
 		"Ctrl+Tab:       Next tab\n"
 		"Ctrl+Shift+Tab: Previous tab\n"
 		"Ctrl+R:         Change tab bar orientation\n"
@@ -82,9 +80,7 @@ void				display_help()
 		"\n"
 		"Ctrl+N/T:\t\tNew tab\n"
 		"Ctrl+W:\t\tClose tab\n"
-#ifdef HELP_SHOWALL
 		"Ctrl+Shift+T:\tReopen closed tab\n"
-#endif
 		"Ctrl+Tab:\t\tNext tab\n"
 		"Ctrl+Shift+Tab:\tPrevious tab\n"
 		"Ctrl+R:\t\tChange tab bar orientation\n"
@@ -765,7 +761,7 @@ struct				TextFile
 		m_histpos_saved=m_histpos=-1;
 	}
 };
-std::vector<TextFile> openfiles;//TODO: count untitled files
+std::vector<TextFile> openfiles;
 int					current_file=0;
 
 int					gen_untitled_idx()
@@ -815,8 +811,9 @@ struct				TabPosition
 	int right, idx;
 	TabPosition():right(0), idx(0){}
 	TabPosition(int right, int idx):right(right), idx(idx){}
+	void set(int right, int idx){this->right=right, this->idx=idx;}
 };
-std::vector<TabPosition>	tabbar_tabs;
+std::vector<TabPosition> tabbar_tabs;//TODO: merge TabPosition with TextFile
 
 bool				tabs_ismodified()
 {
@@ -1451,6 +1448,98 @@ void				draw_vscrollbar(int x, int sbwidth, int y1, int y2, int &winpos, int con
 //	x2-=sbwidth;
 }
 
+inline void			tabbar_printnames_init(){g_buf[0]='*';}//don't use g_buf while printing tab names
+int					tabbar_printname(int x, int y, int tab_idx, std::string const &filename, int untitled_idx, int not_modified, bool test=false)
+{
+	int printed=0;
+	//if(filename.size()*dx>tabbar_dx)
+	//{
+	//	int k2=filename.size()-1;
+	//	for(;k2>0&&filename[k2-1]!='/'&&filename[k2-1]!='\\';--k2);
+	//	printed=sprintf_s(g_buf+1, g_buf_size-1, "%s", filename.c_str()+k2);
+	//}
+	//else if(filename.size())
+	//	printed=sprintf_s(g_buf+1, g_buf_size-1, "%s", filename.c_str());
+	if(filename.size())
+	{
+		int k2=filename.size()-1;
+		for(;k2>0&&filename[k2-1]!='/'&&filename[k2-1]!='\\';--k2);
+		printed=sprintf_s(g_buf+1, g_buf_size-1, "%s", filename.c_str()+k2);
+	}
+	else
+		printed=sprintf_s(g_buf+1, g_buf_size-1, "Untitled %d", untitled_idx+1);
+	int msg_width=0;
+	if(test)
+		msg_width=calc_width(x, y, g_buf+not_modified, printed+!not_modified, 0, 1);
+	else
+	{
+		if(tab_idx==current_file)
+			set_text_colors(colors_selection);
+	//	msg_width=print_line(x, y, g_buf+not_modified, printed+!not_modified, 0, font_zoom);
+		msg_width=print_line(x, y, g_buf+not_modified, printed+!not_modified, 0, 1);
+		if(tab_idx==current_file)
+			set_text_colors(colors_text);
+	}
+	return msg_width;
+}
+void				tabbar_calc_positions()
+{
+	tabbar_tabs.resize(openfiles.size());
+	tabbar_printnames_init();
+	for(int k=0, x=0;k<(int)openfiles.size();++k)
+	{
+		auto of=openfiles[k];
+		int x0=x;
+		x+=10+tabbar_printname(x, 0, k, of.m_filename, of.m_untitled_idx, of.m_histpos==of.m_histpos_saved, true);
+		tabbar_tabs[k].set(x, k);
+	}
+}
+void				bring_object_to_view(int &winpos, int winsize, int objstart, int objend)
+{
+	if(winsize>objend-objstart)
+	{
+		if(winpos+winsize<objend)
+			winpos=objend-winsize;
+		if(winpos>objstart)
+			winpos=objstart;
+	}
+	else
+		winpos=objstart;
+}
+void				tabbar_scroll_to(int tab_idx)
+{
+	if(tab_idx<0||tab_idx>=(int)tabbar_tabs.size())
+		return;
+	switch(tabbar_position)
+	{
+	case TABBAR_TOP:
+	case TABBAR_BOTTOM:
+		if(tabbar_tabs.back().right>w)
+		{
+			bring_object_to_view(tabbar_wpx, w, tab_idx?tabbar_tabs[tab_idx-1].right:0, tabbar_tabs[tab_idx].right);
+			//int left=tab_idx?tabbar_tabs[tab_idx-1].right:0, right=tabbar_tabs[tab_idx].right;
+			//if(w>right-left)
+			//	tabbar_wpx=clamp(right-w, tabbar_wpx, left);
+			//else
+			//	tabbar_wpx=left;
+		}
+		break;
+	case TABBAR_LEFT:
+	case TABBAR_RIGHT:
+		if((int)openfiles.size()*dy>h)
+		{
+			int top=tab_idx*dy;
+			bring_object_to_view(tabbar_wpy, h, top, top+dy);
+			//int top=tab_idx*dy, bottom=top+dy;
+			//if(h>bottom-top)
+			//	tabbar_wpy=clamp(bottom-h, tabbar_wpy, top);
+			//else
+			//	tabbar_wpy=top;
+		}
+		break;
+	}
+}
+
 void				wnd_on_create(){}
 bool				wnd_on_init()
 {
@@ -1493,6 +1582,7 @@ bool				wnd_on_init()
 
 	openfiles.push_back(TextFile());
 	current_file=0;
+	tabbar_calc_positions();
 	tabs_switchto(current_file);
 
 	//font_set(L"Consolas", 10);
@@ -1602,53 +1692,31 @@ void				print_text(int tab_origin, int x0, int x, int y, const char *msg, int ms
 		*final_y=(int)currentY;
 	//return nextY-y;
 }
-void				tabbar_printnames_init()//don't use g_buf while printing tab names
-{
-	g_buf[0]='*';
-}
-int					tabbar_printname(int x, int y, int tab_idx, std::string const &filename, int untitled_idx, int not_modified)
-{
-	int printed=0;
-	//if(filename.size()*dx>tabbar_dx)
-	//{
-	//	int k2=filename.size()-1;
-	//	for(;k2>0&&filename[k2-1]!='/'&&filename[k2-1]!='\\';--k2);
-	//	printed=sprintf_s(g_buf+1, g_buf_size-1, "%s", filename.c_str()+k2);
-	//}
-	//else if(filename.size())
-	//	printed=sprintf_s(g_buf+1, g_buf_size-1, "%s", filename.c_str());
-	if(filename.size())
-	{
-		int k2=filename.size()-1;
-		for(;k2>0&&filename[k2-1]!='/'&&filename[k2-1]!='\\';--k2);
-		printed=sprintf_s(g_buf+1, g_buf_size-1, "%s", filename.c_str()+k2);
-	}
-	else
-		printed=sprintf_s(g_buf+1, g_buf_size-1, "Untitled %d", untitled_idx+1);
-	if(tab_idx==current_file)
-		set_text_colors(colors_selection);
-	//int msg_width=print_line(x, y, g_buf+not_modified, printed+!not_modified, 0, font_zoom);
-	int msg_width=print_line(x, y, g_buf+not_modified, printed+!not_modified, 0, 1);
-	if(tab_idx==current_file)
-		set_text_colors(colors_text);
-	return msg_width;
-}
 void				tabbar_draw_horizontal(int ty1, int ty2, int wy1, int wy2)
 {
 	if(h>ty2-ty1)
 	{
+		if(tabbar_wpx>tabbar_tabs.back().right-(w>>1))
+			tabbar_wpx=tabbar_tabs.back().right-(w>>1);
+		if(tabbar_wpx<0)
+			tabbar_wpx=0;
 		window_tabbar.set(0, w, ty1, ty2);
 		set_region_immediate(0, w, ty1, ty2);
 		tabbar_printnames_init();
-		tabbar_tabs.clear();
+		//tabbar_tabs.clear();
 		for(int k=0, x=-tabbar_wpx;k<(int)openfiles.size();++k)
 		{
 			auto of=openfiles[k];
 			int x0=x;
 			x+=10+tabbar_printname(x, ty1, k, of.m_filename, of.m_untitled_idx, of.m_histpos==of.m_histpos_saved);
-			draw_rectangle_i(x-10, x, ty1, ty1+dy, k==current_file?colors_selection.hi:colors_text.hi);
-			draw_rectangle_i(x0, x, ty1+dy, ty1+(dy<<1), k==current_file?colors_selection.hi:colors_text.hi);
-			tabbar_tabs.push_back(TabPosition(x, k));
+			//if(k==current_file)
+			//{
+			//	draw_rectangle_i(x-10, x, ty1, ty1+dy, colors_selection.hi);
+			//	draw_rectangle_i(x0, x, ty1+dy, ty1+(dy<<1), colors_selection.hi);
+			//}
+			draw_rectangle_i(x-10, x-1, ty1, ty1+dy, k==current_file?colors_selection.hi:colors_text.hi);
+			draw_rectangle_i(x0, x-1, ty1+dy, ty1+(dy<<1), k==current_file?colors_selection.hi:colors_text.hi);
+			//tabbar_tabs.push_back(TabPosition(x, k));
 		}
 		window_editor.set(0, w, wy1, wy2);
 		set_region_immediate(0, w, wy1, wy2);
@@ -1658,6 +1726,10 @@ void				tabbar_draw_sidebar(int tx1, int tx2, int wx1, int wx2)
 {
 	if(w>tx2-tx1)
 	{
+		if(tabbar_wpy>(int)openfiles.size()*dy-(h>>1))
+			tabbar_wpy=openfiles.size()*dy-(h>>1);
+		if(tabbar_wpy<0)
+			tabbar_wpy=0;
 		window_tabbar.set(tx1, tx2, 0, h);
 		set_region_immediate(tx1, tx2, 0, h);
 		tabbar_printnames_init();
@@ -1958,6 +2030,47 @@ bool				wnd_on_mousewheel(bool mw_forward)
 	}
 	else
 	{
+		switch(tabbar_position)
+		{
+		case TABBAR_TOP:
+			if(h>(dy<<1)&&my<(dy<<1)&&tabbar_tabs.back().right>w)
+			{
+				//int k=tabbar_get_horizontal_idx(1);//npp: skip one tab
+				if(mw_forward)//predictable
+					tabbar_wpx-=dx<<3;
+				else
+					tabbar_wpx+=dx<<3;
+				return true;
+			}
+			break;
+		case TABBAR_BOTTOM:
+			if(h>(dy<<1)&&my>h-(dy<<1)&&tabbar_tabs.back().right>w)
+			{
+				if(mw_forward)
+					tabbar_wpx-=dx<<3;
+				else
+					tabbar_wpx+=dx<<3;
+			}
+			break;
+		case TABBAR_LEFT:
+			if(w>tabbar_dx&&mx<tabbar_dx&&(int)openfiles.size()*dy>h)
+			{
+				if(mw_forward)
+					tabbar_wpy-=dy*3;
+				else
+					tabbar_wpy+=dy*3;
+			}
+			break;
+		case TABBAR_RIGHT:
+			if(w>tabbar_dx&&mx>w-tabbar_dx&&(int)openfiles.size()*dy>h)
+			{
+				if(mw_forward)
+					tabbar_wpy-=dy*3;
+				else
+					tabbar_wpy+=dy*3;
+			}
+			break;
+		}
 		if(mw_forward)
 			wpy-=dy*font_zoom*3;
 		else
@@ -2018,7 +2131,7 @@ inline void			lbutton_down_text()
 int					tabbar_get_horizontal_idx(int mousex)
 {
 	int k=0;
-	for(;k<(int)tabbar_tabs.size()&&mousex>=tabbar_tabs[k].right;++k);
+	for(;k<(int)tabbar_tabs.size()&&tabbar_wpx+mousex>=tabbar_tabs[k].right;++k);
 	if(k>=0&&k<(int)tabbar_tabs.size())
 		return k;
 	return -1;
@@ -2037,6 +2150,7 @@ bool				wnd_on_lbuttondown()
 				if(k!=-1)
 				{
 					tabs_switchto(tabbar_tabs[k].idx);
+					tabbar_scroll_to(current_file);
 					return true;
 				}
 				return false;
@@ -2053,6 +2167,7 @@ bool				wnd_on_lbuttondown()
 				if(k!=-1)
 				{
 					tabs_switchto(tabbar_tabs[k].idx);
+					tabbar_scroll_to(current_file);
 					return true;
 				}
 				return false;
@@ -2065,8 +2180,8 @@ bool				wnd_on_lbuttondown()
 		{
 			if(mx<tabbar_dx)
 			{
-				//tabs_switchto(clamp(0, my/(dy*font_zoom), openfiles.size()-1));
-				tabs_switchto(clamp(0, my/dy, openfiles.size()-1));
+				tabs_switchto(clamp(0, (tabbar_wpy+my)/dy, openfiles.size()-1));
+				tabbar_scroll_to(current_file);
 				return true;
 			}
 			x1=tabbar_dx, x2=w, y1=0, y2=h;
@@ -2077,8 +2192,8 @@ bool				wnd_on_lbuttondown()
 		{
 			if(mx>w-tabbar_dx)
 			{
-				//tabs_switchto(clamp(0, my/(dy*font_zoom), openfiles.size()-1));
-				tabs_switchto(clamp(0, my/dy, openfiles.size()-1));
+				tabs_switchto(clamp(0, (tabbar_wpy+my)/dy, openfiles.size()-1));
+				tabbar_scroll_to(current_file);
 				return true;
 			}
 			x1=0, x2=w-tabbar_dx, y1=0, y2=h;
@@ -2142,23 +2257,6 @@ bool				wnd_on_display_help()
 bool				wnd_on_toggle_profiler()
 {
 	prof_toggle();
-	return true;
-}
-bool				wnd_on_open()
-{
-	auto filename2=open_file_dialog();
-	if(filename2)
-	{
-		openfiles.push_back(TextFile());
-		auto &of=openfiles.back();
-		if(open_text_file(filename2, of.m_text))
-		{
-			of.m_filename=filename2;
-			tabs_switchto(openfiles.size()-1);
-			hist_cont=true;
-			dimensions_known=false;
-		}
-	}
 	return true;
 }
 bool				wnd_on_select_all()
@@ -2563,12 +2661,16 @@ bool				wnd_on_newtab()
 			TextFile f;
 			if(open_text_file(file.filename.c_str(), f.m_text))
 			{
+				hist_cont=false;
+				dimensions_known=false;
 				f.m_filename=file.filename;
 				int idx=file.tab_idx;
 				if(idx>(int)openfiles.size())//crash guard
 					idx=openfiles.size();
 				openfiles.insert(openfiles.begin()+idx, std::move(f));
+				tabbar_calc_positions();
 				tabs_switchto(idx);
+				tabbar_scroll_to(current_file);
 			}
 			else
 				messagebox("Information", "Cannot reopen \'%s\'.", file.filename.c_str());
@@ -2578,15 +2680,46 @@ bool				wnd_on_newtab()
 	{
 		openfiles.push_back(TextFile());
 		openfiles.back().m_untitled_idx=gen_untitled_idx();
+		tabbar_calc_positions();
 		tabs_switchto(openfiles.size()-1);
+		tabbar_scroll_to(current_file);
 	}
 	return true;
+}
+bool				wnd_on_open()
+{
+	auto filename2=open_file_dialog();
+	if(filename2)
+	{
+		openfiles.push_back(TextFile());
+		auto &of=openfiles.back();
+		if(open_text_file(filename2, of.m_text))
+		{
+			hist_cont=false;
+			dimensions_known=false;
+			of.m_filename=filename2;
+			tabbar_calc_positions();
+			tabs_switchto(openfiles.size()-1);
+			tabbar_scroll_to(current_file);
+		}
+	}
+	return true;
+}
+int					ask_to_save(int tab_idx)
+{
+	auto &f=openfiles[tab_idx];
+	int printed=0;
+	if(filename->size())
+		printed=sprintf_s(g_buf, g_buf_size, "Save changes to \'%s\'?", f.m_filename.c_str());
+	else
+		printed=sprintf_s(g_buf, g_buf_size, "Save changes to \'Untitled %d\'?", f.m_untitled_idx+1);
+	return messagebox_yesnocancel(g_buf, printed);
 }
 bool				wnd_on_closetab()
 {
 	if(tabs_ismodified())
 	{
-		switch(ask_to_save(*filename))
+		switch(ask_to_save(current_file))
 		{
 		case 0://yes
 			{
@@ -2612,7 +2745,9 @@ bool				wnd_on_closetab()
 		if(filename->size())
 			closedfiles.push_back(ClosedFile(current_file, *filename));
 		openfiles.erase(openfiles.begin()+current_file);
+		tabbar_calc_positions();
 		tabs_switchto(openfiles.size()-1);
+		tabbar_scroll_to(current_file);
 	}
 	return true;
 }
@@ -2621,6 +2756,7 @@ bool				wnd_on_next_tab()
 	if(openfiles.size()>1)
 	{
 		tabs_switchto(current_file+1);
+		tabbar_scroll_to(current_file);
 		return true;
 	}
 	return false;
@@ -2630,13 +2766,17 @@ bool				wnd_on_prev_tab()
 	if(openfiles.size()>1)
 	{
 		tabs_switchto(current_file-1);
+		tabbar_scroll_to(current_file);
 		return true;
 	}
 	return false;
 }
 bool				wnd_on_barorient()
 {
-	tabbar_position=TabbarPosition((tabbar_position+1)%TABBAR_ORIENT_COUNT);
+	if(is_shift_down())
+		tabbar_position=(TabbarPosition)mod(tabbar_position-1, TABBAR_ORIENT_COUNT);
+	else
+		tabbar_position=(TabbarPosition)mod(tabbar_position+1, TABBAR_ORIENT_COUNT);
 	return true;
 }
 
@@ -2647,7 +2787,7 @@ bool				wnd_on_quit()//return false to deny exit
 		tabs_switchto(k, false);
 		if(tabs_ismodified())
 		{
-			switch(ask_to_save(*filename))
+			switch(ask_to_save(current_file))
 			{
 			case 0://yes
 				//if(filename->size())//X
