@@ -817,16 +817,16 @@ struct				TabPosition
 };
 std::vector<TabPosition> tabbar_tabs;//TODO: merge TabPosition with TextFile
 
-bool				tabs_ismodified()
+bool				tabs_ismodified(int tab_idx)
 {
-	auto &of=openfiles[current_file];
+	auto &of=openfiles[tab_idx];
 	return of.m_histpos!=of.m_histpos_saved;
 }
 void				set_title()
 {
 	int printed=0;
 
-	if(tabs_ismodified())
+	if(tabs_ismodified(current_file))
 		printed+=sprintf_s(g_buf+printed, g_buf_size-printed, "*");
 
 	printed+=sprintf_s(g_buf+printed, g_buf_size-printed, "%d/%d - ", current_file+1, (int)openfiles.size());
@@ -1732,10 +1732,10 @@ void				tabbar_draw_sidebar(int tx1, int tx2, int wx1, int wx2)
 		set_region_immediate(wx1, wx2, 0, h);
 	}
 }
-int					tab_drag_get_h_idx()
+int					tab_drag_get_h_idx()//duplicate!, see tabbar_get_horizontal_idx
 {
 	int k=0;
-	for(int left=0, right=0;k<tabbar_tabs.size();++k)
+	for(int left=0, right=0;k<(int)tabbar_tabs.size();++k)
 	{
 		left=right, right=tabbar_tabs[k].right;
 		if(tabbar_wpx+mx<((left+right)>>1))
@@ -1992,6 +1992,45 @@ void				wnd_on_render()
 	report_errors();
 }
 
+int					ask_to_save(int tab_idx)
+{
+	auto &f=openfiles[tab_idx];
+	int printed=0;
+	if(filename->size())
+		printed=sprintf_s(g_buf, g_buf_size, "Save changes to \'%s\'?", f.m_filename.c_str());
+	else
+		printed=sprintf_s(g_buf, g_buf_size, "Save changes to \'Untitled %d\'?", f.m_untitled_idx+1);
+	return messagebox_yesnocancel(g_buf, printed);
+}
+bool				close_tab(int tab_idx)//returns true if tab got closed
+{
+	if(tabs_ismodified(tab_idx))
+	{
+		switch(ask_to_save(tab_idx))
+		{
+		case 0://yes
+			{
+				auto str=save_file_dialog();
+				if(str&&save_text_file(str, openfiles[tab_idx].m_text))
+					openfiles[tab_idx].m_filename=str;
+			}
+			break;
+		case 1://no
+			break;
+		case 2://cancel
+			return false;
+		}
+	}
+	if(filename->size())
+		closedfiles.push_back(ClosedFile(tab_idx, std::move(openfiles[tab_idx].m_filename)));
+	if(openfiles.size()>1)
+		openfiles.erase(openfiles.begin()+tab_idx);
+	else
+		openfiles.front().clear();
+	tabbar_calc_positions();
+	current_file-=tab_idx<current_file;
+	return true;
+}
 bool				wnd_on_mousemove()
 {
 	switch(drag)
@@ -2189,7 +2228,10 @@ bool				wnd_on_lbuttondown()
 		{
 			if(mx<tabbar_dx)
 			{
-				tabs_switchto(clamp(0, (tabbar_wpy+my)/dy, openfiles.size()-1));
+				//tabs_switchto(clamp(0, (tabbar_wpy+my)/dy, openfiles.size()-1));
+				int k=tab_drag_get_v_idx();
+				if(k>(int)openfiles.size()-1)
+					k=openfiles.size()-1;
 				tabbar_scroll_to(current_file);
 				drag_tab();
 				return true;
@@ -2202,7 +2244,10 @@ bool				wnd_on_lbuttondown()
 		{
 			if(mx>w-tabbar_dx)
 			{
-				tabs_switchto(clamp(0, (tabbar_wpy+my)/dy, openfiles.size()-1));
+				//tabs_switchto(clamp(0, (tabbar_wpy+my)/dy, openfiles.size()-1));
+				int k=tab_drag_get_v_idx();
+				if(k>(int)openfiles.size()-1)
+					k=openfiles.size()-1;
 				tabbar_scroll_to(current_file);
 				drag_tab();
 				return true;
@@ -2286,6 +2331,63 @@ bool				wnd_on_lbuttonup()
 	drag=DRAG_NONE;
 	return true;
 }
+bool				wnd_on_mbuttondown()
+{
+	int k=0;
+	switch(tabbar_position)
+	{
+	case TABBAR_TOP:
+		if(h>(dy<<1)&&my<(dy<<1))
+		{
+			k=tabbar_get_horizontal_idx(mx);
+			if(k!=-1)
+			{
+				close_tab(k);
+				tabs_switchto(current_file);
+				return true;
+			}
+		}
+		break;
+	case TABBAR_BOTTOM:
+		if(h>(dy<<1)&&my>h-(dy<<1))
+		{
+			k=tabbar_get_horizontal_idx(mx);
+			if(k!=-1)
+			{
+				close_tab(k);
+				tabs_switchto(current_file);
+				return true;
+			}
+		}
+		break;
+	case TABBAR_LEFT:
+		if(w>tabbar_dx&&mx<tabbar_dx)
+		{
+			k=tab_drag_get_h_idx();
+			if(k<(int)openfiles.size())
+			{
+				close_tab(k);
+				tabs_switchto(current_file);
+				return true;
+			}
+		}
+		break;
+	case TABBAR_RIGHT:
+		if(w>tabbar_dx&&mx>w-tabbar_dx)
+		{
+			k=tab_drag_get_h_idx();
+			if(k<(int)openfiles.size())
+			{
+				close_tab(k);
+				tabs_switchto(current_file);
+				return true;
+			}
+		}
+		break;
+	}
+	return false;
+}
+bool				wnd_on_mbuttonup(){return false;}
 bool				wnd_on_rbuttondown(){return false;}
 bool				wnd_on_rbuttonup(){return false;}
 
@@ -2746,19 +2848,18 @@ bool				wnd_on_open()
 	}
 	return true;
 }
-int					ask_to_save(int tab_idx)
-{
-	auto &f=openfiles[tab_idx];
-	int printed=0;
-	if(filename->size())
-		printed=sprintf_s(g_buf, g_buf_size, "Save changes to \'%s\'?", f.m_filename.c_str());
-	else
-		printed=sprintf_s(g_buf, g_buf_size, "Save changes to \'Untitled %d\'?", f.m_untitled_idx+1);
-	return messagebox_yesnocancel(g_buf, printed);
-}
 bool				wnd_on_closetab()
 {
-	if(tabs_ismodified())
+	if(close_tab(current_file))
+	{
+		if(current_file>(int)openfiles.size()-1)
+			current_file=openfiles.size()-1;
+		tabs_switchto(current_file);
+		tabbar_scroll_to(current_file);
+		return true;
+	}
+	return false;
+/*	if(tabs_ismodified(current_file))
 	{
 		switch(ask_to_save(current_file))
 		{
@@ -2771,28 +2872,25 @@ bool				wnd_on_closetab()
 					set_title();
 				}
 			}
-			openfiles.erase(openfiles.begin()+current_file);
+			//openfiles.erase(openfiles.begin()+current_file);
 			break;
 		case 1://no
-			openfiles.erase(openfiles.begin()+current_file);
-			tabs_switchto(openfiles.size()-1);
+			//openfiles.erase(openfiles.begin()+current_file);
+			//tabs_switchto(openfiles.size()-1);
 			break;
 		case 2://cancel
 			return false;
 		}
 	}
-	else
-	{
-		if(filename->size())
-			closedfiles.push_back(ClosedFile(current_file, *filename));
-		openfiles.erase(openfiles.begin()+current_file);
-		tabbar_calc_positions();
-		if(current_file>openfiles.size()-1)
-			current_file=openfiles.size()-1;
-		tabs_switchto(current_file);
-		tabbar_scroll_to(current_file);
-	}
-	return true;
+	if(filename->size())
+		closedfiles.push_back(ClosedFile(current_file, *filename));
+	openfiles.erase(openfiles.begin()+current_file);
+	tabbar_calc_positions();
+	if(current_file>openfiles.size()-1)
+		current_file=openfiles.size()-1;
+	tabs_switchto(current_file);
+	tabbar_scroll_to(current_file);
+	return true;//*/
 }
 bool				wnd_on_next_tab()
 {
@@ -2828,7 +2926,7 @@ bool				wnd_on_quit()//return false to deny exit
 	for(int k=0;k<(int)openfiles.size();++k)
 	{
 		tabs_switchto(k, false);
-		if(tabs_ismodified())
+		if(tabs_ismodified(current_file))
 		{
 			switch(ask_to_save(current_file))
 			{

@@ -327,9 +327,11 @@ bool				wnd_on_mousemove();
 bool				wnd_on_mousewheel(bool mw_forward);
 bool				wnd_on_zoomin();
 bool				wnd_on_zoomout();
-bool				wnd_on_lbuttondown();
+bool				wnd_on_lbuttondown();//left mouse button
 bool				wnd_on_lbuttonup();
-bool				wnd_on_rbuttondown();
+bool				wnd_on_mbuttondown();//middle mouse button
+bool				wnd_on_mbuttonup();
+bool				wnd_on_rbuttondown();//right mouse button
 bool				wnd_on_rbuttonup();
 
 bool				wnd_on_display_help();
