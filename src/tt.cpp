@@ -707,6 +707,7 @@ struct				TextFile
 	std::string
 		m_filename,//UTF-8
 		m_text;//ASCII
+	int m_untitled_idx;
 
 	float m_wcx, m_wcy;//window position inside the text buffer, in character units
 	Cursor m_cur;
@@ -714,11 +715,11 @@ struct				TextFile
 	History m_history;
 	int m_histpos_saved, m_histpos;//pointing at previous action
 
-	TextFile():m_wcx(0), m_wcy(0), m_histpos_saved(-1), m_histpos(-1){}
-	TextFile(TextFile const &f):m_filename(f.m_filename), m_text(f.m_text),
+	TextFile():m_untitled_idx(0), m_wcx(0), m_wcy(0), m_histpos_saved(-1), m_histpos(-1){}
+	TextFile(TextFile const &f):m_filename(f.m_filename), m_text(f.m_text), m_untitled_idx(f.m_untitled_idx),
 		m_wcx(f.m_wcx), m_wcy(f.m_wcy), m_cur(f.m_cur),
 		m_history(f.m_history), m_histpos_saved(f.m_histpos_saved), m_histpos(f.m_histpos){}
-	TextFile(TextFile &&f):m_filename(std::move(f.m_filename)), m_text(std::move(f.m_text)),
+	TextFile(TextFile &&f):m_filename(std::move(f.m_filename)), m_text(std::move(f.m_text)), m_untitled_idx(f.m_untitled_idx),
 		m_wcx(f.m_wcx), m_wcy(f.m_wcy), m_cur(f.m_cur),
 		m_history(std::move(f.m_history)), m_histpos_saved(f.m_histpos_saved), m_histpos(f.m_histpos){}
 	TextFile& operator=(TextFile const &f)
@@ -727,11 +728,13 @@ struct				TextFile
 		{
 			m_filename=f.m_filename;
 			m_text=f.m_text;
+			m_untitled_idx=f.m_untitled_idx;
+
 			m_wcx=f.m_wcx, m_wcy=f.m_wcy;
 			m_cur=f.m_cur;
+
 			m_history=f.m_history;
-			m_histpos_saved=f.m_histpos_saved;
-			m_histpos=f.m_histpos;
+			m_histpos_saved=f.m_histpos_saved, m_histpos=f.m_histpos;
 		}
 		return *this;
 	}
@@ -741,11 +744,13 @@ struct				TextFile
 		{
 			m_filename=std::move(f.m_filename);
 			m_text=std::move(f.m_text);
+			m_untitled_idx=f.m_untitled_idx;
+
 			m_wcx=f.m_wcx, m_wcy=f.m_wcy;
 			m_cur=f.m_cur;
+
 			m_history=std::move(f.m_history);
-			m_histpos_saved=f.m_histpos_saved;
-			m_histpos=f.m_histpos;
+			m_histpos_saved=f.m_histpos_saved, m_histpos=f.m_histpos;
 		}
 		return *this;
 	}
@@ -753,6 +758,7 @@ struct				TextFile
 	{
 		m_filename.clear();
 		m_text.clear();
+		m_untitled_idx=0;
 		m_wcx=0, m_wcy=0;
 		m_cur.reset();
 		m_history.clear();
@@ -761,6 +767,36 @@ struct				TextFile
 };
 std::vector<TextFile> openfiles;//TODO: count untitled files
 int					current_file=0;
+
+int					gen_untitled_idx()
+{
+	int max_idx=0;
+	for(int k=0;k<(int)openfiles.size();++k)
+	{
+		auto &file=openfiles[k];
+		if(!file.m_filename.size()&&max_idx<file.m_untitled_idx)
+			max_idx=file.m_untitled_idx;
+	}
+	std::vector<bool> reserved(max_idx+1);
+	for(int k=0;k<(int)openfiles.size();++k)
+	{
+		auto &file=openfiles[k];
+		if(!file.m_filename.size())
+			reserved[file.m_untitled_idx]=true;
+	}
+	int k2=0;
+	for(;k2<(int)reserved.size()&&reserved[k2];++k2);
+	return k2;
+}
+
+struct				ClosedFile
+{
+	int tab_idx;
+	std::string filename;
+	ClosedFile():tab_idx(0){}
+	ClosedFile(int tab_idx, std::string const &filename):tab_idx(tab_idx), filename(filename){}
+};
+std::vector<ClosedFile> closedfiles;
 
 enum				TabbarPosition
 {
@@ -1570,7 +1606,7 @@ void				tabbar_printnames_init()//don't use g_buf while printing tab names
 {
 	g_buf[0]='*';
 }
-int					tabbar_printname(int x, int y, int tab_idx, std::string const &filename, int not_modified)
+int					tabbar_printname(int x, int y, int tab_idx, std::string const &filename, int untitled_idx, int not_modified)
 {
 	int printed=0;
 	//if(filename.size()*dx>tabbar_dx)
@@ -1588,7 +1624,7 @@ int					tabbar_printname(int x, int y, int tab_idx, std::string const &filename,
 		printed=sprintf_s(g_buf+1, g_buf_size-1, "%s", filename.c_str()+k2);
 	}
 	else
-		printed=sprintf_s(g_buf+1, g_buf_size-1, "Untitled");//TODO: track untitled files
+		printed=sprintf_s(g_buf+1, g_buf_size-1, "Untitled %d", untitled_idx+1);
 	if(tab_idx==current_file)
 		set_text_colors(colors_selection);
 	//int msg_width=print_line(x, y, g_buf+not_modified, printed+!not_modified, 0, font_zoom);
@@ -1609,7 +1645,7 @@ void				tabbar_draw_horizontal(int ty1, int ty2, int wy1, int wy2)
 		{
 			auto of=openfiles[k];
 			int x0=x;
-			x+=10+tabbar_printname(x, ty1, k, of.m_filename, of.m_histpos==of.m_histpos_saved);
+			x+=10+tabbar_printname(x, ty1, k, of.m_filename, of.m_untitled_idx, of.m_histpos==of.m_histpos_saved);
 			draw_rectangle_i(x-10, x, ty1, ty1+dy, k==current_file?colors_selection.hi:colors_text.hi);
 			draw_rectangle_i(x0, x, ty1+dy, ty1+(dy<<1), k==current_file?colors_selection.hi:colors_text.hi);
 			tabbar_tabs.push_back(TabPosition(x, k));
@@ -1629,7 +1665,7 @@ void				tabbar_draw_sidebar(int tx1, int tx2, int wx1, int wx2)
 		for(int k=0;k<(int)openfiles.size();++k)
 		{
 			auto of=openfiles[k];
-			tabbar_printname(tx1, k*dy-tabbar_wpy, k, of.m_filename, of.m_histpos==of.m_histpos_saved);
+			tabbar_printname(tx1, k*dy-tabbar_wpy, k, of.m_filename, of.m_untitled_idx, of.m_histpos==of.m_histpos_saved);
 		/*	int not_modified=of.m_histpos==of.m_histpos_saved;
 			int printed=0;
 			//if(of.m_filename.size()*dx>tabbar_dx)
@@ -1884,6 +1920,7 @@ void				wnd_on_render()
 	prof_print();
 	report_errors();
 }
+
 bool				wnd_on_mousemove()
 {
 	switch(drag)
@@ -2234,12 +2271,6 @@ bool				wnd_on_paste()
 	calc_cursor_coords(0);
 	return true;
 }
-//bool				wnd_on_new()
-//{
-//	hist_clear();
-//	text->clear();
-//	return true;
-//}
 bool				wnd_on_scroll_up_key()
 {
 	wpy-=dy*font_zoom;
@@ -2524,8 +2555,31 @@ bool				wnd_on_type(char character)
 
 bool				wnd_on_newtab()
 {
-	openfiles.push_back(TextFile());
-	tabs_switchto(openfiles.size()-1);
+	if(is_shift_down())//reopen closed tab
+	{
+		if(closedfiles.size())
+		{
+			auto &file=closedfiles.back();
+			TextFile f;
+			if(open_text_file(file.filename.c_str(), f.m_text))
+			{
+				f.m_filename=file.filename;
+				int idx=file.tab_idx;
+				if(idx>(int)openfiles.size())//crash guard
+					idx=openfiles.size();
+				openfiles.insert(openfiles.begin()+idx, std::move(f));
+				tabs_switchto(idx);
+			}
+			else
+				messagebox("Information", "Cannot reopen \'%s\'.", file.filename.c_str());
+		}
+	}
+	else//new tab
+	{
+		openfiles.push_back(TextFile());
+		openfiles.back().m_untitled_idx=gen_untitled_idx();
+		tabs_switchto(openfiles.size()-1);
+	}
 	return true;
 }
 bool				wnd_on_closetab()
@@ -2555,6 +2609,8 @@ bool				wnd_on_closetab()
 	}
 	else
 	{
+		if(filename->size())
+			closedfiles.push_back(ClosedFile(current_file, *filename));
 		openfiles.erase(openfiles.begin()+current_file);
 		tabs_switchto(openfiles.size()-1);
 	}
