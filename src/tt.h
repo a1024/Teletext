@@ -135,9 +135,10 @@ void				console_pause();
 #define				console_pause()
 #endif
 void				messagebox(const char *title, const char *format, ...);
+int					messagebox_okcancel(const char *title, const char *format, ...);//returns 0: OK, 1: cancel
+int					messagebox_yesnocancel(const char *title, const char *format, ...);//returns 0: yes, 1: no, 2: cancel
 void				copy_to_clipboard_c(const char *a, int size);
 bool				paste_from_clipboard(char *&str, int &len);//filters out '\r', don't forget to delete[] str
-int					messagebox_yesnocancel(const char *msg, int msg_len);//returns 0: yes, 1: no, 2: cancel
 void				get_window_title(char *str, int size);
 void				set_window_title(const char *str);
 int					GUINPrint(int x, int y, int w, int h, const char *a, ...);

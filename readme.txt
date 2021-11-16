@@ -22,6 +22,7 @@ TODO:
 - Status bar
 - Go to previous/next cursor location
 - Find & replace
+- Go to line number
 - Optional syntax highlighting for C/C++
 - State file
 - Config file

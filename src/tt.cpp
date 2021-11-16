@@ -19,7 +19,7 @@
 #define				STB_IMAGE_IMPLEMENTATION
 #include			"stb_image.h"//https://github.com/nothings/stb
 
-	#define			HELP_SHOWALL
+//	#define			HELP_SHOWALL
 
 const char			file[]=__FILE__;
 char				g_buf[G_BUF_SIZE]={};
@@ -34,11 +34,9 @@ void				display_help()
 		"Ctrl+O:         Open\n"//TODO: config file
 		"Ctrl+S:         Save\n"
 		"Ctrl+Shift+S:   Save as\n"
-		"Ctrl+Z:         Undo\n"
-		"Ctrl+Y:         Redo\n"
-		"Ctrl+X:         Cut\n"
-		"Ctrl+C:         Copy\n"
-		"Ctrl+V:         Paste\n"
+		"Ctrl+Z/Y:       Undo/Redo\n"
+		"Ctrl+D:         Clear undo/redo history\n"
+		"Ctrl+X/C/V:     Cut/Copy/Paste\n"
 		"\n"
 		"Ctrl+N/T:       New tab\n"
 		"Ctrl+W:         Close tab\n"
@@ -52,11 +50,10 @@ void				display_help()
 #ifdef HELP_SHOWALL
 		"Alt+Left:               Previous location\n"
 		"Alt+Right:              Next location\n"
-		"Ctrl+F:                 Find\n"
-		"Ctrl+R:                 Replace\n"
+		"Ctrl+F:                 Find/Replace\n"
+		"F3:                     Find next\n"
 #endif
-		"Ctrl+=:                 Zoom in\n"
-		"Ctrl+-:                 Zoom out\n"
+		"Ctrl+=/-/wheel:         Zoom in/out\n"
 		"\n"
 		"Shift+Arrows/Home/End:  Select\n"
 		"Ctrl+Mouse1:            Select word\n"
@@ -66,17 +63,18 @@ void				display_help()
 		"Ctrl+Shift+Left/Right:  Select words\n"
 		"Escape:                 Deselect\n"
 		"\n"
+#ifdef HELP_SHOWALL
+		"F11:            Full-screen\n"
+#endif
 		"F4:             Toggle benchmark");
 #else
 	messagebox("Controls",
 		"Ctrl+O:\t\tOpen\n"//TODO: config file
 		"Ctrl+S:\t\tSave\n"
 		"Ctrl+Shift+S:\tSave as\n"
-		"Ctrl+Z:\t\tUndo\n"
-		"Ctrl+Y:\t\tRedo\n"
-		"Ctrl+X:\t\tCut\n"
-		"Ctrl+C:\t\tCopy\n"
-		"Ctrl+V:\t\tPaste\n"
+		"Ctrl+Z/Y:\t\tUndo/Redo\n"
+		"Ctrl+D:\t\tClear undo/redo history\n"
+		"Ctrl+X/C/V:\tCut/Copy/Paste\n"
 		"\n"
 		"Ctrl+N/T:\t\tNew tab\n"
 		"Ctrl+W:\t\tClose tab\n"
@@ -88,11 +86,11 @@ void				display_help()
 		"Ctrl+Up/Down:\tScroll\n"
 		"Ctrl+Left/Right:\tSkip word\n"
 #ifdef HELP_SHOWALL
-		"Ctrl+-:\t\tPrevious location\n"
-		"Ctrl+Shift+-:\tNext location\n"
-		"Ctrl+F:\t\tFind\n"
-		"Ctrl+R:\t\tReplace\n"
+		"Alt+Left/Right:\tPrevious/Next location\n"
+		"Ctrl+F:\t\tFind/Replace\n"
+		"F3:\t\tFind next\n"
 #endif
+		"Ctrl+=/-/wheel:\tZoom in/out\n"
 		"\n"
 		"Shift+Arrows/Home/End:\tSelect\n"
 		"Ctrl+Mouse1:\t\tSelect word\n"
@@ -102,6 +100,9 @@ void				display_help()
 		"Ctrl+Shift+Left/Right:\tSelect words\n"
 		"Escape:\t\t\tDeselect\n"
 		"\n"
+#ifdef HELP_SHOWALL
+		"F11:\tFull-screen\n"
+#endif
 		"F4:\tToggle benchmark");
 #endif
 }
@@ -532,6 +533,19 @@ struct				Cursor
 		ccx=ccy=0;
 		scx=scy=0;
 	}
+	void get_selection(int &i, int &f)
+	{
+		if(selcur<cursor)
+			i=selcur, f=cursor;
+		else
+			i=cursor, f=selcur;
+	}
+	Rect get_rectsel_raw()
+	{
+		Rect r;
+		r.set(scx, ccx, scy, ccy);
+		return r;
+	}
 	Rect get_rectsel()
 	{
 		Rect r;
@@ -554,8 +568,10 @@ struct				Cursor
 		if(scy<ccy)
 			y1=scy, y2=ccy;
 		else
-			y1=ccx, y2=scy;
+			y1=ccy, y2=scy;
 	}
+	void set_rectsel(int x1, int x2, int y1, int y2){scx=x1, ccx=x2, scy=y1, ccy=y2;}
+	void set_rectsel(Rect const &r){scx=r.x1, ccx=r.x2, scy=r.y1, ccy=r.y2;}
 };
 short				font_zoom=1;//font pixel size
 int					wpx=0, wpy=0,//window position inside the text buffer, in pixels
@@ -567,7 +583,7 @@ struct				Range
 	unsigned
 		linestart, lineend,//absolute index
 		linecols,//line width in character units
-		i, f;//offsets from linestart
+		i, f;//index from linestart
 	Range():linestart(0), lineend(0), linecols(0), i(-1), f(0){}
 	//Range(unsigned linestart, unsigned i, unsigned f):linestart(linestart), i(i), f(f){}
 	void set(unsigned linestart, unsigned p, int &extent)
@@ -915,6 +931,12 @@ void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int
 	}
 }
 
+inline int			count_lines(int i, int f)
+{
+	int lineno=0;
+	for(int k=i;k<f;lineno+=AT(k)=='\n', ++k);
+	return lineno;
+}
 inline int			find_line_start(int i)
 {
 	i-=AT(i)=='\n';
@@ -1047,12 +1069,6 @@ void				hist_redo()//ctrl y
 	wnd_to_cursor=true;
 	set_title();
 }
-void				hist_clear()
-{
-	*histpos=-1;//TODO: ask for confirmation
-	history->clear();
-	//clear_modified();
-}
 int					calc_ranges(Ranges &ranges)
 {
 	int rx1, rx2, ry1, ry2;//rect coordinates in character units
@@ -1094,9 +1110,8 @@ int					calc_ranges(Ranges &ranges)
 	}
 	return extent;
 }
-void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are updated
+void				text_replace_rect(Ranges &ranges, const char *a, int len, bool indent=false)//ranges are updated
 {
-	//set_modified();
 	history->resize(*histpos+1);
 	ActionData data;
 	bool padded=false, erased=false;
@@ -1127,53 +1142,66 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 		history->push_back(HistoryAction(ACTION_INSERT_RECT, std::move(data), cur->scx, cur->ccx, cur->scy, cur->ccy));
 		++*histpos;
 	}
-	for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)	//2) erase selection
+	if(!indent)
 	{
-		auto &range=ranges[k];
-		range.linestart-=cumulative_delta;
-		range.lineend-=cumulative_delta;
-		if(range.i<range.f)
+		for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)	//2) erase selection
 		{
-			unsigned linecount=range.lineend-range.linestart, delta=0;
-			//if(linecount<range.i)//unreachable
-			//{
-			//}
-			//else
-			if(linecount>=range.f)//erase [linestart+i, linestart+f[
+			auto &range=ranges[k];
+			range.linestart-=cumulative_delta;
+			range.lineend-=cumulative_delta;
+			if(range.i<range.f)
 			{
-				erased=true;
-				delta=range.f-range.i;
-				data.push_back(ActionFragment(range.linestart+range.i, text->c_str()+range.linestart+range.i, delta));
-				text->erase(text->begin()+range.linestart+range.i, text->begin()+range.linestart+range.f);
+				unsigned linecount=range.lineend-range.linestart, delta=0;
+				//if(linecount<range.i)//unreachable
+				//{
+				//}
+				//else
+				if(linecount>=range.f)//erase [linestart+i, linestart+f[
+				{
+					erased=true;
+					delta=range.f-range.i;
+					data.push_back(ActionFragment(range.linestart+range.i, text->c_str()+range.linestart+range.i, delta));
+					text->erase(text->begin()+range.linestart+range.i, text->begin()+range.linestart+range.f);
+				}
+				else if(range.i<linecount&&linecount<range.f)//erase [linestart+i, lineend[
+				{
+					erased=true;
+					delta=linecount-range.i;
+					data.push_back(ActionFragment(range.linestart+range.i, text->c_str()+range.linestart+range.i, delta));
+					text->erase(text->begin()+range.linestart+range.i, text->begin()+range.lineend);
+				}
+				cumulative_delta+=delta;
+				range.lineend-=delta;
+				range.f=range.i;
 			}
-			else if(range.i<linecount&&linecount<range.f)//erase [linestart+i, lineend[
-			{
-				erased=true;
-				delta=linecount-range.i;
-				data.push_back(ActionFragment(range.linestart+range.i, text->c_str()+range.linestart+range.i, delta));
-				text->erase(text->begin()+range.linestart+range.i, text->begin()+range.lineend);
-			}
-			cumulative_delta+=delta;
-			range.lineend-=delta;
-			range.f=range.i;
 		}
-	}
-	if(erased)
-	{
-		history->push_back(HistoryAction(ACTION_ERASE_RECT_SELECTION, std::move(data), cur->scx, cur->ccx, cur->scy, cur->ccy));
-		++*histpos;
+		if(erased)
+		{
+			history->push_back(HistoryAction(ACTION_ERASE_RECT_SELECTION, std::move(data), cur->scx, cur->ccx, cur->scy, cur->ccy));
+			++*histpos;
+		}
+		cur->ccx=cur->scx=minimum(cur->ccx, cur->scx);
 	}
 	
-	cur->ccx=cur->scx=minimum(cur->ccx, cur->scx);
 	if(len>0)													//3) insert text
 	{
+		int max_px_change=0;
 		if(padded||erased||!hist_cont||*histpos<0||ACTION(*histpos).type!=ACTION_INSERT_RECT||ACTION(*histpos).data.size()!=ranges.size())
 		{
 			for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
 			{
 				auto &range=ranges[k];
 				range.linestart+=cumulative_delta;
+
 				text->insert(text->begin()+range.linestart+range.i, a, a+len);
+
+				int width1=calc_width(0, 0, text->c_str()+range.linestart, range.i, 0, 1);
+				int pxchange=calc_width(width1, 0, text->c_str()+range.linestart+range.i, len, 0, 1);
+				if(max_px_change<pxchange)
+					max_px_change=pxchange;
+				//int width2=calc_width(0, 0, text->c_str()+range.linestart, range.i+len-range.linestart, 0, 1);
+				//if(maxwidth<width2-width1)
+				//	maxwidth=width2-width1;
 
 				data.push_back(ActionFragment(range.linestart+range.i, a, len));
 				cumulative_delta+=len;
@@ -1190,7 +1218,13 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 				auto &range=ranges[k];
 				range.linestart+=cumulative_delta;
 				h.data[k].idx+=cumulative_delta;
+
 				text->insert(text->begin()+range.linestart+range.i, a, a+len);
+				
+				int width1=calc_width(0, 0, text->c_str()+range.linestart, range.i, 0, 1);
+				int pxchange=calc_width(width1, 0, text->c_str()+range.linestart+range.i, len, 0, 1);
+				if(max_px_change<pxchange)
+					max_px_change=pxchange;
 
 				auto &dk=h.data[k];
 				dk.str.insert(dk.str.end(), a, a+len);
@@ -1198,7 +1232,10 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 				range.lineend+=cumulative_delta;
 			}
 		}
-		cur->ccx=cur->scx+=len;
+		int idx_change=max_px_change/dx;
+		cur->ccx+=idx_change;//ccx & scx can be different here in case of indent
+		cur->scx+=idx_change;
+		//cur->ccx=cur->scx+=len;//X  character units, not idx
 	}
 	hist_cont=true;
 	dimensions_known=false;
@@ -1207,7 +1244,6 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len)//ranges are up
 }
 void				text_replace(int i, int f, const char *a, int len)
 {
-	//set_modified();
 	history->resize(*histpos+1);
 	history->push_back(HistoryAction(ACTION_ERASE_SELECTION, i, text->c_str()+i, f-i, cur->cursor, cur->selcur));
 
@@ -1226,7 +1262,6 @@ void				text_replace(int i, int f, const char *a, int len)
 }
 void				text_insert(int i, const char *a, int len)
 {
-	//set_modified();
 	text->insert(text->begin()+i, a, a+len);
 
 	++*histpos;
@@ -1243,7 +1278,6 @@ void				text_insert(int i, const char *a, int len)
 }
 void				text_erase(int i, int f)
 {
-	//set_modified();
 	++*histpos;
 	history->resize(*histpos);
 	history->push_back(HistoryAction(f-i>2?ACTION_ERASE_SELECTION:ACTION_ERASE, i, text->c_str()+i, f-i, cur->cursor, cur->selcur));
@@ -1260,7 +1294,6 @@ void				text_erase(int i, int f)
 }
 void				text_insert1(int i, char c)
 {
-	//set_modified();
 	text->insert(text->begin()+i, c);
 
 	if(!hist_cont||c=='\n'||*histpos<0||ACTION(*histpos).type!=ACTION_INSERT)
@@ -1284,7 +1317,6 @@ void				text_erase1_bksp(int i)
 {
 	if(i<1)
 		return;
-	//set_modified();
 	if(!hist_cont||*histpos<0||ACTION(*histpos).type!=ACTION_ERASE)
 	{
 		++*histpos;
@@ -1311,7 +1343,6 @@ void				text_erase1_del(int i)
 {
 	if(i>=(int)text->size())
 		return;
-	//set_modified();
 	if(!hist_cont||*histpos<0||ACTION(*histpos).type!=ACTION_ERASE)
 	{
 		++*histpos;
@@ -1330,6 +1361,16 @@ void				text_erase1_del(int i)
 	wnd_to_cursor=true;
 	set_title();
 	//++total_action_count;
+}
+void				text_indent(int i, int f)
+{
+	for(int k=f;k>i;--k)
+	{
+		if(AT(k-1)=='\n')
+		{
+			text->insert(text->begin(), '\t');
+		}
+	}
 }
 
 char				group_char(char c)
@@ -1995,12 +2036,9 @@ void				wnd_on_render()
 int					ask_to_save(int tab_idx)
 {
 	auto &f=openfiles[tab_idx];
-	int printed=0;
-	if(filename->size())
-		printed=sprintf_s(g_buf, g_buf_size, "Save changes to \'%s\'?", f.m_filename.c_str());
-	else
-		printed=sprintf_s(g_buf, g_buf_size, "Save changes to \'Untitled %d\'?", f.m_untitled_idx+1);
-	return messagebox_yesnocancel(g_buf, printed);
+	if(f.m_filename.size())
+		return messagebox_yesnocancel("Teletext", "Save changes to \'%s\'?", f.m_filename.c_str());
+	return messagebox_yesnocancel("Teletext", "Save changes to \'Untitled %d\'?", f.m_untitled_idx+1);
 }
 bool				close_tab(int tab_idx)//returns true if tab got closed
 {
@@ -2135,7 +2173,7 @@ bool				wnd_on_zoomout()
 	}
 	return false;
 }
-inline void			lbutton_down_text()
+void				lbutton_down_text()
 {
 	if(is_ctrl_down())//select word
 	{
@@ -2425,11 +2463,17 @@ bool				wnd_on_save(bool save_as)
 	else
 		save_text_file(filename->c_str(), *text);
 	set_title();
+	openfiles[current_file].m_histpos_saved=openfiles[current_file].m_histpos;
 	return true;
 }
 bool				wnd_on_clear_hist()
 {
-	hist_clear();//TODO: inline
+	if(!messagebox_okcancel("Teletext", "Are you sure you want to clear the undo/redo history?"))
+	{
+		*histpos=-1;
+		history->clear();
+		set_title();
+	}
 	return true;
 }
 bool				wnd_on_undo()
@@ -2475,10 +2519,11 @@ bool				wnd_on_copy()
 	else if(cur->cursor!=cur->selcur)
 	{
 		int start, end;
-		if(cur->selcur<cur->cursor)
-			start=cur->selcur, end=cur->cursor;
-		else
-			start=cur->cursor, end=cur->selcur;
+		cur->get_selection(start, end);
+		//if(cur->selcur<cur->cursor)
+		//	start=cur->selcur, end=cur->cursor;
+		//else
+		//	start=cur->cursor, end=cur->selcur;
 		copy_to_clipboard_c(text->c_str()+start, end-start);
 	}
 	return false;
@@ -2499,10 +2544,11 @@ bool				wnd_on_paste()
 	else if(cur->cursor!=cur->selcur)
 	{
 		int start, end;
-		if(cur->selcur<cur->cursor)
-			start=cur->selcur, end=cur->cursor;
-		else
-			start=cur->cursor, end=cur->selcur;
+		cur->get_selection(start, end);
+		//if(cur->selcur<cur->cursor)
+		//	start=cur->selcur, end=cur->cursor;
+		//else
+		//	start=cur->cursor, end=cur->selcur;
 		text_replace(start, end, str, len);
 	}
 	else
@@ -2630,10 +2676,11 @@ bool				wnd_on_deletechar()
 	else if(cur->cursor!=cur->selcur)
 	{
 		int start, end;
-		if(cur->selcur<cur->cursor)
-			start=cur->selcur, end=cur->cursor;
-		else
-			start=cur->cursor, end=cur->selcur;
+		cur->get_selection(start, end);
+		//if(cur->selcur<cur->cursor)
+		//	start=cur->selcur, end=cur->cursor;
+		//else
+		//	start=cur->cursor, end=cur->selcur;
 		text_erase(start, end);
 	}
 	else
@@ -2660,10 +2707,11 @@ bool				wnd_on_backspace()
 	else if(cur->cursor!=cur->selcur)
 	{
 		int start, end;
-		if(cur->selcur<cur->cursor)
-			start=cur->selcur, end=cur->cursor;
-		else
-			start=cur->cursor, end=cur->selcur;
+		cur->get_selection(start, end);
+		//if(cur->selcur<cur->cursor)
+		//	start=cur->selcur, end=cur->cursor;
+		//else
+		//	start=cur->cursor, end=cur->selcur;
 		text_erase(start, end);
 	}
 	else
@@ -2777,15 +2825,42 @@ bool				wnd_on_type(char character)
 	{
 		Ranges ranges;
 		calc_ranges(ranges);
-		text_replace_rect(ranges, &character, 1);
+	/*	if(character=='\t'&&cur->ccy!=cur->scy)//indent text
+			text_indent_rect(ranges);
+		//{
+		//	for(int k=0;k<ranges.size();++k)
+		//		ranges[k].f=ranges[k].i;
+		//}
+		else
+			text_replace_rect(ranges, &character, 1);//*/
+		text_replace_rect(ranges, &character, 1, character=='\t');
 	}
 	else if(cur->cursor!=cur->selcur)
 	{
 		int start, end;
-		if(cur->selcur<cur->cursor)
-			start=cur->selcur, end=cur->cursor;
-		else
-			start=cur->cursor, end=cur->selcur;
+		cur->get_selection(start, end);
+		//if(cur->selcur<cur->cursor)
+		//	start=cur->selcur, end=cur->cursor;
+		//else
+		//	start=cur->cursor, end=cur->selcur;
+		if(character=='\t')//indent text
+		{
+			int line1=count_lines(0, start), line2=line1+count_lines(start, end);
+			if(line1!=line2)
+			{
+				Ranges ranges;
+				//auto r=cur->get_rectsel_raw();
+				cur->set_rectsel(0, 0, line1, line2);
+				calc_ranges(ranges);
+				//cur->set_rectsel(r);
+				text_replace_rect(ranges, &character, 1, true);
+				if(cur->selcur<cur->cursor)
+					++cur->selcur, cur->cursor+=line2-line1+1;
+				else
+					++cur->cursor, cur->selcur+=line2-line1+1;
+				return true;
+			}
+		}
 		text_replace(start, end, &character, 1);
 	}
 	else
@@ -2859,38 +2934,6 @@ bool				wnd_on_closetab()
 		return true;
 	}
 	return false;
-/*	if(tabs_ismodified(current_file))
-	{
-		switch(ask_to_save(current_file))
-		{
-		case 0://yes
-			{
-				auto str=save_file_dialog();
-				if(str&&save_text_file(str, *text))
-				{
-					*filename=str;
-					set_title();
-				}
-			}
-			//openfiles.erase(openfiles.begin()+current_file);
-			break;
-		case 1://no
-			//openfiles.erase(openfiles.begin()+current_file);
-			//tabs_switchto(openfiles.size()-1);
-			break;
-		case 2://cancel
-			return false;
-		}
-	}
-	if(filename->size())
-		closedfiles.push_back(ClosedFile(current_file, *filename));
-	openfiles.erase(openfiles.begin()+current_file);
-	tabbar_calc_positions();
-	if(current_file>openfiles.size()-1)
-		current_file=openfiles.size()-1;
-	tabs_switchto(current_file);
-	tabbar_scroll_to(current_file);
-	return true;//*/
 }
 bool				wnd_on_next_tab()
 {

@@ -436,16 +436,50 @@ void				console_pause()
 	char c=0;
 	scanf_s("%c", &c);
 }
-void				messagebox(const char *title, const char *format, ...)
+static int			format_utf8_message(const char *title, const char *format, char *args)//returns idx of title in g_wbuf
 {
-	int len=vsprintf_s(g_buf, g_buf_size, format, (char*)(&format+1));
+	int len=vsprintf_s(g_buf, g_buf_size, format, args);
 	len=MultiByteToWideChar(CP_UTF8, 0, g_buf, len, g_wbuf, g_buf_size);	SYS_ASSERT(len);
 	g_wbuf[len]='\0';
 	++len;
 	int len2=MultiByteToWideChar(CP_UTF8, 0, title, strlen(title), g_wbuf+len, g_buf_size-len);	SYS_ASSERT(len2);
 	g_wbuf[len+len2]='\0';
+	return len;
+}
+void				messagebox(const char *title, const char *format, ...)
+{
+	int len=format_utf8_message(title, format, (char*)(&format+1));
 	MessageBoxW(ghWnd, g_wbuf, g_wbuf+len, MB_OK);
-	//MessageBoxA(ghWnd, g_buf, title, MB_OK);
+}
+int					messagebox_okcancel(const char *title, const char *format, ...)
+{
+	int len=format_utf8_message(title, format, (char*)(&format+1));
+	int result=MessageBoxW(ghWnd, g_wbuf, g_wbuf+len, MB_OKCANCEL);
+	switch(result)
+	{
+	case IDOK:		return 0;
+	case IDCANCEL:	return 1;
+	}
+	return 1;
+}
+int					messagebox_yesnocancel(const char *title, const char *format, ...)
+{
+	int len=format_utf8_message(title, format, (char*)(&format+1));
+	//va_list args;
+	//va_start(args, format);
+	//int len=vsprintf_s(g_buf, g_buf_size, format, args);
+	//va_end(args);
+	//len=MultiByteToWideChar(CP_UTF8, 0, g_buf, len, g_wbuf, g_buf_size);	SYS_ASSERT(len);
+	//g_wbuf[len]='\0';
+	//++len;
+	int result=MessageBoxW(ghWnd, g_wbuf, g_wbuf+len, MB_YESNOCANCEL);
+	switch(result)
+	{
+	case IDYES:		return 0;
+	case IDNO:		return 1;
+	case IDCANCEL:	return 2;
+	}
+	return 2;
 }
 void				copy_to_clipboard_c(const char *a, int size)//size not including null terminator
 {
@@ -639,25 +673,6 @@ bool				save_text_file(const char *filename, std::string &str)
 	fwrite(str.c_str(), 1, str.size(), file);
 	fclose(file);
 	return true;
-}
-int					messagebox_yesnocancel(const char *msg, int msg_len)
-{
-	//int len=0;
-	//if(filename.size())
-	//	len=sprintf_s(g_buf, g_buf_size, "Save changes to \'%s\'?", filename.c_str());
-	//else
-	//	len=sprintf_s(g_buf, g_buf_size, "Save changes to \'Untitled\'?");
-	int len=MultiByteToWideChar(CP_UTF8, 0, msg, msg_len, g_wbuf, g_buf_size);	SYS_ASSERT(len);
-	g_wbuf[len]='\0';
-	++len;
-	int result=MessageBoxW(ghWnd, g_wbuf, L"Teletext", MB_YESNOCANCEL);
-	switch(result)
-	{
-	case IDYES:		return 0;
-	case IDNO:		return 1;
-	case IDCANCEL:	return 2;
-	}
-	return -1;
 }
 
 static bool			mouse_captured=false;

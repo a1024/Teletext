@@ -70,6 +70,73 @@ void				messagebox(const char *title, const char *format, ...)
 	va_end(args);
 	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, title, g_buf, window);
 }
+int					messagebox_okcancel(const char *title, const char *format, ...)
+{
+	va_list args;
+	va_start(args, format);
+	int len=vsnprintf(g_buf, g_buf_size, format, args);
+	va_end(args);
+	const SDL_MessageBoxButtonData buttons[]=
+	{
+		{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 0, "OK"},
+		{SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 1, "Cancel"},
+	};
+	SDL_MessageBoxData data=
+	{
+		SDL_MESSAGEBOX_INFORMATION,//.flags
+		nullptr,//.window
+		title,//.title
+		g_buf,//.message
+		SDL_arraysize(buttons),//.numbuttons
+		buttons,//.buttons
+		nullptr,
+	//	&colorScheme,//.colorScheme
+	};
+	int choice=0;
+	int success=SDL_ShowMessageBox(&data, &choice);	SDL_ASSERT(success>=0);
+	if(choice==-1)
+		choice=1;
+	return choice;
+}
+int					messagebox_yesnocancel(const char *title, const char *format, ...)
+{
+	va_list args;
+	va_start(args, format);
+	int len=vsnprintf(g_buf, g_buf_size, format, args);
+	va_end(args);
+	const SDL_MessageBoxButtonData buttons[]=
+	{
+		{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 0, "Yes"},
+		{0, 1, "No" },
+		{SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 2, "Cancel"},
+	};
+	//const SDL_MessageBoxColorScheme colorScheme=
+	//{
+	//	{	//.r, .g, .b
+	//		{255,   0,   0},//[SDL_MESSAGEBOX_COLOR_BACKGROUND]
+	//		{  0, 255,   0},//[SDL_MESSAGEBOX_COLOR_TEXT]
+	//		{255, 255,   0},//[SDL_MESSAGEBOX_COLOR_BUTTON_BORDER]
+	//		{  0,   0, 255},//[SDL_MESSAGEBOX_COLOR_BUTTON_BACKGROUND]
+	//		{255,   0, 255},//[SDL_MESSAGEBOX_COLOR_BUTTON_SELECTED]
+	//	}
+	//};
+	SDL_MessageBoxData data=
+	{
+		SDL_MESSAGEBOX_INFORMATION,//.flags
+		nullptr,//.window
+		title,//.title
+		g_buf,//.message
+		SDL_arraysize(buttons),//.numbuttons
+		buttons,//.buttons
+		nullptr,
+	//	&colorScheme,//.colorScheme
+	};
+	int choice=0;
+	int success=SDL_ShowMessageBox(&data, &choice);	SDL_ASSERT(success>=0);
+	if(choice==-1)
+		choice=2;
+	return choice;
+}
 void				copy_to_clipboard_c(const char *a, int size)//size not including null terminator
 {
 	int fail=SDL_SetClipboardText(a);	SDL_ASSERT(fail>=0);
@@ -227,45 +294,6 @@ bool				save_text_file(const char *filename, std::string &str)
 	fwrite(str.c_str(), 1, str.size(), file);
 	fclose(file);
 	return true;
-}
-int					messagebox_yesnocancel(const char *msg, int msg_len)
-{
-	//if(filename.size())
-	//	snprintf(g_buf, g_buf_size, "Save changes to \'%s\'?", filename.c_str());
-	//else
-	//	snprintf(g_buf, g_buf_size, "Save changes to \'Untitled\'?");
-	const SDL_MessageBoxButtonData buttons[]=
-	{
-		{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 0, "Yes"},
-		{0, 1, "No" },
-		{SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 2, "Cancel"},
-	};
-	//const SDL_MessageBoxColorScheme colorScheme=
-	//{
-	//	{	//.r, .g, .b
-	//		{255,   0,   0},//[SDL_MESSAGEBOX_COLOR_BACKGROUND]
-	//		{  0, 255,   0},//[SDL_MESSAGEBOX_COLOR_TEXT]
-	//		{255, 255,   0},//[SDL_MESSAGEBOX_COLOR_BUTTON_BORDER]
-	//		{  0,   0, 255},//[SDL_MESSAGEBOX_COLOR_BUTTON_BACKGROUND]
-	//		{255,   0, 255},//[SDL_MESSAGEBOX_COLOR_BUTTON_SELECTED]
-	//	}
-	//};
-	SDL_MessageBoxData data=
-	{
-		SDL_MESSAGEBOX_INFORMATION,//.flags
-		nullptr,//.window
-		"Teletext",//.title
-		msg,//.message
-		SDL_arraysize(buttons),//.numbuttons
-		buttons,//.buttons
-		nullptr,
-	//	&colorScheme,//.colorScheme
-	};
-	int choice=0;
-	int success=SDL_ShowMessageBox(&data, &choice);	SDL_ASSERT(success>=0);
-	if(choice==-1)
-		choice=2;
-	return choice;
 }
 static bool			mouse_captured=false;
 void				mouse_capture()
