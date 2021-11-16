@@ -14,6 +14,7 @@ r	g	b	r	g	b
 
 
 TODO:
+- Tab marker
 - Drag selection
 - Split view
 - Compare files

@@ -310,7 +310,7 @@ int					calc_width(int x, int y, const char *msg, int msg_length, int tab_origin
 {
 	if(msg_length<1)
 		return 0;
-	int msg_width=0, width, printable_count=0, tab_width=tab_count*dx*zoom, w2=dx*zoom;
+	int msg_width=0, width, tab_width=tab_count*dx*zoom, w2=dx*zoom;
 	for(int k=0;k<msg_length;++k)
 	{
 		char c=msg[k];
@@ -322,11 +322,7 @@ int					calc_width(int x, int y, const char *msg, int msg_length, int tab_origin
 			width=w2;
 		else
 			width=0;
-		if(width)
-		{
-			msg_width+=width;
-			++printable_count;
-		}
+		msg_width+=width;
 	}
 	return msg_width;
 }
@@ -606,6 +602,7 @@ enum				ActionType
 	ACTION_ERASE,
 	ACTION_ERASE_SELECTION,
 	ACTION_ERASE_RECT_SELECTION,
+	ACTION_INDENT_BACK,
 };
 struct				ActionFragment
 {
@@ -639,26 +636,28 @@ struct				HistoryAction
 {
 	ActionType type;
 	ActionData data;
-	union//initial cursor positions
-	{
-		struct{int scx0, ccx0, scy0, ccy0;};
-		struct{int cursor0, selcur0, z_unused0, z_unused1;};
-	};
-	HistoryAction():type(ACTION_UNINITIALIZED), scx0(0), ccx0(0), scy0(0), ccy0(0){}
-	HistoryAction(HistoryAction const &h):type(h.type), data(h.data), scx0(h.scx0), ccx0(h.ccx0), scy0(h.scy0), ccy0(h.ccy0){}
-	HistoryAction(HistoryAction &&h):type(h.type), data((ActionData&&)h.data), scx0(h.scx0), ccx0(h.ccx0), scy0(h.scy0), ccy0(h.ccy0){}
-	HistoryAction(ActionType type, int idx, const char *a, int len, int cursor0, int selcur0):type(type), cursor0(cursor0), selcur0(selcur0), z_unused0(0), z_unused1(0)//normal editing
+	Cursor cur_before, cur_after;
+	//union//initial cursor positions
+	//{
+	//	struct{int scx0, ccx0, scy0, ccy0;};
+	//	struct{int cursor0, selcur0, z_unused0, z_unused1;};
+	//};
+	HistoryAction():type(ACTION_UNINITIALIZED){}
+	HistoryAction(HistoryAction const &h):type(h.type), data(h.data), cur_before(h.cur_before), cur_after(h.cur_after){}
+	HistoryAction(HistoryAction &&h):type(h.type), data((ActionData&&)h.data), cur_before(h.cur_before), cur_after(h.cur_after){}
+	HistoryAction(ActionType type, int idx, const char *a, int len, Cursor const &cur_before, Cursor const &cur_after):type(type), cur_before(cur_before), cur_after(cur_after)//normal editing
 	{
 		data.push_back(ActionFragment(idx, a, len));
 	}
-	HistoryAction(ActionType type, ActionData &&data, int scx0, int ccx0, int scy0, int ccy0):type(type), data((ActionData&&)data), scx0(scx0), ccx0(ccx0), scy0(scy0), ccy0(ccy0){}//rectangular editing
+	HistoryAction(ActionType type, ActionData &&data, Cursor const &cur_before, Cursor const &cur_after):type(type), data((ActionData&&)data), cur_before(cur_before), cur_after(cur_after){}//rectangular editing
 	HistoryAction& operator=(HistoryAction const &h)
 	{
 		if(&h!=this)
 		{
 			type=h.type;
 			data=h.data;
-			scx0=h.scx0, ccx0=h.ccx0, scy0=h.scy0, ccy0=h.ccy0;
+			cur_before=h.cur_before;
+			cur_after=h.cur_after;
 		}
 		return *this;
 	}
@@ -668,7 +667,8 @@ struct				HistoryAction
 		{
 			type=h.type;
 			data=std::move(h.data);
-			scx0=h.scx0, ccx0=h.ccx0, scy0=h.scy0, ccy0=h.ccy0;
+			cur_before=h.cur_before;
+			cur_after=h.cur_after;
 		}
 		return *this;
 	}
@@ -961,7 +961,7 @@ void				hist_undo()//ctrl z
 		{
 			auto &frag=action.data[0];
 			text->erase(text->begin()+frag.idx, text->begin()+frag.idx+frag.str.size());
-			cur->rectsel=false;
+			//cur->rectsel=false;
 		}
 		break;
 	case ACTION_INSERT_RECT:
@@ -970,38 +970,40 @@ void				hist_undo()//ctrl z
 			auto &frag=action.data[k];
 			text->erase(text->begin()+frag.idx, text->begin()+frag.idx+frag.str.size());
 		}
-		cur->rectsel=true;
+		//cur->rectsel=true;
 		break;
 	case ACTION_ERASE:
 		{
 			auto &frag=action.data[0];
 			text->insert(text->begin()+frag.idx, frag.str.begin(), frag.str.end());
-			cur->rectsel=false;
+		//	cur->rectsel=false;
 		}
 		break;
 	case ACTION_ERASE_SELECTION:
 		{
 			auto &frag=action.data[0];
 			text->insert(text->begin()+frag.idx, frag.str.begin(), frag.str.end());
-			cur->rectsel=false;
+		//	cur->rectsel=false;
 		}
 		break;
 	case ACTION_ERASE_RECT_SELECTION:
+	case ACTION_INDENT_BACK:
 		for(int k=action.data.size()-1;k>=0;--k)
 		{
 			auto &frag=action.data[k];
 			text->insert(text->begin()+frag.idx, frag.str.begin(), frag.str.end());
 		}
-		cur->rectsel=true;
+		//cur->rectsel=true;
 		break;
 	}
-	if(cur->rectsel)
-		cur->scx=action.scx0, cur->scy=action.scy0, cur->ccx=action.ccx0, cur->ccy=action.ccy0;//set selection rect
-	else
-	{
-		cur->cursor=action.cursor0, cur->selcur=action.selcur0;
-		calc_cursor_coords(0);
-	}
+	*cur=action.cur_before;
+	//if(cur->rectsel)
+	//	cur->scx=action.scx0, cur->scy=action.scy0, cur->ccx=action.ccx0, cur->ccy=action.ccy0;//set selection rect
+	//else
+	//{
+	//	cur->cursor=action.cursor0, cur->selcur=action.selcur0;
+	//	calc_cursor_coords(0);
+	//}
 
 	hist_cont=false;
 	dimensions_known=false;
@@ -1020,8 +1022,8 @@ void				hist_redo()//ctrl y
 		{
 			auto &frag=action.data[0];
 			text->insert(text->begin()+frag.idx, frag.str.begin(), frag.str.end());
-			cur->cursor=cur->selcur=frag.idx+frag.str.size();
-			cur->rectsel=false;
+			//cur->cursor=cur->selcur=frag.idx+frag.str.size();
+			//cur->rectsel=false;
 		}
 		break;
 	case ACTION_INSERT_RECT:
@@ -1034,35 +1036,40 @@ void				hist_redo()//ctrl y
 				if(extent<(int)frag.str.size())
 					extent=frag.str.size();
 			}
-			int minx=minimum(action.scx0, action.ccx0);
-			cur->scx=minx+extent, cur->scy=action.scy0, cur->ccx=minx+extent, cur->ccy=action.ccy0;
+			//int minx=minimum(action.scx0, action.ccx0);
+			//cur->scx=minx+extent, cur->scy=action.scy0, cur->ccx=minx+extent, cur->ccy=action.ccy0;
+			//cur->rectsel=true;
 		}
-		cur->rectsel=true;
 		break;
 	case ACTION_ERASE:
 	case ACTION_ERASE_SELECTION:
 		{
 			auto &frag=action.data[0];
 			text->erase(text->begin()+frag.idx, text->begin()+frag.idx+frag.str.size());
-			cur->cursor=cur->selcur=frag.idx;
-			cur->rectsel=false;
+			//cur->cursor=cur->selcur=frag.idx;
+			//cur->rectsel=false;
 		}
 		break;
 	case ACTION_ERASE_RECT_SELECTION:
+	case ACTION_INDENT_BACK:
 		{
 			for(int k=0;k<(int)action.data.size();++k)
 			{
 				auto &frag=action.data[k];
 				text->erase(text->begin()+frag.idx, text->begin()+frag.idx+frag.str.size());
 			}
-			int minx=minimum(action.scx0, action.ccx0);
-			cur->scx=minx, cur->scy=action.scy0, cur->ccx=minx, cur->ccy=action.ccy0;
-			cur->rectsel=true;
+			//int minx=minimum(action.scx0, action.ccx0);
+			//if(action.type==ACTION_ERASE_RECT_SELECTION&&action.data.size())
+			//	minx-=action.data[0].str.size();
+			//cur->scx=minx, cur->scy=action.scy0;
+			//cur->ccx=minx, cur->ccy=action.ccy0;
+			//cur->rectsel=true;
 		}
 		break;
 	}
-	if(!cur->rectsel)
-		calc_cursor_coords(0);
+	*cur=action.cur_after;
+	//if(!cur->rectsel)
+	//	calc_cursor_coords(0);
 
 	hist_cont=false;
 	dimensions_known=false;
@@ -1110,11 +1117,17 @@ int					calc_ranges(Ranges &ranges)
 	}
 	return extent;
 }
-void				text_replace_rect(Ranges &ranges, const char *a, int len, bool indent=false)//ranges are updated
+struct				WhitespaceInfo
+{
+	int start_idx, end_idx, width1, ws_width, rem_c;
+	void set(int start_idx, int end_idx, int width1, int ws_width, int rem_c){this->start_idx=start_idx, this->end_idx=end_idx, this->width1=width1, this->ws_width=ws_width, this->rem_c=rem_c;}
+};
+void				text_replace_rect(Ranges &ranges, const char *a, int len, int indent=0)//ranges are updated,	indent: 0: disabled, 1: forward, 2: backward
 {
 	history->resize(*histpos+1);
 	ActionData data;
 	bool padded=false, erased=false;
+	Cursor cur0=*cur;
 	for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)	//1) pad selection
 	{
 		auto &range=ranges[k];
@@ -1139,8 +1152,9 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len, bool indent=fa
 	}
 	if(padded)
 	{
-		history->push_back(HistoryAction(ACTION_INSERT_RECT, std::move(data), cur->scx, cur->ccx, cur->scy, cur->ccy));
+		history->push_back(HistoryAction(ACTION_INSERT_RECT, std::move(data), cur0, *cur));
 		++*histpos;
+		cur0=*cur;
 	}
 	if(!indent)
 	{
@@ -1175,67 +1189,154 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len, bool indent=fa
 				range.f=range.i;
 			}
 		}
+		cur->ccx=cur->scx=minimum(cur->ccx, cur->scx);
 		if(erased)
 		{
-			history->push_back(HistoryAction(ACTION_ERASE_RECT_SELECTION, std::move(data), cur->scx, cur->ccx, cur->scy, cur->ccy));
+			history->push_back(HistoryAction(ACTION_ERASE_RECT_SELECTION, std::move(data), cur0, *cur));
 			++*histpos;
 		}
-		cur->ccx=cur->scx=minimum(cur->ccx, cur->scx);
+		cur0=*cur;
 	}
 	
 	if(len>0)													//3) insert text
 	{
-		int max_px_change=0;
-		if(padded||erased||!hist_cont||*histpos<0||ACTION(*histpos).type!=ACTION_INSERT_RECT||ACTION(*histpos).data.size()!=ranges.size())
+		if(indent==2)//indent backwards: remove tab before selection
 		{
-			for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
+			unsigned min_ws=-1, max_ws=0, min_rem=-1;
+			std::vector<WhitespaceInfo> ws_infos(ranges.size());
+			for(int k=0;k<(int)ranges.size();++k)//find smallest whitespace before selection
 			{
 				auto &range=ranges[k];
-				range.linestart+=cumulative_delta;
+				int end=range.linestart+range.i, start=end;
+				for(;start>0&&(AT(start-1)=='\t'||AT(start-1)==' ');--start);
+				int width1=calc_width(0, 0, text->c_str()+range.linestart, start-range.linestart, 0, 1);
+				unsigned whitespace_px=calc_width(width1, 0, text->c_str()+start, end-start, 0, 1);
 
-				text->insert(text->begin()+range.linestart+range.i, a, a+len);
+				//int rem_c=minimum(mod((width1+whitespace_px)/dx, tab_count), whitespace_px/dx);
+				int remove_c=(width1+whitespace_px)/dx;
+				int remainder=mod(remove_c, tab_count);
+				if(!remainder)
+					remove_c=tab_count;
+				else
+					remove_c=remainder;
+				if(remove_c>(int)whitespace_px/dx)
+					remove_c=0;
 
-				int width1=calc_width(0, 0, text->c_str()+range.linestart, range.i, 0, 1);
-				int pxchange=calc_width(width1, 0, text->c_str()+range.linestart+range.i, len, 0, 1);
-				if(max_px_change<pxchange)
-					max_px_change=pxchange;
-				//int width2=calc_width(0, 0, text->c_str()+range.linestart, range.i+len-range.linestart, 0, 1);
-				//if(maxwidth<width2-width1)
-				//	maxwidth=width2-width1;
-
-				data.push_back(ActionFragment(range.linestart+range.i, a, len));
-				cumulative_delta+=len;
-				range.lineend+=cumulative_delta;
+				ws_infos[k].set(start, end, width1, whitespace_px, remove_c);
+				if(min_ws>whitespace_px)
+					min_ws=whitespace_px;
+				if(max_ws<whitespace_px)
+					max_ws=whitespace_px;
+				if(min_rem>(unsigned)remove_c)
+					min_rem=remove_c;
 			}
-			history->push_back(HistoryAction(ACTION_INSERT_RECT, std::move(data), cur->scx, cur->ccx, cur->scy, cur->ccy));
-			++*histpos;
-		}
-		else
-		{
-			auto &h=ACTION(*histpos);
-			for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
+			if((int)min_rem>0)//if there is anything to remove
 			{
-				auto &range=ranges[k];
-				range.linestart+=cumulative_delta;
-				h.data[k].idx+=cumulative_delta;
+				for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
+				{
+					auto &range=ranges[k];
+					auto &wsk=ws_infos[k];
+					range.linestart-=cumulative_delta;
 
-				text->insert(text->begin()+range.linestart+range.i, a, a+len);
+					int start=0, rem_idx=0;
+					int idx=range.linestart+range.i;
+					if(idx>0)
+					{
+						if(AT(idx-1)=='\t')
+							start=idx-1, rem_idx=1;
+						else if(AT(idx-1)==' ')
+							start=idx-wsk.rem_c, rem_idx=wsk.rem_c;
+					}
+					if(rem_idx)
+					{
+						data.push_back(ActionFragment(start, text->c_str()+start, rem_idx));
+						text->erase(start, rem_idx);
+						cumulative_delta+=rem_idx;
+					}
+				}
+				cur->ccx-=min_rem;//ccx & scx can be different here in case of indent
+				cur->scx-=min_rem;
+				history->push_back(HistoryAction(ACTION_ERASE_RECT_SELECTION, std::move(data), cur0, *cur));
+				++*histpos;
+			/*	for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
+				{
+					auto &range=ranges[k];
+					range.linestart+=cumulative_delta;
+
+					int idx=range.linestart+range.i-1;
+					if(idx>=0&&AT(idx)=='\t')
+					{
+						range.linestart+=cumulative_delta;
+						int width1=calc_width(0, 0, text->c_str()+range.linestart, range.i-1, 0, 1);
+						int pxchange=calc_width(width1, 0, text->c_str()+range.linestart+range.i-1, 1, 0, 1);
+						if(max_px_change<pxchange)
+							max_px_change=pxchange;
+
+						data.push_back(ActionFragment(idx, text->c_str()+idx, 1));
+
+						text->erase(idx, 1);
+
+						--cumulative_delta;
+						range.lineend+=cumulative_delta;
+					}
+				}//*/
+			}
+		}
+		else//insert text or indent
+		{
+			int max_px_change=0;
+			if(padded||erased||!hist_cont||*histpos<0||ACTION(*histpos).type!=ACTION_INSERT_RECT||ACTION(*histpos).data.size()!=ranges.size())//new history
+			{
+				for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
+				{
+					auto &range=ranges[k];
+					range.linestart+=cumulative_delta;
+
+					text->insert(text->begin()+range.linestart+range.i, a, a+len);
+
+					int width1=calc_width(0, 0, text->c_str()+range.linestart, range.i, 0, 1);
+					int pxchange=calc_width(width1, 0, text->c_str()+range.linestart+range.i, len, 0, 1);
+					if(max_px_change<pxchange)
+						max_px_change=pxchange;
+					//int width2=calc_width(0, 0, text->c_str()+range.linestart, range.i+len-range.linestart, 0, 1);
+					//if(maxwidth<width2-width1)
+					//	maxwidth=width2-width1;
+
+					data.push_back(ActionFragment(range.linestart+range.i, a, len));
+					cumulative_delta+=len;
+					range.lineend+=cumulative_delta;
+				}
+				history->push_back(HistoryAction(ACTION_INSERT_RECT, std::move(data), cur0, *cur));
+				++*histpos;
+			}
+			else//continue history
+			{
+				auto &h=ACTION(*histpos);
+				for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
+				{
+					auto &range=ranges[k];
+					range.linestart+=cumulative_delta;
+					h.data[k].idx+=cumulative_delta;
+
+					text->insert(text->begin()+range.linestart+range.i, a, a+len);
 				
-				int width1=calc_width(0, 0, text->c_str()+range.linestart, range.i, 0, 1);
-				int pxchange=calc_width(width1, 0, text->c_str()+range.linestart+range.i, len, 0, 1);
-				if(max_px_change<pxchange)
-					max_px_change=pxchange;
+					int width1=calc_width(0, 0, text->c_str()+range.linestart, range.i, 0, 1);
+					int pxchange=calc_width(width1, 0, text->c_str()+range.linestart+range.i, len, 0, 1);
+					if(max_px_change<pxchange)
+						max_px_change=pxchange;
 
-				auto &dk=h.data[k];
-				dk.str.insert(dk.str.end(), a, a+len);
-				cumulative_delta+=len;
-				range.lineend+=cumulative_delta;
+					auto &dk=h.data[k];
+					dk.str.insert(dk.str.end(), a, a+len);
+					cumulative_delta+=len;
+					range.lineend+=cumulative_delta;
+				}
 			}
+			int idx_change=max_px_change/dx;
+			cur->ccx+=idx_change;//ccx & scx can be different here in case of indent
+			cur->scx+=idx_change;
+			//cur->ccx=cur->scx+=len;//X  character units, not idx
+			history->back().cur_after=*cur;
 		}
-		int idx_change=max_px_change/dx;
-		cur->ccx+=idx_change;//ccx & scx can be different here in case of indent
-		cur->scx+=idx_change;
-		//cur->ccx=cur->scx+=len;//X  character units, not idx
 	}
 	hist_cont=true;
 	dimensions_known=false;
@@ -1244,133 +1345,140 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len, bool indent=fa
 }
 void				text_replace(int i, int f, const char *a, int len)
 {
+	auto cur0=*cur;
+	cur->cursor=cur->selcur=i;
+
 	history->resize(*histpos+1);
-	history->push_back(HistoryAction(ACTION_ERASE_SELECTION, i, text->c_str()+i, f-i, cur->cursor, cur->selcur));
+	history->push_back(HistoryAction(ACTION_ERASE_SELECTION, i, text->c_str()+i, f-i, cur0, *cur));
+	cur0=*cur;
 
 	text->replace(text->begin()+i, text->begin()+f, a, a+len);
-
-	history->push_back(HistoryAction(ACTION_INSERT, i, text->c_str()+i, len, i, i));
-	*histpos+=2;
 	
 	cur->cursor=cur->selcur=i+len;
 	calc_cursor_coords(0);
+	history->push_back(HistoryAction(ACTION_INSERT, i, text->c_str()+i, len, cur0, *cur));
+	*histpos+=2;
+	
 	hist_cont=false;
 	dimensions_known=false;
 	wnd_to_cursor=true;
 	set_title();
-	//++total_action_count;
 }
 void				text_insert(int i, const char *a, int len)
 {
 	text->insert(text->begin()+i, a, a+len);
 
-	++*histpos;
-	history->resize(*histpos);
-	history->push_back(HistoryAction(ACTION_INSERT, i, text->c_str()+i, len, cur->cursor, cur->selcur));
-
+	auto cur0=*cur;
 	cur->cursor=cur->selcur=i+len;
 	calc_cursor_coords(0);
+
+	++*histpos;
+	history->resize(*histpos);
+	history->push_back(HistoryAction(ACTION_INSERT, i, text->c_str()+i, len, cur0, *cur));
+
 	hist_cont=false;
 	dimensions_known=false;
 	wnd_to_cursor=true;
 	set_title();
-	//++total_action_count;
 }
 void				text_erase(int i, int f)
 {
+	auto cur0=*cur;
+	cur->cursor=cur->selcur=i;
+	calc_cursor_coords(0);
+
 	++*histpos;
 	history->resize(*histpos);
-	history->push_back(HistoryAction(f-i>2?ACTION_ERASE_SELECTION:ACTION_ERASE, i, text->c_str()+i, f-i, cur->cursor, cur->selcur));
+	history->push_back(HistoryAction(f-i>2?ACTION_ERASE_SELECTION:ACTION_ERASE, i, text->c_str()+i, f-i, cur0, *cur));
 
 	text->erase(text->begin()+i, text->begin()+f);
 
-	cur->cursor=cur->selcur=i;
-	calc_cursor_coords(0);
 	hist_cont=false;
 	dimensions_known=false;
 	wnd_to_cursor=true;
 	set_title();
-	//++total_action_count;
 }
 void				text_insert1(int i, char c)
 {
 	text->insert(text->begin()+i, c);
+	
+	auto cur0=*cur;
+	cur->cursor=cur->selcur=i+1;
+	calc_cursor_coords(0);
 
 	if(!hist_cont||c=='\n'||*histpos<0||ACTION(*histpos).type!=ACTION_INSERT)
 	{
 		++*histpos;
 		history->resize(*histpos);
-		history->push_back(HistoryAction(ACTION_INSERT, i, text->c_str()+i, 1, cur->cursor, cur->selcur));
+		history->push_back(HistoryAction(ACTION_INSERT, i, text->c_str()+i, 1, cur0, *cur));
 	}
 	else
+	{
 		ACTION(*histpos).data[0].str.push_back(c);
+		history->back().cur_after=*cur;
+	}
 
-	cur->cursor=cur->selcur=i+1;
-	calc_cursor_coords(0);
 	hist_cont=true;
 	dimensions_known=false;
 	wnd_to_cursor=true;
 	set_title();
-	//++total_action_count;
 }
 void				text_erase1_bksp(int i)
 {
 	if(i<1)
 		return;
+	
+	auto cur0=*cur;
+	cur->cursor=cur->selcur=i-1;
+	calc_cursor_coords(0);
+
 	if(!hist_cont||*histpos<0||ACTION(*histpos).type!=ACTION_ERASE)
 	{
 		++*histpos;
 		history->resize(*histpos);
-		history->push_back(HistoryAction(ACTION_ERASE, i-1, text->c_str()+i-1, 1, cur->cursor, cur->selcur));
+		history->push_back(HistoryAction(ACTION_ERASE, i-1, text->c_str()+i-1, 1, cur0, *cur));
 	}
 	else
 	{
 		auto &str=ACTION(*histpos).data[0].str;
 		str.insert(str.begin(), AT(i));
+		history->back().cur_after=*cur;
 	}
 
 	text->erase(text->begin()+i-1);
 
-	cur->cursor=cur->selcur=i-1;
-	calc_cursor_coords(0);
 	hist_cont=true;
 	dimensions_known=false;
 	wnd_to_cursor=true;
 	set_title();
-	//++total_action_count;
 }
 void				text_erase1_del(int i)
 {
 	if(i>=(int)text->size())
 		return;
+	
+	auto cur0=*cur;
+	cur->cursor=cur->selcur=i;
+	calc_cursor_coords(0);
+
 	if(!hist_cont||*histpos<0||ACTION(*histpos).type!=ACTION_ERASE)
 	{
 		++*histpos;
 		history->resize(*histpos);
-		history->push_back(HistoryAction(ACTION_ERASE, i, text->c_str()+i, 1, cur->cursor, cur->selcur));
+		history->push_back(HistoryAction(ACTION_ERASE, i, text->c_str()+i, 1, cur0, *cur));
 	}
 	else
+	{
 		ACTION(*histpos).data[0].str.push_back(AT(i));
+		history->back().cur_after=*cur;
+	}
 
 	text->erase(text->begin()+i);
 	
-	cur->cursor=cur->selcur=i;
-	calc_cursor_coords(0);
 	hist_cont=true;
 	dimensions_known=false;
 	wnd_to_cursor=true;
 	set_title();
-	//++total_action_count;
-}
-void				text_indent(int i, int f)
-{
-	for(int k=f;k>i;--k)
-	{
-		if(AT(k-1)=='\n')
-		{
-			text->insert(text->begin(), '\t');
-		}
-	}
 }
 
 char				group_char(char c)
@@ -2833,7 +2941,7 @@ bool				wnd_on_type(char character)
 		//}
 		else
 			text_replace_rect(ranges, &character, 1);//*/
-		text_replace_rect(ranges, &character, 1, character=='\t');
+		text_replace_rect(ranges, &character, 1, (character=='\t')+is_shift_down());
 	}
 	else if(cur->cursor!=cur->selcur)
 	{
@@ -2853,7 +2961,7 @@ bool				wnd_on_type(char character)
 				cur->set_rectsel(0, 0, line1, line2);
 				calc_ranges(ranges);
 				//cur->set_rectsel(r);
-				text_replace_rect(ranges, &character, 1, true);
+				text_replace_rect(ranges, &character, 1, 1+is_shift_down());
 				if(cur->selcur<cur->cursor)
 					++cur->selcur, cur->cursor+=line2-line1+1;
 				else
