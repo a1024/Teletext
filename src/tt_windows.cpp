@@ -655,9 +655,9 @@ bool				open_text_file(const char *filename, std::string &str)
 	int bytesize=ftell(file);
 	fseek(file, 0, SEEK_SET);
 	str.resize(bytesize);
-	fread(&str[0], 1, bytesize, file);
+	int read=fread(&str[0], 1, bytesize, file);
 	fclose(file);
-	str.resize(strlen(str.c_str()));//remove extra null terminators at the end
+	str.resize(read);
 	return true;
 }
 bool				save_text_file(const char *filename, std::string &str)

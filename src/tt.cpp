@@ -336,7 +336,7 @@ void				inv_calc_width(int x, int y, const char *msg, int msg_length, int tab_or
 			*out_k=0;
 		return;
 	}
-	int msg_width=0, temp_width, printable_count=0, tab_width=tab_count*dx*zoom, w2=dx*zoom, k=0;
+	int msg_width=0, temp_width, printable_count=0, tab_width=tab_count*dx*zoom, dxpx=dx*zoom, k=0;
 	for(;k<msg_length;++k)
 	{
 		char c=msg[k];
@@ -345,7 +345,7 @@ void				inv_calc_width(int x, int y, const char *msg, int msg_length, int tab_or
 		if(c=='\t')
 			temp_width=tab_width-mod(x+msg_width-tab_origin, tab_width), c=' ';
 		else if(c>=32&&c<0xFF)
-			temp_width=w2;
+			temp_width=dxpx;
 		else
 			temp_width=0;
 		if(temp_width)
@@ -363,7 +363,7 @@ void				inv_calc_width(int x, int y, const char *msg, int msg_length, int tab_or
 		}
 	}
 	if(out_cols)
-		*out_cols=msg_width/w2;
+		*out_cols=msg_width/dxpx;
 	if(out_k)
 		*out_k=k;
 }
@@ -568,6 +568,12 @@ struct				Cursor
 	}
 	void set_rectsel(int x1, int x2, int y1, int y2){scx=x1, ccx=x2, scy=y1, ccy=y2;}
 	void set_rectsel(Rect const &r){scx=r.x1, ccx=r.x2, scy=r.y1, ccy=r.y2;}
+	bool selection_exists()
+	{
+		if(rectsel)
+			return ccx!=scx;
+		return cursor!=selcur;
+	}
 };
 short				font_zoom=1;//font pixel size
 int					wpx=0, wpy=0,//window position inside the text buffer, in pixels
@@ -689,9 +695,13 @@ enum				DragType
 	DRAG_VSCROLL,
 	DRAG_HSCROLL,
 	DRAG_TAB,
+	DRAG_MOVE_SELECTION,
+	DRAG_COPY_SELECTION,
 };
 DragType			drag;
 int					drag_tab_idx=0;
+Cursor				drag_cursor;
+//std::vector<std::string> drag_selection;
 
 const int			scrollbarwidth=17;
 struct				Scrollbar
@@ -1122,7 +1132,7 @@ struct				WhitespaceInfo
 	int start_idx, end_idx, width1, ws_width, rem_c;
 	void set(int start_idx, int end_idx, int width1, int ws_width, int rem_c){this->start_idx=start_idx, this->end_idx=end_idx, this->width1=width1, this->ws_width=ws_width, this->rem_c=rem_c;}
 };
-void				text_replace_rect(Ranges &ranges, const char *a, int len, int indent=0)//ranges are updated,	indent: 0: disabled, 1: forward, 2: backward
+void				text_replace_rect(Ranges &ranges, const char *a, int len, int indent=0, std::vector<std::string> *strings=nullptr)//ranges are updated,		indent: 0: disabled, 1: forward, 2: backward
 {
 	history->resize(*histpos+1);
 	ActionData data;
@@ -1198,7 +1208,7 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len, int indent=0)/
 		cur0=*cur;
 	}
 	
-	if(len>0)													//3) insert text
+	if(len>0||strings)													//3) insert text
 	{
 		if(indent==2)//indent backwards: remove tab before selection
 		{
@@ -1292,7 +1302,14 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len, int indent=0)/
 					auto &range=ranges[k];
 					range.linestart+=cumulative_delta;
 
-					text->insert(text->begin()+range.linestart+range.i, a, a+len);
+					if(strings)
+					{
+						auto &str=strings->operator[](k);
+						text->insert(text->begin()+range.linestart+range.i, str.begin(), str.end());
+						len=str.size();
+					}
+					else
+						text->insert(text->begin()+range.linestart+range.i, a, a+len);
 
 					int width1=calc_width(0, 0, text->c_str()+range.linestart, range.i, 0, 1);
 					int pxchange=calc_width(width1, 0, text->c_str()+range.linestart+range.i, len, 0, 1);
@@ -1302,14 +1319,15 @@ void				text_replace_rect(Ranges &ranges, const char *a, int len, int indent=0)/
 					//if(maxwidth<width2-width1)
 					//	maxwidth=width2-width1;
 
-					data.push_back(ActionFragment(range.linestart+range.i, a, len));
+					data.push_back(ActionFragment(range.linestart+range.i, text->c_str()+range.linestart+range.i, len));
+					//data.push_back(ActionFragment(range.linestart+range.i, a, len));
 					cumulative_delta+=len;
 					range.lineend+=cumulative_delta;
 				}
 				history->push_back(HistoryAction(ACTION_INSERT_RECT, std::move(data), cur0, *cur));
 				++*histpos;
 			}
-			else//continue history
+			else if(len)//continue history
 			{
 				auto &h=ACTION(*histpos);
 				for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
@@ -1493,6 +1511,39 @@ char				group_char(char c)
 		return '\n';
 	return c;
 }
+bool				cursor_to_mouse_full(int &idx, int &lineno, int &col, int &linestart)//returns true if mouse hit text
+{
+	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
+	int dxpx=dx*font_zoom, dypx=dy*font_zoom,
+		lineno_mouse=(wpy+mousey)/dypx, lineno2=0;
+	linestart=0;
+	if(lineno_mouse>0)
+	{
+		for(int k=0;k<(int)text->size();++k)
+		{
+			if(AT(k)=='\n')
+			{
+				linestart=k+1, ++lineno2;
+				if(lineno2==lineno_mouse)
+					break;
+			}
+		}
+	}
+	if(lineno2>=0&&lineno2<nlines)
+	{
+		int req_width=wpx+mousex+(dxpx>>1), xpos2=req_width/dxpx;
+		inv_calc_width(-wpx, -wpy, text->c_str()+linestart, text->size()-linestart, -wpx, font_zoom, req_width, &col, &idx);
+
+		lineno=lineno2;
+		if(col<xpos2)//if mousex is beyond the reach of the line
+		{
+			col=xpos2, idx=find_line_end(linestart+idx);
+			return false;
+		}
+		return true;
+	}
+	return false;
+}
 void				cursor_at_mouse()//sets cursor, ccx & *ccy
 {
 	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
@@ -1534,8 +1585,9 @@ bool				cursor_at_mouse_rect(int &xpos, int &ypos)//sets ccx & ccy dummies
 	int d_idx=0;
 	inv_calc_width(-wpx, -wpy, text->c_str()+linestart, text->size()-linestart, -wpx, font_zoom, wpx+mousex+(dxpx>>1), &xpos, &d_idx);
 
-	d_idx=find_line_end(linestart+d_idx);
-	int ncols=calc_width(-wpx, -wpy, text->c_str()+linestart, d_idx-linestart, -wpx, font_zoom)/dxpx;
+	//d_idx=find_line_end(linestart+d_idx);
+	//int ncols=calc_width(-wpx, -wpy, text->c_str()+linestart, d_idx-linestart, -wpx, font_zoom)/dxpx;
+	int ncols=xpos;
 	int xpos2=(wpx+mousex+(dxpx>>1))/dxpx;
 	if(ncols<xpos2)//if mousex is beyond the reach of the line
 		xpos=xpos2;
@@ -1916,6 +1968,8 @@ void				wnd_on_render()
 	//calculate text dimensions & cursor coordinates
 	auto arr=text->c_str();
 	int textlen=text->size();
+	if(drag==DRAG_MOVE_SELECTION||drag==DRAG_COPY_SELECTION)
+		std::swap(*cur, drag_cursor);
 	if(!dimensions_known)
 	{
 		dimensions_known=true;
@@ -2029,27 +2083,26 @@ void				wnd_on_render()
 		}
 		draw_line_i(cpx-wpx, py1-wpy, cpx-wpx, py2+dypx-wpy, 0xFFFFFFFF);//draw cursor
 	}
-	else if(cur->cursor!=cur->selcur)//normal selection
+	else
 	{
 		draw_rectangle_i(x1, x2, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
-		int selstart, selend;
-		if(cur->cursor<cur->selcur)
-			selstart=cur->cursor, selend=cur->selcur;
-		else
-			selstart=cur->selcur, selend=cur->cursor;
+		if(cur->cursor!=cur->selcur)//normal selection
+		{
+			int selstart, selend;
+			if(cur->cursor<cur->selcur)
+				selstart=cur->cursor, selend=cur->selcur;
+			else
+				selstart=cur->selcur, selend=cur->cursor;
 		
-		int x=x1-wpx, y=y1-wpy;
-		print_text(x1-wpx, x, x1-wpx, y, arr, selstart, font_zoom, &x, &y);
-		set_text_colors(colors_selection);
-		print_text(x1-wpx, x, x1-wpx, y, arr+selstart, selend-selstart, font_zoom, &x, &y);
-		set_text_colors(colors_text);
-		print_text(x1-wpx, x, x1-wpx, y, arr+selend, textlen-selend, font_zoom, &x, &y);
-		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
-	}
-	else//no selection
-	{
-		draw_rectangle_i(x1, x2, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
-		print_text(x1-wpx, x1-wpx, x1-wpx, y1-wpy, arr, textlen, font_zoom);
+			int x=x1-wpx, y=y1-wpy;
+			print_text(x1-wpx, x, x1-wpx, y, arr, selstart, font_zoom, &x, &y);
+			set_text_colors(colors_selection);
+			print_text(x1-wpx, x, x1-wpx, y, arr+selstart, selend-selstart, font_zoom, &x, &y);
+			set_text_colors(colors_text);
+			print_text(x1-wpx, x, x1-wpx, y, arr+selend, textlen-selend, font_zoom, &x, &y);
+		}
+		else//no selection
+			print_text(x1-wpx, x1-wpx, x1-wpx, y1-wpy, arr, textlen, font_zoom);
 		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
 	}
 	prof_add("text");
@@ -2078,47 +2131,58 @@ void				wnd_on_render()
 	prof_add("scrollbars");
 
 	set_region_immediate(0, w, 0, h);
-	if(drag==DRAG_TAB)
+	switch(drag)
 	{
-		int marker_size=10;
-		int xtip=0, ytip=0;
-		const char *buf=nullptr;
-		int len=0;
-		int msg_width=tabbar_printname(0, 0, drag_tab_idx, true, true, &buf, &len);
-		switch(tabbar_position)
+	case DRAG_TAB:
 		{
-		case TABBAR_TOP:
-		case TABBAR_BOTTOM:
+			int marker_size=10;
+			int xtip=0, ytip=0;
+			const char *buf=nullptr;
+			int len=0;
+			int msg_width=tabbar_printname(0, 0, drag_tab_idx, true, true, &buf, &len);
+			switch(tabbar_position)
 			{
-				int k=tab_drag_get_h_idx();
-				int xmarker=k?tabbar_tabs[k-1].right:0;
-				int my1, my2;
-				if(tabbar_position==TABBAR_TOP)
-					my1=(dy<<1)+1, my2=my1+marker_size, xtip=mx, ytip=my+20;
-				else
-					my1=h-(dy<<1)-1, my2=my1-marker_size, xtip=mx, ytip=my-dy-20;
-				draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx-marker_size, my2, 0xFFFFFFFF);
-				draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx+marker_size, my2, 0xFFFFFFFF);
+			case TABBAR_TOP:
+			case TABBAR_BOTTOM:
+				{
+					int k=tab_drag_get_h_idx();
+					int xmarker=k?tabbar_tabs[k-1].right:0;
+					int my1, my2;
+					if(tabbar_position==TABBAR_TOP)
+						my1=(dy<<1)+1, my2=my1+marker_size, xtip=mx, ytip=my+20;
+					else
+						my1=h-(dy<<1)-1, my2=my1-marker_size, xtip=mx, ytip=my-dy-20;
+					draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx-marker_size, my2, 0xFFFFFFFF);
+					draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx+marker_size, my2, 0xFFFFFFFF);
+				}
+				break;
+			case TABBAR_LEFT:
+			case TABBAR_RIGHT:
+				{
+					int ymarker=tab_drag_get_v_idx()*dy;
+					int mx1, mx2;
+					if(tabbar_position==TABBAR_LEFT)
+						mx1=tabbar_dx+1, mx2=mx1+marker_size, xtip=mx+20, ytip=my;
+					else
+						mx1=w-tabbar_dx-1, mx2=mx1-marker_size, xtip=mx-msg_width-20, ytip=my;
+					draw_line_i(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy-marker_size, 0xFFFFFFFF);
+					draw_line_i(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy+marker_size, 0xFFFFFFFF);
+				}
+				break;
 			}
-			break;
-		case TABBAR_LEFT:
-		case TABBAR_RIGHT:
-			{
-				int ymarker=tab_drag_get_v_idx()*dy;
-				int mx1, mx2;
-				if(tabbar_position==TABBAR_LEFT)
-					mx1=tabbar_dx+1, mx2=mx1+marker_size, xtip=mx+20, ytip=my;
-				else
-					mx1=w-tabbar_dx-1, mx2=mx1-marker_size, xtip=mx-msg_width-20, ytip=my;
-				draw_line_i(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy-marker_size, 0xFFFFFFFF);
-				draw_line_i(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy+marker_size, 0xFFFFFFFF);
-			}
-			break;
+			draw_rectangle_i(xtip, xtip+msg_width+4, ytip, ytip+dy+4, 0x40FFFFFF);
+			set_text_colors(colors_selection);
+			print_line(xtip+2, ytip+2, buf, len, 0, 1);
+			set_text_colors(colors_text);
 		}
-		draw_rectangle_i(xtip, xtip+msg_width+4, ytip, ytip+dy+4, 0x40FFFFFF);
-		set_text_colors(colors_selection);
-		print_line(xtip+2, ytip+2, buf, len, 0, 1);
-		set_text_colors(colors_text);
+		break;
+	case DRAG_MOVE_SELECTION:
+	case DRAG_COPY_SELECTION:
+		std::swap(*cur, drag_cursor);
+		cpx=x1+cur->ccx*dxpx;
+		cpy=y1+cur->ccy*dypx;
+		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
+		break;
 	}
 
 	//print(1, 0, 0, 0, "Hello. Sample Text. What\'s going on???");
@@ -2197,6 +2261,10 @@ bool				wnd_on_mousemove()
 	case DRAG_VSCROLL:
 	case DRAG_HSCROLL:
 	case DRAG_TAB:
+		return true;
+	case DRAG_MOVE_SELECTION:
+	case DRAG_COPY_SELECTION:
+		cursor_at_mouse();
 		return true;
 	}
 	return false;
@@ -2281,10 +2349,43 @@ bool				wnd_on_zoomout()
 	}
 	return false;
 }
+bool				drag_selection_click(DragType drag_type)
+{
+	if(cur->selection_exists())
+	{
+		int idx=0, lineno=0, col=0, linestart=0;
+		if(cursor_to_mouse_full(idx, lineno, col, linestart))
+		{
+			if(cur->rectsel)
+			{
+				auto r=cur->get_rectsel();
+				int ch=idx-linestart;
+				if(lineno>=r.y1&&lineno<=r.y2&&ch>=r.x1&&ch<r.x2)
+				{
+					drag=drag_type, drag_cursor=*cur;
+					return true;
+				}
+			}
+			else//normal selection
+			{
+				int i, f;
+				cur->get_selection(i, f);
+				if(idx>=i&&idx<f)
+				{
+					drag=drag_type, drag_cursor=*cur;
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
 void				lbutton_down_text()
 {
 	if(is_ctrl_down())//select word
 	{
+		if(drag_selection_click(DRAG_COPY_SELECTION))
+			return;
 		cursor_at_mouse();
 		cur->selcur=cur->cursor;
 		char initial=group_char(AT(cur->cursor));
@@ -2296,20 +2397,25 @@ void				lbutton_down_text()
 
 		calc_cursor_coords(0);
 	}
-	else if(cur->rectsel=is_alt_down())//rectsel
+	else
 	{
-		int xpos=0, ypos=0;
-		if(cursor_at_mouse_rect(xpos, ypos))
-			drag=DRAG_RECT, cur->ccx=xpos, cur->ccy=ypos;
-		if(!is_shift_down())
-			cur->scx=cur->ccx, cur->scy=cur->ccy;
-	}
-	else//place cursor / normal selection
-	{
-		drag=DRAG_SELECT;
-		cursor_at_mouse();
-		if(!is_shift_down())
-			cur->selcur=cur->cursor, cur->scx=cur->ccx, cur->scy=cur->ccy;
+		if(drag_selection_click(DRAG_MOVE_SELECTION))
+			return;
+		if(cur->rectsel=is_alt_down())//rectsel
+		{
+			int xpos=0, ypos=0;
+			if(cursor_at_mouse_rect(xpos, ypos))
+				drag=DRAG_RECT, cur->ccx=xpos, cur->ccy=ypos;
+			if(!is_shift_down())
+				cur->scx=cur->ccx, cur->scy=cur->ccy;
+		}
+		else//place cursor / normal selection
+		{
+			drag=DRAG_SELECT;
+			cursor_at_mouse();
+			if(!is_shift_down())
+				cur->selcur=cur->cursor, cur->scx=cur->ccx, cur->scy=cur->ccy;
+		}
 	}
 }
 int					tabbar_get_horizontal_idx(int mousex)
@@ -2469,6 +2575,66 @@ bool				wnd_on_lbuttonup()
 
 				tabbar_calc_positions();
 				tabs_switchto(dst);
+			}
+		}
+		break;
+	case DRAG_MOVE_SELECTION:
+	case DRAG_COPY_SELECTION:
+		{
+			std::vector<std::string> selection;
+			int idx=0, lineno=0, col=0, linestart=0;
+			cursor_to_mouse_full(idx, lineno, col, linestart);
+			if(drag_cursor.rectsel)
+			{
+				Ranges ranges;
+				std::swap(*cur, drag_cursor);
+				calc_ranges(ranges);
+				std::swap(*cur, drag_cursor);
+				cur->rectsel=false, cur->cursor=cur->selcur=idx, cur->ccx=cur->scx=col, cur->ccy=cur->scy=lineno;
+				auto r=drag_cursor.get_rectsel();
+				int ch=idx-linestart;
+				if(ch>=r.x1&&ch<=r.x2&&lineno>=r.y1&&lineno<r.y2)
+					break;
+				selection.resize(ranges.size());
+				for(int k=0;k<(int)ranges.size();++k)
+				{
+					auto &range=ranges[k];
+					selection[k].assign(text->begin()+range.linestart+range.i, text->begin()+range.linestart+range.f);
+				}
+				text_replace_rect(ranges, nullptr, 0, 0);//erase selection
+				cursor_to_mouse_full(idx, lineno, col, linestart);
+				int nlines_total=lineno+count_lines(idx, text->size());
+				if(nlines_total<lineno+ranges.size())
+				{
+					for(int k=0, lines_change=lineno+ranges.size()-1-nlines_total;k<lines_change;++k)
+						text_insert1(text->size(), '\n');
+				}
+				cur->cursor=idx, cur->ccx=cur->scx=col, cur->scy=lineno, cur->ccy=lineno+ranges.size()-1;
+				ranges.clear();
+				calc_ranges(ranges);
+				text_replace_rect(ranges, nullptr, 0, 0, &selection);
+				//for(int k=0;k<(int)selection.size();++k)
+				//	text_insert(
+				//text_replace_rect(ranges, nullptr, 0, 0, &selection);
+				//text_replace_rect(ranges, nullptr, 0, 0, &selection, &drag_cursor);
+			}
+			else
+			{
+				int i, f;
+				drag_cursor.get_selection(i, f);
+				if(idx<i)
+				{
+					selection.push_back(std::string(text->begin()+i, text->begin()+f));
+					text_erase(i, f);
+					text_insert(idx, selection[0].c_str(), selection[0].size());
+				}
+				else if(idx>f)
+				{
+					selection.push_back(std::string(text->begin()+i, text->begin()+f));
+					text_erase(i, f);
+					int change=f-i;
+					text_insert(idx-change, selection[0].c_str(), selection[0].size());
+				}
 			}
 		}
 		break;
@@ -2933,34 +3099,20 @@ bool				wnd_on_type(char character)
 	{
 		Ranges ranges;
 		calc_ranges(ranges);
-	/*	if(character=='\t'&&cur->ccy!=cur->scy)//indent text
-			text_indent_rect(ranges);
-		//{
-		//	for(int k=0;k<ranges.size();++k)
-		//		ranges[k].f=ranges[k].i;
-		//}
-		else
-			text_replace_rect(ranges, &character, 1);//*/
 		text_replace_rect(ranges, &character, 1, (character=='\t')+is_shift_down());
 	}
 	else if(cur->cursor!=cur->selcur)
 	{
 		int start, end;
 		cur->get_selection(start, end);
-		//if(cur->selcur<cur->cursor)
-		//	start=cur->selcur, end=cur->cursor;
-		//else
-		//	start=cur->cursor, end=cur->selcur;
 		if(character=='\t')//indent text
 		{
 			int line1=count_lines(0, start), line2=line1+count_lines(start, end);
 			if(line1!=line2)
 			{
 				Ranges ranges;
-				//auto r=cur->get_rectsel_raw();
 				cur->set_rectsel(0, 0, line1, line2);
 				calc_ranges(ranges);
-				//cur->set_rectsel(r);
 				text_replace_rect(ranges, &character, 1, 1+is_shift_down());
 				if(cur->selcur<cur->cursor)
 					++cur->selcur, cur->cursor+=line2-line1+1;

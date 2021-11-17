@@ -14,17 +14,17 @@ r	g	b	r	g	b
 
 
 TODO:
+- Non-printable characters & extended ASCII
 - Tab marker
 - Drag selection
 - Split view
 - Compare files
-- Indentation with tab/shift tab
-- Wrap option
+- Text wrap
 - Status bar
 - Go to previous/next cursor location
 - Find & replace
 - Go to line number
-- Optional syntax highlighting for C/C++
+- Syntax highlighting for C/C++
 - State file
 - Config file
 - Save on write
@@ -35,3 +35,4 @@ DONE:
 - Multiple tabs
 - Tab bar/sidebar
 - Drag tab to reorder
+- Indentation with tab/shift tab
