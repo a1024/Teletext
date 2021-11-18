@@ -1533,7 +1533,7 @@ bool				cursor_to_mouse_full(int &idx, int &lineno, int &col, int &linestart)//r
 	{
 		int req_width=wpx+mousex+(dxpx>>1), xpos2=req_width/dxpx;
 		inv_calc_width(-wpx, -wpy, text->c_str()+linestart, text->size()-linestart, -wpx, font_zoom, req_width, &col, &idx);
-
+		idx+=linestart;
 		lineno=lineno2;
 		if(col<xpos2)//if mousex is beyond the reach of the line
 		{
@@ -2609,7 +2609,7 @@ bool				wnd_on_lbuttonup()
 					for(int k=0, lines_change=lineno+ranges.size()-1-nlines_total;k<lines_change;++k)
 						text_insert1(text->size(), '\n');
 				}
-				cur->cursor=idx, cur->ccx=cur->scx=col, cur->scy=lineno, cur->ccy=lineno+ranges.size()-1;
+				cur->rectsel=true, cur->cursor=idx, cur->ccx=cur->scx=col, cur->scy=lineno, cur->ccy=lineno+ranges.size()-1;
 				ranges.clear();
 				calc_ranges(ranges);
 				text_replace_rect(ranges, nullptr, 0, 0, &selection);

@@ -15,8 +15,7 @@ r	g	b	r	g	b
 
 TODO:
 - Non-printable characters & extended ASCII
-- Tab marker
-- Drag selection
+- Tab character mark
 - Split view
 - Compare files
 - Text wrap
@@ -25,6 +24,7 @@ TODO:
 - Find & replace
 - Go to line number
 - Syntax highlighting for C/C++
+- Region folding
 - State file
 - Config file
 - Save on write
@@ -36,3 +36,4 @@ DONE:
 - Tab bar/sidebar
 - Drag tab to reorder
 - Indentation with tab/shift tab
+- Drag selection
