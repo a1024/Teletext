@@ -2354,7 +2354,10 @@ bool				drag_selection_click(DragType drag_type)
 	if(cur->selection_exists())
 	{
 		int idx=0, lineno=0, col=0, linestart=0;
-		if(cursor_to_mouse_full(idx, lineno, col, linestart))
+		mx-=dx*font_zoom>>1;
+		bool hit=cursor_to_mouse_full(idx, lineno, col, linestart);
+		mx+=dx*font_zoom>>1;
+		if(hit)
 		{
 			if(cur->rectsel)
 			{
@@ -2601,10 +2604,17 @@ bool				wnd_on_lbuttonup()
 					auto &range=ranges[k];
 					selection[k].assign(text->begin()+range.linestart+range.i, text->begin()+range.linestart+range.f);
 				}
-				text_replace_rect(ranges, nullptr, 0, 0);//erase selection
+				if(drag==DRAG_MOVE_SELECTION)
+					text_replace_rect(ranges, nullptr, 0, 0);//erase selection
+				int xoffset=dx*font_zoom>>1;
+				auto r2=cur->get_rectsel();
+				if(lineno>=r2.y1&&lineno<=r2.y2)
+					xoffset+=r2.x2-r2.x1;
+				mx-=xoffset;
 				cursor_to_mouse_full(idx, lineno, col, linestart);
+				mx+=xoffset;
 				int nlines_total=lineno+count_lines(idx, text->size());
-				if(nlines_total<lineno+ranges.size())
+				if(nlines_total<lineno+(int)ranges.size())
 				{
 					for(int k=0, lines_change=lineno+ranges.size()-1-nlines_total;k<lines_change;++k)
 						text_insert1(text->size(), '\n');
@@ -2613,10 +2623,6 @@ bool				wnd_on_lbuttonup()
 				ranges.clear();
 				calc_ranges(ranges);
 				text_replace_rect(ranges, nullptr, 0, 0, &selection);
-				//for(int k=0;k<(int)selection.size();++k)
-				//	text_insert(
-				//text_replace_rect(ranges, nullptr, 0, 0, &selection);
-				//text_replace_rect(ranges, nullptr, 0, 0, &selection, &drag_cursor);
 			}
 			else
 			{
