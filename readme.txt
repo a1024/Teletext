@@ -14,6 +14,7 @@ r	g	b	r	g	b
 
 
 TODO:
+- Change case
 - Line operations: sort lines, ...etc
 - Bracket matching
 - Non-printable characters & extended ASCII
