@@ -16,7 +16,7 @@ r	g	b	r	g	b
 TODO:
 - Change case
 - Line operations: sort lines, ...etc
-- Bracket matching
+- Bracket matching: green: matched, red: unmatched
 - Non-printable characters & extended ASCII
 - Tab character mark
 - Split view
