@@ -14,19 +14,19 @@ r	g	b	r	g	b
 
 
 TODO:
-- Change case
-- Line operations: sort lines, ...etc
-- Bracket matching: green: matched, red: unmatched
-- Non-printable characters & extended ASCII
-- Tab character mark
-- Split view
-- Compare files
+- Syntax highlighting for C/C++
 - Text wrap
-- Status bar
-- Go to previous/next cursor location
 - Find & replace
 - Go to line number
-- Syntax highlighting for C/C++
+- Change case
+- Tab character mark
+- Non-printable characters & extended ASCII
+- Line operations: sort lines, ...etc
+- Bracket matching: green: matched, red: unmatched
+- Split view
+- Compare files
+- Status bar
+- Go to previous/next cursor location
 - Region folding
 - State file
 - Config file
@@ -40,3 +40,4 @@ DONE:
 - Drag tab to reorder
 - Indentation with tab/shift tab
 - Drag selection
+- Reimplement with vector<string>

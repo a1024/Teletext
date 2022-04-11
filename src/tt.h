@@ -11,6 +11,7 @@
 #include			<GL/gl.h>
 #include			<GL/glu.h>
 #include			<math.h>
+#include			<vector>
 #include			<string>
 
 #define				SIZEOF(STATIC_ARRAY)	(sizeof(STATIC_ARRAY)/sizeof(*(STATIC_ARRAY)))
@@ -300,6 +301,8 @@ void				toNDC(float xs, float ys, float &xn, float &yn);//2021-01-14 test: fill 
 #endif
 
 //tt
+typedef std::vector<std::string> Text;
+extern short		tab_count;
 extern char			caps_lock;
 extern unsigned		font_txid;
 typedef unsigned long long u64;
@@ -315,8 +318,13 @@ union				U64
 	}
 };
 void				set_text_colors(U64 const &colors);
-int					print_line(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom);
+int					calc_width		(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom);
+void				inv_calc_width	(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom, int width, int *out_cols, int *out_k);//returns index to fit [msg, msg+index[ in width
+int					print_line		(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom, int req_cols=-1, int *ret_idx=nullptr);
 int					print(short zoom, int tab_origin, int x, int y, const char *format, ...);
+
+void				hist_undo();//ctrl z
+void				hist_redo();//ctrl y
 
 void				wnd_on_create();
 bool				wnd_on_init();//return false for EXIT_FAILURE
