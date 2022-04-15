@@ -694,7 +694,8 @@ void				mouse_release()
 }
 bool				get_key_state(int key)
 {
-	keyboard[key]=(GetAsyncKeyState(key)>>15)!=0;
+	short result=GetAsyncKeyState(key);
+	keyboard[key]=(result>>15)!=0;
 	return keyboard[key]!=0;
 }
 void				update_main_key_states()
@@ -808,7 +809,8 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 				case VK_HOME:		redraw|=wnd_on_goto_file_start();			break;
 				case VK_END:		redraw|=wnd_on_goto_file_end();				break;
 				case 'A':			redraw|=wnd_on_select_all();				break;
-				case 'C':			redraw|=wnd_on_copy();						break;
+				case 'C':			redraw|=wnd_on_copy(false);					break;
+				case 'X':			redraw|=wnd_on_copy(true);					break;
 				case 'D':			redraw|=wnd_on_clear_hist();				break;
 				case 'N':			redraw|=wnd_on_newtab();					break;
 				case 'O':			redraw|=wnd_on_open();						break;

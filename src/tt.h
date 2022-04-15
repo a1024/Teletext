@@ -302,6 +302,7 @@ void				toNDC(float xs, float ys, float &xn, float &yn);//2021-01-14 test: fill 
 
 //tt
 typedef std::vector<std::string> Text;
+extern Text			*text;
 extern short		tab_count;
 extern char			caps_lock;
 extern unsigned		font_txid;
@@ -351,7 +352,7 @@ bool				wnd_on_save(bool save_as);
 bool				wnd_on_clear_hist();
 bool				wnd_on_undo();
 bool				wnd_on_redo();
-bool				wnd_on_copy();
+bool				wnd_on_copy(bool cut);
 bool				wnd_on_paste();
 bool				wnd_on_scroll_up_key();
 bool				wnd_on_scroll_down_key();

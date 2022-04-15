@@ -1,5 +1,5 @@
 //tt.cpp - Teletext Editor implementation
-//Copyright (C) 2021 Ayman Wagih
+//Copyright (C) 2021, 2022 Ayman Wagih
 //
 //This program is free software: you can redistribute it and/or modify
 //it under the terms of the GNU General Public License as published by
@@ -15,17 +15,18 @@
 //along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include			"tt.h"
-#include			<vector>
+//#include			<algorithm>
 #define				STB_IMAGE_IMPLEMENTATION
 #include			"stb_image.h"//https://github.com/nothings/stb
 
+//	#define			DEBUG_CURSOR
 //	#define			HELP_SHOWALL
 
 const char			file[]=__FILE__;
 char				g_buf[G_BUF_SIZE]={};
 int					w=0, h=0;
 short				mx=0, my=0,//current mouse coordinates
-					dx=0, dy=0,//non-tab character dimensiont
+					dx=0, dy=0,//non-tab character dimensions
 					tab_count=4;
 std::string			exe_dir;
 
@@ -308,7 +309,7 @@ void				set_text_colors(U64 const &colors)
 	send_color(ns_text::u_txtColor, colors.lo);
 	send_color(ns_text::u_bkColor, colors.hi);
 }
-void				col2idx(const char *text, int text_length, int tab0_cols, int req_col, int *ret_idx, int *ret_col)
+void				col2idx(const char *text, int text_length, int tab0_cols, float req_col, int *ret_idx, int *ret_col)
 {
 	int idx=0, col=0;
 	for(;idx<text_length;++idx)
@@ -323,12 +324,17 @@ void				col2idx(const char *text, int text_length, int tab0_cols, int req_col, i
 			dcol=1;
 		if(dcol)
 		{
-			col+=dcol;
-			if(col>=req_col)
-			{
-				idx+=col==req_col;
+			if(col+dcol*0.5f>=req_col)
 				break;
-			}
+			col+=dcol;
+
+			//int c0=col;
+			//col+=dcol;
+			//if(((col+c0)>>1)>=req_col)
+			//{
+			//	idx+=col==req_col;
+			//	break;
+			//}
 
 			//int sum=col+dcol;
 			//if(sum>=req_col)
@@ -424,6 +430,8 @@ int					print_line		(int x, int y, const char *msg, int msg_length, int tab_orig
 {
 	if(msg_length<1)
 		return 0;
+	//if(ret_idx)
+	//	msg+=*ret_idx, msg_length-=*ret_idx;
 	float rect[4]={};
 	QuadCoords *txc=nullptr;
 	int msg_width=0, width, idx, printable_count=0, tab_width=tab_count*dx*zoom, w2=dx*zoom, height=dy*zoom, req_width=req_cols*dx*zoom;
@@ -435,49 +443,108 @@ int					print_line		(int x, int y, const char *msg, int msg_length, int tab_orig
 	float CX1=2.f/rdx, CX0=CX1*(x-rx1)-1;
 	rect[1]=1-(y-ry1)*2.f/rdy;
 	rect[3]=1-(y+height-ry1)*2.f/rdy;
-	int k=0;
-	for(;k<msg_length;++k)
+	int k=ret_idx?*ret_idx:0;
+	if(req_width<0||x+msg_width<req_width)
 	{
-		char c=msg[k];
-		if(c>=32&&c<0xFF)
-			width=w2;
-		else if(c=='\t')
-			width=tab_width-mod(x+msg_width-tab_origin, tab_width), c=' ';
-		else
-			width=0;
-		if(width)
+		for(;k<msg_length;++k)
 		{
-			if(req_width>=0&&x+msg_width+width>=req_width)
-				break;
-			if(x+msg_width+width>=0&&x+msg_width<w)//off-screen optimization
-			{
-				rect[0]=CX1*msg_width+CX0;//xn1
-				msg_width+=width;
-				rect[2]=CX1*msg_width+CX0;//xn2
-
-				//rect[0]=(x+msg_width-rx1)*2.f/rdx-1;//xn1
-				//rect[1]=1-(y-ry1)*2.f/rdy;//yn1
-				//rect[2]=(x+msg_width+width-rx1)*2.f/rdx-1;//xn2
-				//rect[3]=1-(y+height-ry1)*2.f/rdy;//yn2
-
-				//toNDC_nobias(float(x+msg_width		), float(y			), rect[0], rect[1]);
-				//toNDC_nobias(float(x+msg_width+width	), float(y+height	), rect[2], rect[3]);//y2<y1
-
-				idx=printable_count<<4;
-				txc=font_coords+c-32;
-				vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
-				vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
-				vrtx[idx+ 8]=rect[2], vrtx[idx+ 9]=rect[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
-				vrtx[idx+12]=rect[2], vrtx[idx+13]=rect[1],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
-
-				++printable_count;
-			}
+			char c=msg[k];
+			if(c>=32&&c<0xFF)
+				width=w2;
+			else if(c=='\t')
+				width=tab_width-mod(x+msg_width-tab_origin, tab_width), c=' ';
 			else
-				msg_width+=width;
+				width=0;
+			if(width)
+			{
+				if(x+msg_width+width>=0&&x+msg_width<w)//off-screen optimization
+				{
+					rect[0]=CX1*msg_width+CX0;//xn1
+					msg_width+=width;
+					rect[2]=CX1*msg_width+CX0;//xn2
+
+					//rect[0]=(x+msg_width-rx1)*2.f/rdx-1;//xn1
+					//rect[1]=1-(y-ry1)*2.f/rdy;//yn1
+					//rect[2]=(x+msg_width+width-rx1)*2.f/rdx-1;//xn2
+					//rect[3]=1-(y+height-ry1)*2.f/rdy;//yn2
+
+					//toNDC_nobias(float(x+msg_width		), float(y			), rect[0], rect[1]);
+					//toNDC_nobias(float(x+msg_width+width	), float(y+height	), rect[2], rect[3]);//y2<y1
+
+					idx=printable_count<<4;
+					txc=font_coords+c-32;
+					vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
+					vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
+					vrtx[idx+ 8]=rect[2], vrtx[idx+ 9]=rect[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
+					vrtx[idx+12]=rect[2], vrtx[idx+13]=rect[1],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
+
+					++printable_count;
+				}
+				else
+					msg_width+=width;
+				if(req_width>=0&&x+msg_width>=req_width)
+				{
+					++k;
+					break;
+				}
+			}
+		}
+		if(printable_count)
+		{
+			setGLProgram(shader_text.program);
+			select_texture(font_txid, ns_text::u_atlas);
+			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
+			glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
+			glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);			GL_CHECK();
+
+			glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+			glDrawArrays(GL_QUADS, 0, printable_count<<2);	GL_CHECK();//draw the quads: 4 vertices per character quad
+			glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
 		}
 	}
 	if(ret_idx)
 		*ret_idx=k;
+	return msg_width;
+}
+int					debug_print_cols(int x, int y, short zoom, int req_cols, int den)
+{
+	float rect[4]={};
+	QuadCoords *txc=nullptr;
+	int msg_width=0, width, idx, printable_count=0, tab_width=tab_count*dx*zoom, w2=dx*zoom, height=dy*zoom, req_width=req_cols*dx*zoom;
+	vrtx.resize(req_cols<<4);//vx, vy, txx, txy		x4 vertices/char
+	int rx1=0, ry1=0, rdx=0, rdy=0;
+	get_current_region(rx1, ry1, rdx, rdy);
+	float CX1=2.f/rdx, CX0=CX1*(x-rx1)-1;
+	rect[1]=1-(y-ry1)*2.f/rdy;
+	rect[3]=1-(y+height-ry1)*2.f/rdy;
+	int k=0;
+	for(;;++k)
+	{
+		char c='0'+k/den%10;
+		width=w2;
+		if(x+msg_width+width>=0&&x+msg_width<w)//off-screen optimization
+		{
+			rect[0]=CX1*msg_width+CX0;//xn1
+			msg_width+=width;
+			rect[2]=CX1*msg_width+CX0;//xn2
+
+			idx=printable_count<<4;
+			txc=font_coords+c-32;
+			vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
+			vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
+			vrtx[idx+ 8]=rect[2], vrtx[idx+ 9]=rect[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
+			vrtx[idx+12]=rect[2], vrtx[idx+13]=rect[1],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
+
+			++printable_count;
+		}
+		else
+			msg_width+=width;
+		if(req_width>=0&&x+msg_width>=req_width)
+		{
+			++k;
+			break;
+		}
+	}
 	if(printable_count)
 	{
 		setGLProgram(shader_text.program);
@@ -553,6 +620,19 @@ int					print_line_rect(int x, int y, const char *msg, int msg_length, int tab_o
 	nconsumed=k2;
 	return msg_width;
 }
+void				relocate_range(int dst, int &a, int &b)
+{
+	if(a<b)
+	{
+		b=dst+(b-a);
+		a=dst;
+	}
+	else
+	{
+		a=dst+(a-b);
+		b=dst;
+	}
+}
 
 //U64				colors_text=0xFFABABABFF000000;//black on white		0xBKBKBKBK_TXTXTXTX
 U64					colors_text=0x20ABABABFFABABAB;//dark mode
@@ -589,15 +669,27 @@ struct				Bookmark
 	int line, idx, col;
 	Bookmark():line(0), idx(0), col(0){}
 	Bookmark(int line, int idx, int col):line(line), idx(idx), col(col){}
-	void set_gui(Text const &text, int line, int col)
+	bool set_gui(Text const &text, int line, float col)//returns true if text is hit
 	{
-		this->line=line, this->col=col;
-		update_idx(text);
-		//auto &_line=text[line];
+		bool hit=true;
+		if(line<0)
+			line=0, hit=false;
+		else if(line>(int)text.size()-1)
+			line=(int)text.size()-1, hit=false;
+		this->line=line;
+		auto &_line=text[line];
+		this->col=col;
+		col2idx(_line.c_str(), _line.size(), 0, col, &this->idx, nullptr);//
 		//col2idx(_line.c_str(), _line.size(), 0, col, &this->idx, &this->col);
+	//	update_idx(text);
+		return hit;
 	}
 	void set_text(Text const &text, int line, int idx)
 	{
+		if(line<0)
+			line=0;
+		else if(line>(int)text.size()-1)
+			line=(int)text.size()-1;
 		this->line=line, this->idx=idx;
 		update_col(text);
 	}
@@ -632,29 +724,43 @@ struct				Bookmark
 	{
 		if(idx<(int)text[line].size()-1)
 			++idx;
-		else
+		else if(line<(int)text.size()-1)
 			++line, idx=0;
 	}
 	void decrement_idx_skipnewline(Text const &text)
 	{
 		if(idx)
 			--idx;
-		else
+		else if(line>0)
 			--line, idx=(int)text[line].size()-1;
 	}
-	void increment_idx(Text const &text)
+	bool increment_idx(Text const &text)
 	{
 		if(idx<(int)text[line].size())
+		{
 			++idx;
-		else
+			return true;
+		}
+		else if(line<(int)text.size()-1)
+		{
 			++line, idx=0;
+			return true;
+		}
+		return false;
 	}
-	void decrement_idx(Text const &text)
+	bool decrement_idx(Text const &text)
 	{
 		if(idx)
+		{
 			--idx;
-		else
+			return true;
+		}
+		else if(line>0)
+		{
 			--line, idx=(int)text[line].size();
+			return true;
+		}
+		return false;
 	}
 	//char dereference_idx_unchecked(Text const &text)const{return text[line][idx];}
 	char dereference_idx(Text const &text)const
@@ -680,21 +786,103 @@ struct				Bookmark
 		col2idx(_line.c_str(), _line.size(), 0, col, &this->idx, &this->col);
 	}
 };
-bool operator<(Bookmark const &left, Bookmark const &right)
+bool				operator==(Bookmark const &left, Bookmark const &right){return left.line==right.line&&left.idx==right.idx;}
+bool				operator!=(Bookmark const &left, Bookmark const &right){return left.line!=right.line||left.idx!=right.idx;}
+bool				operator<(Bookmark const &left, Bookmark const &right)
 {
 	if(left.line==right.line)
 		return left.idx<right.idx;
 	return left.line<right.line;
 }
-bool operator<=(Bookmark const &left, Bookmark const &right)
+bool				operator<=(Bookmark const &left, Bookmark const &right)
 {
 	return !(right<left);
 	//if(left.line==right.line)
 	//	return left.idx<=right.idx;
 	//return left.line<=right.line;
 }
-bool operator>(Bookmark const &left, Bookmark const &right){return right<left;}
-bool operator>=(Bookmark const &left, Bookmark const &right){return right<=left;}
+bool				operator>(Bookmark const &left, Bookmark const &right){return right<left;}
+bool				operator>=(Bookmark const &left, Bookmark const &right){return right<=left;}
+int					bookmark_subtract(Bookmark const &a, Bookmark const &b, Text const &text)
+{
+	Bookmark const *p1, *p2;
+	if(a<b)
+		p1=&a, p2=&b;
+	else
+		p1=&b, p2=&a;
+	int diff=0;
+	if(p1->line==p2->line)
+		diff=p1->idx-p2->idx;
+	else
+	{
+		diff-=text[p1->line].size()+1-p1->idx;
+		for(int kl=p1->line+1;kl<p2->line-1;++kl)
+			diff-=text[kl].size()+1;//account for newline
+		diff-=p2->idx;
+	}
+	return diff;
+}
+int					bookmark_add(Bookmark &b, int offset, Text const &text)//returns remainder on overflow
+{
+	if(offset>0)
+	{
+		int line_max=(int)text.size()-1;
+		for(;;)
+		{
+			auto &line=text[b.line];
+			if(b.idx+offset<(int)line.size()+1)
+			{
+				b.idx+=offset;
+				offset=0;
+				break;
+			}
+			if(b.line<line_max)
+			{
+				offset-=line.size()+1-b.idx;
+				++b.line, b.idx=0;
+			}
+			else//overflow
+			{
+				b.idx=line.size();
+				break;
+			}
+		}
+	}
+	else if(offset<0)
+	{
+		for(;;)
+		{
+			if(b.idx+offset>0)
+			{
+				b.idx+=offset;
+				offset=0;
+				break;
+			}
+			if(b.line>0)
+			{
+				offset+=b.idx;
+				--b.line;
+				b.idx=text[b.line].size();
+			}
+			else//overflow
+			{
+				offset+=b.idx;
+				b.idx=0;
+				break;
+			}
+		}
+	}
+	return offset;
+}
+void				relocate_bookmark(Bookmark const &i, Bookmark const &f, Bookmark &b, Text const &text)
+{
+	int diff=bookmark_subtract(f, i, text);
+	bookmark_add(b, diff, text);
+	//if(i<f)//X  slow
+	//	for(Bookmark temp=i;temp!=f;temp.increment_idx(text), b.increment_idx(text));
+	//else if(f<i)
+	//	for(Bookmark temp=i;temp!=f;temp.decrement_idx(text), b.decrement_idx(text));
+}
 struct				Cursor
 {
 	bool rectsel;
@@ -704,7 +892,31 @@ struct				Cursor
 	//	scx, scy;//selcur coordinates in the text buffer, in character units
 
 	Cursor():rectsel(false){}
-	void deselect(){rectsel=false, selcur=cursor;}
+	void deselect(Text const &text, int direction)//direction: -1: left, 0: don't care, 1: right
+	{
+		rectsel=false;
+		if(direction)
+		{
+			if(rectsel)
+			{
+				auto r=get_rectsel();
+				if(direction==-1)
+					cursor.set_gui(text, r.y1, r.x1);
+				else
+					cursor.set_gui(text, r.y2, r.x2);
+			}
+			else
+			{
+				Bookmark i, f;
+				get_selection(i, f);
+				if(direction==-1)
+					cursor=i;
+				else
+					cursor=f;
+			}
+		}
+		selcur=cursor;
+	}
 	void reset()
 	{
 		rectsel=false;
@@ -751,6 +963,17 @@ struct				Cursor
 		//if(rectsel)
 		//	return ccx!=scx;
 		//return cursor!=selcur;
+	}
+	bool does_contain(Bookmark const &b)const
+	{
+		if(rectsel)
+		{
+			auto r=get_rectsel();
+			return b.line>=r.y1&&b.line<=r.y2&&b.col>=r.x1&&b.col<r.x2;
+		}
+		Bookmark i, f;
+		get_selection(i, f);
+		return b>=i&&b<=f;
 	}
 
 	//void set_rectsel(Rect const &r){scx=r.x1, ccx=r.x2, scy=r.y1, ccy=r.y2;}
@@ -810,13 +1033,21 @@ void				rectsel_insert(Text const &src, int l1, int col1, Text &dst)
 {
 	//int l1, l2, col1, col2;//l2 & col2 shouldn't be used here
 	//cur.get_rectsel(l1, l2, col1, col2);
-	for(int kls=0, kld=l1;kls<(int)src.size();++kls, ++kld)
+	int kls=0, kld=l1;
+	for(;kls<(int)src.size()&&kld<(int)dst.size();++kls, ++kld)
 	{
 		auto &srcline=src[kls];
 		auto &dstline=dst[kld];
 		int idx1, c1;
 		col2idx(dstline.c_str(), dstline.size(), 0, col1, &idx1, &c1);
 		dstline.insert(dstline.begin()+idx1, srcline.begin(), srcline.end());
+	}
+	for(;kls<(int)src.size();++kls)
+	{
+		dst.push_back(std::string(col1/tab_count, '\t'));
+		auto &line=dst.back();
+		line.append(mod(col1, tab_count), ' ');
+		line+=src[kls];
 	}
 }
 void				selection_copy(Text const &src, Cursor const &cur, Text &dst)
@@ -835,7 +1066,7 @@ void				selection_copy(Text const &src, Cursor const &cur, Text &dst)
 		dst.push_back(std::string(firstline.begin()+i.idx, firstline.end()));
 		for(int kl=i.line+1;kl<f.line;++kl)
 			dst.push_back(src[kl]);
-		dst.push_back(std::string(lastline.begin(), firstline.begin()+f.idx));
+		dst.push_back(std::string(lastline.begin(), lastline.begin()+f.idx));
 	}
 }
 void				selection_insert(Text const &src, int l1, int idx1, Text &dst)
@@ -885,6 +1116,8 @@ enum				ActionType
 	ACTION_ERASE_RECT_SELECTION,
 	ACTION_INDENT_FORWARD,
 	ACTION_INDENT_BACK,
+	ACTION_REPLACE,
+	ACTION_REPLACE_RECT,
 };
 /*struct				ActionFragment
 {
@@ -917,8 +1150,9 @@ typedef std::vector<ActionFragment> ActionData;//*/
 struct				HistoryAction
 {
 	ActionType type;
-	Text data;
+	Text data_ins, data_rem;
 	//ActionData data;
+	//Bookmark b1, b2;
 	Cursor cur_before, cur_control, cur_after;
 	//union//initial cursor positions
 	//{
@@ -926,8 +1160,8 @@ struct				HistoryAction
 	//	struct{int cursor0, selcur0, z_unused0, z_unused1;};
 	//};
 	HistoryAction():type(ACTION_UNINITIALIZED){}
-	HistoryAction(HistoryAction const &h):type(h.type), data(h.data), cur_before(h.cur_before), cur_after(h.cur_after){}
-	HistoryAction(HistoryAction &&h):type(h.type), data(std::move(h.data)), cur_before(h.cur_before), cur_after(h.cur_after){}
+	HistoryAction(HistoryAction const &h):type(h.type), data_ins(h.data_ins), data_rem(h.data_rem), cur_before(h.cur_before), cur_after(h.cur_after){}
+	HistoryAction(HistoryAction &&h):type(h.type), data_ins(std::move(h.data_ins)), data_rem(std::move(h.data_rem)), cur_before(h.cur_before), cur_after(h.cur_after){}
 	//HistoryAction(ActionType type, int idx, const char *a, int len, Cursor const &cur_before, Cursor const &cur_after):type(type), cur_before(cur_before), cur_after(cur_after)//normal editing
 	//{
 	//	data.push_back(ActionFragment(idx, a, len));
@@ -958,7 +1192,8 @@ struct				HistoryAction
 		if(&h!=this)
 		{
 			type=h.type;
-			data=h.data;
+			data_ins=h.data_ins;
+			data_rem=h.data_rem;
 			cur_before=h.cur_before;
 			cur_after=h.cur_after;
 		}
@@ -969,7 +1204,8 @@ struct				HistoryAction
 		if(&h!=this)
 		{
 			type=h.type;
-			data=std::move(h.data);
+			data_ins=std::move(h.data_ins);
+			data_rem=std::move(h.data_rem);
 			cur_before=h.cur_before;
 			cur_after=h.cur_after;
 		}
@@ -1162,6 +1398,14 @@ void				set_title()
 	printed+=sprintf_s(g_buf+printed, g_buf_size-printed, "Teletext");
 	set_window_title(g_buf);
 }
+void				debug_set_window_title(const char *format, ...)
+{
+	va_list args;
+	va_start(args, format);
+	vsprintf_s(g_buf, g_buf_size, format, args);
+	va_end(args);
+	set_window_title(g_buf);
+}
 void				tabs_switchto(int k, bool change_title=true)
 {
 	TextFile *of=nullptr;
@@ -1297,23 +1541,34 @@ void				text_erase(Text &text, int l1, int idx1, int l2, int idx2)
 		text.erase(text.begin()+l1+1, text.begin()+l2+1);
 	}
 }
-void				text_insert(Text &text, int l0, int idx0, const char *a, int len)
+void				text_insert(Text &text, int l0, int idx0, const char *a, int len, int *ret_line, int *ret_idx)
 {
 	int k=0, k2=0;
-	for(int l=l0;;++l)
+	for(int kl=l0;;++kl)
 	{
 		for(;k2<len&&a[k2]!='\n';++k2);
-		if(!k)
+		if(k2>=len)
+		{
+			int idx=k2-k;
+			if(k)
+				text[kl].insert(text[kl].begin(), a+k, a+k2);
+			else
+			{
+				text[kl].insert(text[kl].begin()+idx0, a+k, a+k2);
+				idx+=idx0;
+			}
+			if(ret_line)
+				*ret_line=kl;
+			if(ret_idx)
+				*ret_idx=idx;
+			break;
+		}
+		else if(k)
+			text.insert(text.begin()+kl, std::string(a+k, a+k2));
+		else
 		{
 			text.insert(text.begin()+l0+1, text[l0].substr(idx0, text[l0].size()-idx0));
 			text[l0].replace(text[l0].begin()+idx0, text[l0].end(), a+k, a+k2);
-		}
-		else if(k2<len)
-			text.insert(text.begin()+l, std::string(a+k, a+k2));
-		else
-		{
-			text[l].insert(text[l].begin(), a+k, a+k2);
-			break;
 		}
 		++k2;
 		k=k2;
@@ -1333,7 +1588,8 @@ void				text_erase_rect(Text &text, int l1, int l2, int col1, int col2)
 		if(c1==col1)
 		{
 			int idx2=0, c2=0;
-			col2idx(line.c_str()+idx1, line.size()-idx1, -c1, col2, &idx2, &c2);
+			//col2idx(line.c_str()+idx1, line.size()-idx1, -c1, col2-c1, &idx2, &c2);
+			col2idx(line.c_str(), line.size(), 0, col2, &idx2, &c2);
 			if(idx1<idx2)
 				line.erase(line.begin()+idx1, line.begin()+idx2);
 		}
@@ -1377,13 +1633,23 @@ void				text_insert1(Text &text, int l0, int idx0, char c)
 void				text_erase1_bksp(Text &text, int l0, int idx0)
 {
 	if(idx0>0)
-		text[l0].erase(idx0-1);
+		text[l0].erase(idx0-1, 1);
+	else if(l0>0)
+	{
+		text[l0-1].append(text[l0]);
+		text.erase(text.begin()+l0);
+	}
 }
 void				text_erase1_del(Text &text, int l0, int idx0)
 {
 	auto &line=text[l0];
 	if(idx0<(int)line.size())
-		line.erase(idx0);
+		line.erase(idx0, 1);
+	else if(l0<(int)text.size()-1)
+	{
+		text[l0].append(text[l0+1]);
+		text.erase(text.begin()+l0+1);
+	}
 }
 void				indent_rectsel_back(Cursor &cur)
 {
@@ -1424,6 +1690,8 @@ void				indent_rectsel_back(Cursor &cur)
 		int col_diff=col1-dst_col;
 		cur.cursor.col-=col_diff;
 		cur.selcur.col-=col_diff;
+		cur.cursor.update_idx(*text);
+		cur.selcur.update_idx(*text);
 	}
 }
 void				indent_rectsel_forward(Cursor &cur)
@@ -1440,6 +1708,8 @@ void				indent_rectsel_forward(Cursor &cur)
 	int col_diff=tab_count-mod(col1, tab_count);
 	cur.cursor.col+=col_diff;
 	cur.selcur.col+=col_diff;
+	cur.cursor.update_idx(*text);
+	cur.selcur.update_idx(*text);
 }
 void				indent_selection_back(Cursor &cur)
 {
@@ -1453,17 +1723,19 @@ void				indent_selection_back(Cursor &cur)
 		col2idx(line.c_str(), line.size(), 0, tab_count, &idx1, &c1);
 		int kc=0;
 		for(;kc<idx1&&isspace(line[kc]);++kc);
+		if(kl==i.line)
+			i_diff=idx2col(line.c_str(), kc, 0);
+		if(kl==f.line)
+			f_diff=idx2col(line.c_str(), kc, 0);
 		if(kc)
 			line.erase(line.begin(), line.begin()+kc);
-		if(kl==i.line)
-			i_diff=kc;
-		if(kl==f.line)
-			f_diff=kc;
 	}
 	if(cur.cursor<cur.selcur)
 		cur.cursor.col-=i_diff, cur.selcur.col-=f_diff;
 	else
 		cur.selcur.col-=i_diff, cur.cursor.col-=f_diff;
+	cur.cursor.update_idx(*text);
+	cur.selcur.update_idx(*text);
 }
 void				indent_selection_forward(Cursor &cur)
 {
@@ -1476,6 +1748,8 @@ void				indent_selection_forward(Cursor &cur)
 	}
 	cur.cursor.col+=tab_count;
 	cur.selcur.col+=tab_count;
+	cur.cursor.update_idx(*text);
+	cur.selcur.update_idx(*text);
 }
 
 void				hist_undo()//ctrl z
@@ -1487,20 +1761,32 @@ void				hist_undo()//ctrl z
 	--*histpos;
 	switch(action.type)
 	{
-	case ACTION_INSERT:
-		text_erase(*text, action.cur_control.cursor.line, action.cur_control.cursor.idx, action.cur_control.selcur.line, action.cur_control.selcur.idx);
+	//case ACTION_INSERT:
+	//	text_erase(*text, action.cur_control.cursor.line, action.cur_control.cursor.idx, action.cur_control.selcur.line, action.cur_control.selcur.idx);
+	//	break;
+	//case ACTION_INSERT_RECT:
+	//case ACTION_INDENT_FORWARD:
+	//	text_erase_rect(*text, action.cur_control.cursor.line, action.cur_control.selcur.line, action.cur_control.cursor.col, action.cur_control.selcur.col);
+	//	break;
+	//case ACTION_ERASE:
+	//case ACTION_ERASE_SELECTION:
+	//	selection_insert(action.data, action.cur_control.cursor.line, action.cur_control.cursor.idx, *text);
+	//	break;
+	//case ACTION_ERASE_RECT_SELECTION:
+	//case ACTION_INDENT_BACK:
+	//	rectsel_insert(action.data, action.cur_control.cursor.line, action.cur_control.cursor.col, *text);
+	//	break;
+	case ACTION_REPLACE:
+		if(action.data_ins.size())
+			text_erase(*text, action.cur_control.cursor.line, action.cur_control.cursor.idx, action.cur_control.selcur.line, action.cur_control.selcur.idx);
+		if(action.data_rem.size())
+			selection_insert(action.data_rem, action.cur_control.cursor.line, action.cur_control.cursor.idx, *text);
 		break;
-	case ACTION_INSERT_RECT:
-	case ACTION_INDENT_FORWARD:
-		text_erase_rect(*text, action.cur_control.cursor.line, action.cur_control.selcur.line, action.cur_control.cursor.col, action.cur_control.selcur.col);
-		break;
-	case ACTION_ERASE:
-	case ACTION_ERASE_SELECTION:
-		selection_insert(action.data, action.cur_control.cursor.line, action.cur_control.cursor.idx, *text);
-		break;
-	case ACTION_ERASE_RECT_SELECTION:
-	case ACTION_INDENT_BACK:
-		rectsel_insert(action.data, action.cur_control.cursor.line, action.cur_control.cursor.col, *text);
+	case ACTION_REPLACE_RECT:
+		if(action.data_ins.size())
+			text_erase_rect(*text, action.cur_control.cursor.line, action.cur_control.selcur.line, action.cur_control.cursor.col, action.cur_control.selcur.col);
+		if(action.data_rem.size())
+			rectsel_insert(action.data_rem, action.cur_control.cursor.line, action.cur_control.cursor.col, *text);
 		break;
 	}
 	*cur=action.cur_before;
@@ -1518,20 +1804,32 @@ void				hist_redo()//ctrl y
 	auto &action=ACTION(*histpos);
 	switch(action.type)
 	{
-	case ACTION_INSERT:
-		selection_insert(action.data, action.cur_control.cursor.line, action.cur_control.cursor.idx, *text);
+	//case ACTION_INSERT:
+	//	selection_insert(action.data, action.cur_control.cursor.line, action.cur_control.cursor.idx, *text);
+	//	break;
+	//case ACTION_INSERT_RECT:
+	//case ACTION_INDENT_FORWARD:
+	//	rectsel_insert(action.data, action.cur_control.cursor.line, action.cur_control.cursor.col, *text);
+	//	break;
+	//case ACTION_ERASE:
+	//case ACTION_ERASE_SELECTION:
+	//	text_erase(*text, action.cur_control.cursor.line, action.cur_control.cursor.idx, action.cur_control.selcur.line, action.cur_control.selcur.idx);
+	//	break;
+	//case ACTION_ERASE_RECT_SELECTION:
+	//case ACTION_INDENT_BACK:
+	//	text_erase_rect(*text, action.cur_control.cursor.line, action.cur_control.selcur.line, action.cur_control.cursor.col, action.cur_control.selcur.col);
+	//	break;
+	case ACTION_REPLACE:
+		if(action.data_rem.size())
+			text_erase(*text, action.cur_control.cursor.line, action.cur_control.cursor.idx, action.cur_control.selcur.line, action.cur_control.selcur.idx);
+		if(action.data_ins.size())
+			selection_insert(action.data_ins, action.cur_control.cursor.line, action.cur_control.cursor.idx, *text);
 		break;
-	case ACTION_INSERT_RECT:
-	case ACTION_INDENT_FORWARD:
-		rectsel_insert(action.data, action.cur_control.cursor.line, action.cur_control.cursor.col, *text);
-		break;
-	case ACTION_ERASE:
-	case ACTION_ERASE_SELECTION:
-		text_erase(*text, action.cur_control.cursor.line, action.cur_control.cursor.idx, action.cur_control.selcur.line, action.cur_control.selcur.idx);
-		break;
-	case ACTION_ERASE_RECT_SELECTION:
-	case ACTION_INDENT_BACK:
-		text_erase_rect(*text, action.cur_control.cursor.line, action.cur_control.selcur.line, action.cur_control.cursor.col, action.cur_control.selcur.col);
+	case ACTION_REPLACE_RECT:
+		if(action.data_rem.size())
+			text_erase_rect(*text, action.cur_control.cursor.line, action.cur_control.selcur.line, action.cur_control.cursor.col, action.cur_control.selcur.col);
+		if(action.data_ins.size())
+			rectsel_insert(action.data_ins, action.cur_control.cursor.line, action.cur_control.cursor.col, *text);
 		break;
 	}
 	*cur=action.cur_after;
@@ -1970,6 +2268,7 @@ char				group_char(char c)
 	return c;
 }
 
+#if 0
 bool				cursor_to_mouse_full(Text const &text, int &lineno, int &idx, int &col)//returns true if mouse hit text
 {
 	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
@@ -1997,7 +2296,6 @@ bool				cursor_to_mouse_full(Text const &text, int &lineno, int &idx, int &col)/
 	}
 	return false;
 }
-#if 0
 bool				cursor_to_mouse_full(const char *text, int len, int &idx, int &lineno, int &col, int &linestart)//returns true if mouse hit text
 {
 	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
@@ -2032,12 +2330,15 @@ bool				cursor_to_mouse_full(const char *text, int len, int &idx, int &lineno, i
 	return false;
 }
 #endif
-void				cursor_at_mouse(Text const &text)//sets the cursor to mouse coordinates
+bool				cursor_at_mouse(Text const &text, Bookmark &cursor)//sets the cursor to mouse coordinates, returns true if text was hit
 {
 	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
-	int dypx=dy*font_zoom, ypos=(wpy+mousey)/dypx, xpos=wpx+mousex+(dx*font_zoom>>1);
+	int dypx=dy*font_zoom, dxpx=dx*font_zoom,
+		line=(wpy+mousey)/dypx;
+	//	col=(wpx+mousex+(dx*font_zoom>>1))/dxpx;
+	float col=float(wpx+mousex)/dxpx;
 
-	cur->cursor.set_gui(text, ypos, xpos);
+	return cursor.set_gui(text, line, col);
 
 	//cur->cursor=0, cur->ccy=0;
 	//if(ypos>0)
@@ -2056,7 +2357,8 @@ void				cursor_at_mouse(Text const &text)//sets the cursor to mouse coordinates
 	//inv_calc_width(-wpx, -wpy, text+cur->cursor, len-cur->cursor, -wpx, font_zoom, wpx+mousex+(dx*font_zoom>>1), &cur->ccx, &d_idx);
 	//cur->cursor+=d_idx;
 }
-bool				cursor_at_mouse_rect(Text const &text, Bookmark &c)//sets cursor to mouse coordinates
+#if 0
+bool				cursor_at_mouse_rect(Text const &text, Bookmark &c)//sets c to mouse coordinates
 {
 	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
 	int dxpx=dx*font_zoom, dypx=dy*font_zoom,
@@ -2087,7 +2389,6 @@ bool				cursor_at_mouse_rect(Text const &text, Bookmark &c)//sets cursor to mous
 	//}
 	//return false;
 }
-#if 0
 bool				cursor_at_mouse_rect(int &xpos, int &ypos)//sets ccx & ccy dummies
 {
 	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
@@ -2599,10 +2900,10 @@ void				wnd_on_render()
 
 	switch(tabbar_position)
 	{
-	case TABBAR_TOP:	tabbar_draw_horizontal(0,			dy<<1,	dy<<1,	h);						break;
-	case TABBAR_BOTTOM:	tabbar_draw_horizontal(h-(dy<<1),	h,		0,		h-(dy<<1));				break;
-	case TABBAR_LEFT:	tabbar_draw_sidebar(0,				tabbar_dx,	tabbar_dx,	w);				break;
-	case TABBAR_RIGHT:	tabbar_draw_sidebar(w-tabbar_dx,	w,			0,			w-tabbar_dx);	break;
+	case TABBAR_TOP:	tabbar_draw_horizontal	(0,				dy<<1,		dy<<1,		h);				break;
+	case TABBAR_BOTTOM:	tabbar_draw_horizontal	(h-(dy<<1),		h,			0,			h-(dy<<1));		break;
+	case TABBAR_LEFT:	tabbar_draw_sidebar		(0,				tabbar_dx,	tabbar_dx,	w);				break;
+	case TABBAR_RIGHT:	tabbar_draw_sidebar		(w-tabbar_dx,	w,			0,			w-tabbar_dx);	break;
 	}
 	prof_add("tab bar");
 	
@@ -2635,8 +2936,7 @@ void				wnd_on_render()
 	hscroll.decide(iw+scrollbarwidth>w);
 	vscroll.decide(ih+scrollbarwidth>h);
 
-	int cpx=x1+cur->cursor.col*dxpx, cpy=y1+cur->cursor.line*dypx;//cursor position in pixels
-	//int cpx=x1+cur->ccx*dxpx, cpy=y1+cur->ccy*dypx;
+	int cpx=x1+cur->cursor.col*dxpx, cpy=y1+cur->cursor.line*dypx, cpy2=y1+cur->selcur.line*dypx;//cursor position in pixels
 	if(wnd_to_cursor)
 	{
 		wnd_to_cursor=false;
@@ -2676,15 +2976,17 @@ void				wnd_on_render()
 	{
 		int rx1, rx2, ry1, ry2;//rect coordinates in characters
 		cur->get_rectsel(ry1, ry2, rx1, rx2);
-		for(int kl=0, x=x1, y=y1;kl<(int)text->size();++kl)
+		if(ry1==ry2)
+			draw_rectangle_i(x1, x2, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
+		for(int kl=0, x=x1, y=y1;kl<(int)text->size();++kl, y+=dypx)
 		{
 			auto &line=text->operator[](kl);
 			if(kl>=ry1&&kl<=ry2)
 			{
 				int idx=0;
-				x+=print_line(x-wpx, y-wpy, line.c_str()+idx, line.size()-idx, x1-wpx, font_zoom, rx1, &idx);
+				x+=print_line(x-wpx, y-wpy, line.c_str(), line.size(), x1-wpx, font_zoom, rx1, &idx);
 				set_text_colors(colors_selection);
-				x+=print_line(x-wpx, y-wpy, line.c_str()+idx, line.size()-idx, x1-wpx, font_zoom, rx2, &idx);
+				x+=print_line(x-wpx, y-wpy, line.c_str(), line.size(), x1-wpx, font_zoom, rx2, &idx);
 				set_text_colors(colors_text);
 				print_line(x-wpx, y-wpy, line.c_str()+idx, line.size()-idx, x1-wpx, font_zoom);
 				x=x1;
@@ -2692,6 +2994,10 @@ void				wnd_on_render()
 			else
 				print_line(x-wpx, y-wpy, line.c_str(), line.size(), x1-wpx, font_zoom);
 		}
+		if(cpy<cpy2)//draw cursor
+			draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy2-wpy+dypx, 0xFFFFFFFF);
+		else
+			draw_line_i(cpx-wpx, cpy2-wpy, cpx-wpx, cpy-wpy+dypx, 0xFFFFFFFF);
 	}
 	else
 	{
@@ -2711,7 +3017,7 @@ void				wnd_on_render()
 		}
 		else//no selection
 			print_text(x1-wpx, x1-wpx, x1-wpx, y1-wpy, *text, i, f, font_zoom);
-		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
+		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy-wpy+dypx, 0xFFFFFFFF);//draw cursor
 
 	/*	Bookmark i, f;
 		cur->get_selection(i, f);
@@ -2854,6 +3160,10 @@ void				wnd_on_render()
 	prof_add("scrollbars");
 
 	set_region_immediate(0, w, 0, h);
+#ifdef DEBUG_CURSOR
+	debug_print_cols(x1-wpx, y1-(dypx<<1), font_zoom, w/dxpx, 10);//
+	debug_print_cols(x1-wpx, y1-dypx, font_zoom, w/dxpx, 1);//
+#endif
 	switch(drag)
 	{
 	case DRAG_TAB:
@@ -2975,16 +3285,25 @@ bool				wnd_on_mousemove()
 	case DRAG_SELECT:
 	case DRAG_RECT:
 		if(cur->rectsel)
-		{
 			drag=DRAG_RECT;
-			cursor_at_mouse_rect(*text, cur->cursor);
-			//cursor_at_mouse_rect(cur->ccx, cur->ccy);
-		}
 		else
-		{
 			drag=DRAG_SELECT;
-			cursor_at_mouse(*text);
+		cursor_at_mouse(*text, cur->cursor);
+#ifdef DEBUG_CURSOR
+		{
+			const char *selectiontype=nullptr;
+			if(cur->selection_exists())
+			{
+				if(cur->rectsel)
+					selectiontype="RECT SEL.";
+				else
+					selectiontype="NORMAL SEL.";
+			}
+			else
+				selectiontype="NO SEL.";
+			debug_set_window_title("%s cur L %d I %d C %d  sel L %d I %d C %d", selectiontype, cur->cursor.line, cur->cursor.idx, cur->cursor.col, cur->selcur.line, cur->selcur.idx, cur->selcur.col);
 		}
+#endif
 		return true;
 	case DRAG_VSCROLL:
 	case DRAG_HSCROLL:
@@ -2992,7 +3311,7 @@ bool				wnd_on_mousemove()
 		return true;
 	case DRAG_MOVE_SELECTION:
 	case DRAG_COPY_SELECTION:
-		cursor_at_mouse(*text);
+		cursor_at_mouse(*text, cur->cursor);
 		return true;
 	}
 	return false;
@@ -3083,7 +3402,8 @@ bool				drag_selection_click(DragType drag_type)//checks if you clicked on the s
 	{
 		Bookmark click;
 		mx-=dx*font_zoom>>1;
-		bool hit=cursor_to_mouse_full(*text, click.line, click.idx, click.col);
+		bool hit=cursor_at_mouse(*text, click);
+	//	bool hit=cursor_to_mouse_full(*text, click.line, click.idx, click.col);
 		mx+=dx*font_zoom>>1;
 		if(hit)
 		{
@@ -3116,7 +3436,7 @@ void				lbutton_down_text()
 	{
 		if(drag_selection_click(DRAG_COPY_SELECTION))
 			return;
-		cursor_at_mouse(*text);
+		cursor_at_mouse(*text, cur->cursor);
 		cur->selcur=cur->cursor;
 		char initial=group_char(cur->cursor.dereference_idx(*text));
 		Bookmark start(0, 0, 0), finish(text->size()-1, text->operator[](text->size()-1).size(), 0);
@@ -3151,7 +3471,7 @@ void				lbutton_down_text()
 		if(cur->rectsel=is_alt_down())//rectsel
 		{
 			Bookmark temp;
-			if(cursor_at_mouse_rect(*text, temp))
+			if(cursor_at_mouse(*text, temp))
 				drag=DRAG_RECT, cur->cursor=temp;
 			if(!is_shift_down())
 				cur->selcur=cur->cursor;
@@ -3164,7 +3484,7 @@ void				lbutton_down_text()
 		else//place cursor / normal selection
 		{
 			drag=DRAG_SELECT;
-			cursor_at_mouse(*text);
+			cursor_at_mouse(*text, cur->cursor);
 			if(!is_shift_down())
 				cur->selcur=cur->cursor, cur->selcur=cur->cursor;
 		}
@@ -3332,21 +3652,60 @@ bool				wnd_on_lbuttonup()
 		break;
 	case DRAG_MOVE_SELECTION:
 	case DRAG_COPY_SELECTION:
+		if(drag_cursor.selection_exists()&&!drag_cursor.does_contain(cur->cursor))
 		{
 			Text selection;
 			if(drag_cursor.rectsel)
 			{
-				rectsel_copy(*text, *cur, selection);
+				rectsel_copy(*text, drag_cursor, selection);
 				if(drag==DRAG_MOVE_SELECTION)
-					text_erase_rect(*text, cur->cursor.line, cur->selcur.line, cur->cursor.col, cur->selcur.col);
-				rectsel_insert(selection, drag_cursor.cursor.line, drag_cursor.cursor.col, *text);
+				{
+					text_erase_rect(*text, drag_cursor.cursor.line, drag_cursor.selcur.line, drag_cursor.cursor.col, drag_cursor.selcur.col);
+					auto r=drag_cursor.get_rectsel();
+					if(cur->cursor.line>=r.y1&&cur->cursor.line<=r.y2)
+					{
+						if(cur->cursor.col>r.x2)
+							cur->cursor.col-=r.x2-r.x1;
+						else if(cur->cursor.col>r.x1)
+							cur->cursor.col=r.x1;
+						cur->cursor.update_idx(*text);
+					}
+				}
+				rectsel_insert(selection, cur->cursor.line, cur->cursor.col, *text);
+
+				relocate_range(cur->cursor.line, drag_cursor.cursor.line, drag_cursor.selcur.line);
+				relocate_range(cur->cursor.col, drag_cursor.cursor.col, drag_cursor.selcur.col);
+				drag_cursor.cursor.update_idx(*text);
+				drag_cursor.selcur.update_idx(*text);
 			}
 			else
 			{
-				selection_copy(*text, *cur, selection);
+				Bookmark i, f;
+				drag_cursor.get_selection(i, f);
+				selection_copy(*text, drag_cursor, selection);
 				if(drag==DRAG_MOVE_SELECTION)
-					text_erase(*text, cur->cursor.line, cur->cursor.idx, cur->selcur.line, cur->selcur.idx);
-				selection_insert(selection, drag_cursor.cursor.line, drag_cursor.cursor.idx, *text);
+				{
+					text_erase(*text, drag_cursor.cursor.line, drag_cursor.cursor.idx, drag_cursor.selcur.line, drag_cursor.selcur.idx);
+					if(cur->cursor>f)
+						relocate_bookmark(i, f, cur->cursor, *text);
+					//{
+					//	for(Bookmark temp=f;temp!=i;temp.decrement_idx(*text), drag_cursor.cursor.decrement_idx(*text));
+					//	//drag_cursor.cursor.line-=f.line+1-i.line;//X
+					//	//drag_cursor.cursor.idx-=f.idx-i.idx;
+					//}
+				}
+				selection_insert(selection, cur->cursor.line, cur->cursor.idx, *text);
+
+				if(cur->cursor<i)
+				{
+					relocate_bookmark(i, cur->cursor, drag_cursor.cursor, *text);
+					relocate_bookmark(i, cur->cursor, drag_cursor.selcur, *text);
+				}
+				else if(cur->cursor>f)
+				{
+					relocate_bookmark(f, cur->cursor, drag_cursor.cursor, *text);
+					relocate_bookmark(f, cur->cursor, drag_cursor.selcur, *text);
+				}
 			}
 #if 0
 			std::vector<std::string> selection;
@@ -3543,16 +3902,22 @@ bool				wnd_on_redo()
 	hist_redo();
 	return true;
 }
-bool				wnd_on_copy()
+bool				wnd_on_copy(bool cut)
 {
-	std::string str;
-	Text selection;
-	if(cur->rectsel)
-		rectsel_copy(*text, *cur, selection);
-	else
-		selection_copy(*text, *cur, selection);
-	text2str(selection, str);
-	copy_to_clipboard_c(str.c_str(), str.size());
+	if(cur->selection_exists())
+	{
+		std::string str;
+		Text selection;
+		if(cur->rectsel)
+			rectsel_copy(*text, *cur, selection);
+		else
+			selection_copy(*text, *cur, selection);
+		if(cut)
+			general_selection_erase();
+		text2str(selection, str);
+		copy_to_clipboard_c(str.c_str(), str.size());
+		return cut;
+	}
 #if 0
 	if(cur->rectsel)
 	{
@@ -3602,8 +3967,12 @@ bool				wnd_on_paste()
 	if(!paste_from_clipboard(str, len))
 		return false;
 	general_selection_erase();
-	text_insert(*text, cur->cursor.line, cur->cursor.idx, str, len);
+	text_insert(*text, cur->cursor.line, cur->cursor.idx, str, len, &cur->cursor.line, &cur->cursor.idx);
 	delete[] str;
+	cur->cursor.update_col(*text);
+	if(!is_shift_down())
+		cur->deselect(*text, 0);
+
 #if 0
 	char *str=nullptr;
 	int len=0;
@@ -3646,15 +4015,20 @@ bool				wnd_on_scroll_down_key()
 bool				wnd_on_skip_word_left()
 {
 	Bookmark start(0, 0, 0);
-	char initial=group_char(cur->cursor.dereference_idx(*text));
-	while(cur->cursor>start)
+	if(cur->cursor.decrement_idx(*text))
 	{
-		cur->cursor.decrement_idx(*text);
-		if(group_char(cur->cursor.dereference_idx(*text))!=initial)
-			break;
+		char initial=group_char(cur->cursor.dereference_idx(*text));
+		while(cur->cursor>start)
+		{
+			if(group_char(cur->cursor.dereference_idx(*text))!=initial)
+			{
+				cur->cursor.increment_idx(*text);
+				break;
+			}
+			cur->cursor.decrement_idx(*text);
+		}
+		cur->cursor.update_col(*text);
 	}
-	cur->cursor.increment_idx(*text);
-	cur->cursor.update_col(*text);
 
 	//if(cur->cursor>0)
 	//{
@@ -3665,7 +4039,7 @@ bool				wnd_on_skip_word_left()
 	//	calc_cursor_coords(0);
 	//}
 	if(!is_shift_down())
-		cur->deselect();
+		cur->deselect(*text, -1);
 	wnd_to_cursor=true;
 	return true;
 }
@@ -3691,7 +4065,7 @@ bool				wnd_on_skip_word_right()
 	//	calc_cursor_coords(0);
 	//}
 	if(!is_shift_down())
-		cur->deselect();
+		cur->deselect(*text, 1);
 	wnd_to_cursor=true;
 	return true;
 }
@@ -3704,7 +4078,7 @@ bool				wnd_on_goto_file_start()
 	//	cur->cursor=0, cur->ccx=0, cur->ccy=0;
 	//}
 	if(!is_shift_down())
-		cur->deselect();
+		cur->deselect(*text, 0);
 	wnd_to_cursor=true;
 	return true;
 }
@@ -3718,7 +4092,7 @@ bool				wnd_on_goto_file_end()
 	//	calc_cursor_coords(0);
 	//}
 	if(!is_shift_down())
-		cur->deselect();
+		cur->deselect(*text, 0);
 	wnd_to_cursor=true;
 	return true;
 }
@@ -3732,7 +4106,7 @@ bool				wnd_on_goto_line_start()
 	//	calc_cursor_coords(0);
 	//}
 	if(!is_shift_down())
-		cur->deselect();
+		cur->deselect(*text, 0);
 	wnd_to_cursor=true;
 	return true;
 }
@@ -3746,7 +4120,7 @@ bool				wnd_on_goto_line_end()
 	//	calc_cursor_coords(0);
 	//}
 	if(!is_shift_down())
-		cur->deselect();
+		cur->deselect(*text, 0);
 	wnd_to_cursor=true;
 	return true;
 }
@@ -3799,9 +4173,11 @@ bool				wnd_on_backspace()
 		general_selection_erase();
 	else
 	{
-		text_erase1_bksp(*text, cur->cursor.line, cur->cursor.idx);
-		cur->cursor.decrement_idx_skipnewline(*text);
+		int l0=cur->cursor.line, idx0=cur->cursor.idx;
+		cur->cursor.decrement_idx(*text);
+		cur->cursor.update_col(*text);
 		cur->selcur=cur->cursor;
+		text_erase1_bksp(*text, l0, idx0);
 	}
 /*	if(cur->rectsel)
 	{
@@ -3834,9 +4210,10 @@ bool				wnd_on_backspace()
 }
 bool				wnd_on_cursor_up()
 {
-	cur->cursor.jump_vertical(*text, -1);
+	if(!cur->selection_exists())
+		cur->cursor.jump_vertical(*text, -1);
 	if(!is_shift_down())
-		cur->deselect();
+		cur->deselect(*text, -1);
 #if 0
 	if(!is_shift_down()&&cur->cursor!=cur->selcur)
 	{
@@ -3867,9 +4244,10 @@ bool				wnd_on_cursor_up()
 }
 bool				wnd_on_cursor_down()
 {
-	cur->cursor.jump_vertical(*text, 1);
+	if(!cur->selection_exists())
+		cur->cursor.jump_vertical(*text, 1);
 	if(!is_shift_down())
-		cur->deselect();
+		cur->deselect(*text, 1);
 #if 0
 	if(!is_shift_down()&&cur->cursor!=cur->selcur)
 	{
@@ -3901,10 +4279,13 @@ bool				wnd_on_cursor_down()
 }
 bool				wnd_on_cursor_left()
 {
-	cur->cursor.decrement_idx(*text);
-	cur->cursor.update_col(*text);
+	if(!cur->selection_exists())
+	{
+		cur->cursor.decrement_idx(*text);
+		cur->cursor.update_col(*text);
+	}
 	if(!is_shift_down())
-		cur->deselect();
+		cur->deselect(*text, -1);
 /*	if(!is_shift_down()&&cur->cursor!=cur->selcur)
 	{
 		cur->cursor=cur->selcur=minimum(cur->cursor, cur->selcur), cur->rectsel=false;
@@ -3927,10 +4308,13 @@ bool				wnd_on_cursor_left()
 }
 bool				wnd_on_cursor_right()
 {
-	cur->cursor.increment_idx(*text);
-	cur->cursor.update_col(*text);
+	if(!cur->selection_exists())
+	{
+		cur->cursor.increment_idx(*text);
+		cur->cursor.update_col(*text);
+	}
 	if(!is_shift_down())
-		cur->deselect();
+		cur->deselect(*text, 1);
 /*	if(!is_shift_down()&&cur->cursor!=cur->selcur)
 	{
 		cur->cursor=cur->selcur=maximum(cur->cursor, cur->selcur), cur->rectsel=false;
@@ -3955,26 +4339,62 @@ bool				wnd_on_type(char character)
 {
 	if(cur->selection_exists())
 	{
-		bool multiline_selection=cur->cursor.line!=cur->cursor.line;
+		bool multiline_selection=cur->cursor.line!=cur->selcur.line;
 		if(character=='\t'&&multiline_selection)//indentation
 		{
 			if(cur->rectsel)
 			{
-				if(is_shift_down())//unindent rectsel (shift tab)
+				if(is_shift_down())//shift tab
 					indent_rectsel_back(*cur);
-				else//indent rectsel (tab)
+				else//tab
 					indent_rectsel_forward(*cur);
 			}
 			else
 			{
-				if(is_shift_down())//unindent selection (shift tab)
+				if(is_shift_down())//shift tab
 					indent_selection_back(*cur);
-				else//indent selection (tab)
+				else//tab
 					indent_selection_forward(*cur);
 			}
 			return true;
 		}
 		general_selection_erase();
+	}
+	if(cur->rectsel)
+	{
+		auto r=cur->get_rectsel();
+		if(character=='\n')
+		{
+			cur->cursor.set_gui(*text, r.y2, r.x2);
+			cur->selcur=cur->cursor;
+		}
+		else
+		{
+			for(int kl=r.y1;kl<=r.y2;++kl)
+			{
+				auto &line=text->operator[](kl);
+				int idx1=0, col1=0, idx2=0, col2=0;
+				col2idx(line.c_str(), line.size(), 0, r.x1, &idx1, &col1);
+				if(col1<r.x1)//line is not long enough
+				{
+					int ntabs=r.x1/tab_count-line.size()/tab_count, nspaces=mod(r.x1, tab_count);
+					if(ntabs>0)
+						line.append(ntabs, '\t');
+					if(nspaces>0)
+						line.append(nspaces, ' ');
+					line.append(1, character);
+				}
+				else
+				{
+					col2idx(line.c_str(), line.size(), 0, r.x2, &idx2, &col2);
+					line.replace(line.begin()+idx1, line.begin()+idx2, &character, &character+1);
+				}
+			}
+			cur->selcur.idx=++cur->cursor.idx;
+			cur->cursor.update_col(*text);
+			cur->selcur.update_col(*text);
+			return true;
+		}
 	}
 	text_insert1(*text, cur->cursor.line, cur->cursor.idx, character);
 	cur->cursor.increment_idx(*text);

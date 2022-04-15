@@ -423,7 +423,8 @@ int					main(int argc, char **argv)
 						case SDL_SCANCODE_HOME:		redraw|=wnd_on_goto_file_start();		break;
 						case SDL_SCANCODE_END:		redraw|=wnd_on_goto_file_end();			break;
 						case SDL_SCANCODE_A:		redraw|=wnd_on_select_all();			break;
-						case SDL_SCANCODE_C:		redraw|=wnd_on_copy();					break;
+						case SDL_SCANCODE_C:		redraw|=wnd_on_copy(false);				break;
+						case SDL_SCANCODE_X:		redraw|=wnd_on_copy(true);				break;
 						case SDL_SCANCODE_D:		redraw|=wnd_on_clear_hist();			break;
 						case SDL_SCANCODE_N:		redraw|=wnd_on_newtab();				break;
 						case SDL_SCANCODE_O:		redraw|=wnd_on_open();					break;
