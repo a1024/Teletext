@@ -19,13 +19,13 @@
 #define				STB_IMAGE_IMPLEMENTATION
 #include			"stb_image.h"//https://github.com/nothings/stb
 
-//	#define			DEBUG_CURSOR
+	#define			DEBUG_CURSOR
 //	#define			HELP_SHOWALL
 
 const char			file[]=__FILE__;
 char				g_buf[G_BUF_SIZE]={};
 int					w=0, h=0;
-short				mx=0, my=0,//current mouse coordinates
+short				mx=0, my=0, mline=0, mcol=0,//current mouse coordinates
 					dx=0, dy=0,//non-tab character dimensions
 					tab_count=4;
 std::string			exe_dir;
@@ -327,22 +327,6 @@ void				col2idx(const char *text, int text_length, int tab0_cols, float req_col,
 			if(col+dcol*0.5f>=req_col)
 				break;
 			col+=dcol;
-
-			//int c0=col;
-			//col+=dcol;
-			//if(((col+c0)>>1)>=req_col)
-			//{
-			//	idx+=col==req_col;
-			//	break;
-			//}
-
-			//int sum=col+dcol;
-			//if(sum>=req_col)
-			//{
-			//	idx+=sum==req_col;
-			//	break;
-			//}
-			//col=sum;
 		}
 	}
 	if(ret_col)
@@ -373,8 +357,6 @@ int					calc_width		(int x, int y, const char *msg, int msg_length, int tab_orig
 	for(int k=0;k<msg_length;++k)
 	{
 		char c=msg[k];
-		//if(c=='\n')
-		//	break;
 		if(c=='\t')
 			width=tab_width-mod(x+msg_width-tab_origin, tab_width), c=' ';
 		else if(c>=32&&c<0xFF)
@@ -430,8 +412,6 @@ int					print_line		(int x, int y, const char *msg, int msg_length, int tab_orig
 {
 	if(msg_length<1)
 		return 0;
-	//if(ret_idx)
-	//	msg+=*ret_idx, msg_length-=*ret_idx;
 	float rect[4]={};
 	QuadCoords *txc=nullptr;
 	int msg_width=0, width, idx, printable_count=0, tab_width=tab_count*dx*zoom, w2=dx*zoom, height=dy*zoom, req_width=req_cols*dx*zoom;
@@ -679,8 +659,8 @@ struct				Bookmark
 		this->line=line;
 		auto &_line=text[line];
 		this->col=col;
-		col2idx(_line.c_str(), _line.size(), 0, col, &this->idx, nullptr);//
-		//col2idx(_line.c_str(), _line.size(), 0, col, &this->idx, &this->col);
+		//col2idx(_line.c_str(), _line.size(), 0, col, &this->idx, nullptr);//
+		col2idx(_line.c_str(), _line.size(), 0, col, &this->idx, &this->col);
 	//	update_idx(text);
 		return hit;
 	}
@@ -705,7 +685,6 @@ struct				Bookmark
 		idx=text[line].size();
 		update_col(text);
 	}
-	//void reset(){line=0, idx=col=0;}
 
 	void jump_vertical(Text const &text, int delta_line)
 	{
@@ -794,13 +773,7 @@ bool				operator<(Bookmark const &left, Bookmark const &right)
 		return left.idx<right.idx;
 	return left.line<right.line;
 }
-bool				operator<=(Bookmark const &left, Bookmark const &right)
-{
-	return !(right<left);
-	//if(left.line==right.line)
-	//	return left.idx<=right.idx;
-	//return left.line<=right.line;
-}
+bool				operator<=(Bookmark const &left, Bookmark const &right){return !(right<left);}
 bool				operator>(Bookmark const &left, Bookmark const &right){return right<left;}
 bool				operator>=(Bookmark const &left, Bookmark const &right){return right<=left;}
 int					bookmark_subtract(Bookmark const &a, Bookmark const &b, Text const &text)
@@ -878,18 +851,11 @@ void				relocate_bookmark(Bookmark const &i, Bookmark const &f, Bookmark &b, Tex
 {
 	int diff=bookmark_subtract(f, i, text);
 	bookmark_add(b, diff, text);
-	//if(i<f)//X  slow
-	//	for(Bookmark temp=i;temp!=f;temp.increment_idx(text), b.increment_idx(text));
-	//else if(f<i)
-	//	for(Bookmark temp=i;temp!=f;temp.decrement_idx(text), b.decrement_idx(text));
 }
 struct				Cursor
 {
 	bool rectsel;
 	Bookmark cursor, selcur;
-	//int cursor, selcur,//text indices
-	//	ccx, ccy,//cursor coordinates in the text buffer, in character units
-	//	scx, scy;//selcur coordinates in the text buffer, in character units
 
 	Cursor():rectsel(false){}
 	void deselect(Text const &text, int direction)//direction: -1: left, 0: don't care, 1: right
@@ -930,12 +896,6 @@ struct				Cursor
 		else
 			i=cursor, f=selcur;
 	}
-	//Rect get_rectsel_raw()
-	//{
-	//	Rect r;
-	//	r.set(scx, ccx, scy, ccy);
-	//	return r;
-	//}
 	Rect get_rectsel()const
 	{
 		Rect r;
@@ -950,19 +910,14 @@ struct				Cursor
 	}
 	void set_rectsel(Text const &text, int l1, int l2, int col1, int col2)
 	{
-		//rectsel=true;//
 		cursor.set_gui(text, l1, col1);
 		selcur.set_gui(text, l2, col2);
-		//scx=x1, ccx=x2, scy=y1, ccy=y2;
 	}
 	bool selection_exists()const
 	{
 		if(rectsel)
 			return cursor.col!=selcur.col;
 		return cursor.line!=selcur.line||cursor.col!=selcur.col;
-		//if(rectsel)
-		//	return ccx!=scx;
-		//return cursor!=selcur;
 	}
 	bool does_contain(Bookmark const &b)const
 	{
@@ -975,12 +930,9 @@ struct				Cursor
 		get_selection(i, f);
 		return b>=i&&b<=f;
 	}
-
-	//void set_rectsel(Rect const &r){scx=r.x1, ccx=r.x2, scy=r.y1, ccy=r.y2;}
 };
 short				font_zoom=1;//font pixel size
 int					wpx=0, wpy=0,//window position inside the text buffer, in pixels
-				//	nlines=1,
 					text_width=0;//in characters
 Cursor				*cur=nullptr;
 void				text2str(Text const &text, std::string &str)
@@ -1031,8 +983,6 @@ void				rectsel_copy(Text const &src, Cursor const &cur, Text &dst)
 }
 void				rectsel_insert(Text const &src, int l1, int col1, Text &dst)
 {
-	//int l1, l2, col1, col2;//l2 & col2 shouldn't be used here
-	//cur.get_rectsel(l1, l2, col1, col2);
 	int kls=0, kld=l1;
 	for(;kls<(int)src.size()&&kld<(int)dst.size();++kls, ++kld)
 	{
@@ -1086,26 +1036,6 @@ void				selection_insert(Text const &src, int l1, int idx1, Text &dst)
 	}
 }
 
-struct				Range
-{
-	unsigned
-		linestart, lineend,//absolute index
-		linecols,//line width in character units
-		i, f;//index from linestart
-	Range():linestart(0), lineend(0), linecols(0), i(-1), f(0){}
-	//Range(unsigned linestart, unsigned i, unsigned f):linestart(linestart), i(i), f(f){}
-	void set(unsigned linestart, unsigned p, int &extent)
-	{
-		this->linestart=linestart;
-		if(i>p)
-			i=p;
-		if(f<p)
-			f=p;
-		if(extent<int(f-i))
-			extent=f-i;
-	}
-};
-typedef std::vector<Range> Ranges;
 enum				ActionType
 {
 	ACTION_UNINITIALIZED,
@@ -1216,9 +1146,6 @@ typedef std::vector<HistoryAction> History;
 
 std::string			*filename;//utf8
 Text				*text=nullptr;
-//std::string		*text=nullptr;
-//#define			AT(BOOKMARK)	text->operator[](BOOKMARK.line)[BOOKMARK.idx]
-//#define			AT(K)	text->operator[](K)
 //std::string		text="Hello.\nSample Text.\nWhat\'s going on???\n";
 char				caps_lock=false;
 
@@ -1265,7 +1192,6 @@ struct				TextFile
 {
 	std::string m_filename;//UTF-8
 	Text m_text;//ASCII
-	//std::string m_text;
 	int m_untitled_idx;
 
 	float m_wcx, m_wcy;//window position inside the text buffer, in character units
@@ -1435,56 +1361,6 @@ void				tabs_switchto(int k, bool change_title=true)
 	dimensions_known=false;
 }
 
-#if 0
-void				calc_cursor_coords(int x0_minus_tab_origin_chars)//calculates line & col of cursor
-{
-	cur->ccx=0, cur->ccy=0;
-	for(int k=0;k<cur->cursor;++k)
-	{
-		if(AT(k)=='\n')
-			cur->ccx=0, ++cur->ccy;
-		else if(AT(k)=='\t')
-			cur->ccx+=tab_count-mod(x0_minus_tab_origin_chars+cur->ccx, tab_count);
-		else
-			++cur->ccx;
-	}
-}
-void				calc_dimensions_chars(short x_chars, short y_chars, const char *msg, int msg_length, short tab_origin_chars, int &cwidth, int &cheight, int kcursor, int &cx, int &cy, int kselcur, int &sx, int &sy)
-{
-	cheight=1, cwidth=0;
-	int k=0, linecols=0;
-	for(;k<msg_length;++k)
-	{
-		if(k==kcursor)
-			cx=linecols, cy=cheight-1;
-		if(k==kselcur)
-			sx=linecols, sy=cheight-1;
-		if(msg[k]=='\t')
-			linecols+=tab_count-mod(x_chars+linecols-tab_origin_chars, tab_count);
-		else if(msg[k]=='\n')
-		{
-			if(cwidth<linecols)
-				cwidth=linecols;
-			++cheight, linecols=0;
-		}
-		else
-			++linecols;
-	}
-	if(cwidth<linecols)
-		cwidth=linecols;
-	if(k==kcursor)
-		cx=linecols, cy=cheight-1;
-	if(k==kselcur)
-		sx=linecols, sy=cheight-1;
-	if(cur->rectsel)
-	{
-		if(cwidth<cx)
-			cwidth=cx;
-		if(cwidth<sx)
-			cwidth=sx;
-	}
-}
-#endif
 int					calc_cols(Text const &text)
 {
 	int cols=0;
@@ -1497,25 +1373,6 @@ int					calc_cols(Text const &text)
 	}
 	return cols;
 }
-
-/*inline int			count_lines(const char *text, int i, int f)
-{
-	int lineno=0;
-	for(int k=i;k<f;lineno+=text[k]=='\n', ++k);
-	//for(int k=i;k<f;lineno+=AT(k)=='\n', ++k);
-	return lineno;
-}
-inline int			find_line_start(const char *text, int i)
-{
-	i-=text[i]=='\n';
-	for(;i>=0&&text[i]!='\n';--i);
-	return i+1;
-}
-inline int			find_line_end(const char *text, int len, int i)
-{
-	for(;i<len&&text[i]!='\n';++i);
-	return i;
-}//*/
 
 void				text_erase(Text &text, int l1, int idx1, int l2, int idx2)
 {
@@ -1574,6 +1431,12 @@ void				text_insert(Text &text, int l0, int idx0, const char *a, int len, int *r
 		k=k2;
 	}
 }
+void				replace_tab_with_spaces(std::string &line, int idx)
+{
+	int col0=idx2col(line.c_str(), idx, 0);
+	int nspaces=tab_count-mod(col0, tab_count);
+	line.replace(idx, 1, nspaces, ' ');
+}
 void				text_erase_rect(Text &text, int l1, int l2, int col1, int col2)
 {
 	if(l2<l1)
@@ -1585,6 +1448,19 @@ void				text_erase_rect(Text &text, int l1, int l2, int col1, int col2)
 		auto &line=text[kl];
 		int idx1=0, c1=0;
 		col2idx(line.c_str(), line.size(), 0, col1, &idx1, &c1);
+		if(c1!=col1)//tab caused misalign
+		{
+			if(idx1>0&&line[idx1-1]=='\t')
+			{
+				replace_tab_with_spaces(line, idx1-1);
+				col2idx(line.c_str(), line.size(), 0, col1, &idx1, &c1);
+			}
+			else if(idx1<(int)line.size()&&line[idx1]=='\t')
+			{
+				replace_tab_with_spaces(line, idx1);
+				col2idx(line.c_str(), line.size(), 0, col1, &idx1, &c1);
+			}
+		}
 		if(c1==col1)
 		{
 			int idx2=0, c2=0;
@@ -1610,11 +1486,6 @@ void				text_insert_rect(Text &text, int l1, int l2, int col0, const char *a, in
 			idx1=line.size();
 		}
 		line.insert(line.begin()+idx1, a, a+len);
-
-		//int pos=col0;
-		//if(pos>(int)line.size())//X  insert tabs
-		//	pos=line.size();
-		//line.insert(line.begin()+pos, a, a+len);
 	}
 }
 void				text_insert1(Text &text, int l0, int idx0, char c)
@@ -1655,7 +1526,9 @@ void				indent_rectsel_back(Cursor &cur)
 {
 	int l1, l2, col1, col2, col0;
 	cur.get_rectsel(l1, l2, col1, col2);
-	col0=col2-mod(col2-1, tab_count);//tab_count can be NPOT
+	int remainder=mod(col1, tab_count);//tab_count can be NPOT
+	remainder+=tab_count&-!remainder;
+	col0=col1-remainder;
 	int dst_col=col0;
 	//std::vector<int> indices(l2+1-l1);
 	for(int kl=l1;kl<=l2;++kl)//find col_clearance
@@ -1679,7 +1552,7 @@ void				indent_rectsel_back(Cursor &cur)
 	}
 	if(dst_col>=0)
 	{
-		for(int kl=l1;kl<l2;++kl)
+		for(int kl=l1;kl<=l2;++kl)
 		{
 			auto &line=text->operator[](kl);
 			int idx1, c1, idx2, c2;
@@ -1840,421 +1713,6 @@ void				hist_redo()//ctrl y
 	set_title();
 }
 
-#if 0
-int					calc_ranges(Ranges &ranges)
-{
-	int rx1, rx2, ry1, ry2;//rect coordinates in character units
-	cur->get_rectsel(ry1, ry2, rx1, rx2);
-	ranges.resize(ry2+1-ry1);
-	int linestart=0, linecols=0, lineno=0, r_idx=0, k=0, extent=0;
-	Range *r=nullptr;
-	for(;k<(int)text->size();++k)
-	{
-		//if(lineno>=ry1&&lineno<=ry2&&linecols>=rx1&&linecols<rx2+(rx1==rx2))
-		if(lineno>=ry1&&lineno<=ry2&&linecols>=rx1&&linecols<=rx2)
-			ranges[r_idx].set(linestart, k-linestart, extent);//i&f are idx because inside
-		if(AT(k)=='\n')
-		{
-			if(lineno>=ry1&&lineno<=ry2)
-			{
-				r=ranges.data()+r_idx;
-				if(r->i==-1)
-					r->linestart=linestart, r->i=k-linestart+rx1-linecols, r->f=r->i+rx2-rx1;//always idx						//i&f are cols! because didn't reach selection X
-				r->lineend=k, r->linecols=linecols;
-				++r_idx;
-			}
-			linestart=k+1, linecols=0, ++lineno;
-		}
-		else if(AT(k)=='\t')
-			linecols+=tab_count-mod(-wpx+linecols-(-wpx), tab_count);
-		else
-			++linecols;
-	}
-	//if(lineno>=ry1&&lineno<=ry2&&linecols>=rx1&&linecols<rx2+(rx1==rx2))
-	if(lineno>=ry1&&lineno<=ry2)
-	{
-		r=ranges.data()+r_idx;
-		if(linecols>=rx1&&linecols<=rx2)
-			r->set(linestart, k-linestart, extent);
-		if(r->i==-1)
-			r->linestart=linestart, r->i=k-linestart+rx1-linecols, r->f=r->i+rx2-rx1;
-		r->lineend=k, r->linecols=linecols;
-	}
-	return extent;
-}
-struct				WhitespaceInfo
-{
-	int start_idx, end_idx, width1, ws_width, rem_c;
-	void set(int start_idx, int end_idx, int width1, int ws_width, int rem_c){this->start_idx=start_idx, this->end_idx=end_idx, this->width1=width1, this->ws_width=ws_width, this->rem_c=rem_c;}
-};
-void				text_replace_rect(Ranges &ranges, const char *a, int len, int indent=0, std::vector<std::string> *strings=nullptr)//ranges are updated,		indent: 0: disabled, 1: forward, 2: backward
-{
-	history->resize(*histpos+1);
-	ActionData data;
-	bool padded=false, erased=false;
-	Cursor cur0=*cur;
-	for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)	//1) pad selection
-	{
-		auto &range=ranges[k];
-		range.linestart+=cumulative_delta;
-		range.lineend+=cumulative_delta;
-		int linecount=range.lineend-range.linestart;
-		if(linecount<(int)range.i)//line ends before selection - pad this line
-		{
-			padded=true;
-			int delta=range.i-linecount;
-			text->insert(text->begin()+range.lineend, delta, ' ');
-			data.push_back(ActionFragment(range.lineend, text->c_str()+range.lineend, delta));
-			cumulative_delta+=delta;
-			range.lineend+=delta;
-		}
-	//	else if(linecount>=range.f)//line ends after selection - no pad necessary
-	//	{
-	//	}
-	//	else//line ends inside selection - no pad necessary
-	//	{
-	//	}
-	}
-	if(padded)
-	{
-		history->push_back(HistoryAction(ACTION_INSERT_RECT, std::move(data), cur0, *cur));
-		++*histpos;
-		cur0=*cur;
-	}
-	if(!indent)
-	{
-		for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)	//2) erase selection
-		{
-			auto &range=ranges[k];
-			range.linestart-=cumulative_delta;
-			range.lineend-=cumulative_delta;
-			if(range.i<range.f)
-			{
-				unsigned linecount=range.lineend-range.linestart, delta=0;
-				//if(linecount<range.i)//unreachable
-				//{
-				//}
-				//else
-				if(linecount>=range.f)//erase [linestart+i, linestart+f[
-				{
-					erased=true;
-					delta=range.f-range.i;
-					data.push_back(ActionFragment(range.linestart+range.i, text->c_str()+range.linestart+range.i, delta));
-					text->erase(text->begin()+range.linestart+range.i, text->begin()+range.linestart+range.f);
-				}
-				else if(range.i<linecount&&linecount<range.f)//erase [linestart+i, lineend[
-				{
-					erased=true;
-					delta=linecount-range.i;
-					data.push_back(ActionFragment(range.linestart+range.i, text->c_str()+range.linestart+range.i, delta));
-					text->erase(text->begin()+range.linestart+range.i, text->begin()+range.lineend);
-				}
-				cumulative_delta+=delta;
-				range.lineend-=delta;
-				range.f=range.i;
-			}
-		}
-		cur->ccx=cur->scx=minimum(cur->ccx, cur->scx);
-		if(erased)
-		{
-			history->push_back(HistoryAction(ACTION_ERASE_RECT_SELECTION, std::move(data), cur0, *cur));
-			++*histpos;
-		}
-		cur0=*cur;
-	}
-	
-	if(len>0||strings)													//3) insert text
-	{
-		if(indent==2)//indent backwards: remove tab before selection
-		{
-			unsigned min_ws=-1, max_ws=0, min_rem=-1;
-			std::vector<WhitespaceInfo> ws_infos(ranges.size());
-			for(int k=0;k<(int)ranges.size();++k)//find smallest whitespace before selection
-			{
-				auto &range=ranges[k];
-				int end=range.linestart+range.i, start=end;
-				for(;start>0&&(AT(start-1)=='\t'||AT(start-1)==' ');--start);
-				int width1=calc_width(0, 0, text->c_str()+range.linestart, start-range.linestart, 0, 1);
-				unsigned whitespace_px=calc_width(width1, 0, text->c_str()+start, end-start, 0, 1);
-
-				//int rem_c=minimum(mod((width1+whitespace_px)/dx, tab_count), whitespace_px/dx);
-				int remove_c=(width1+whitespace_px)/dx;
-				int remainder=mod(remove_c, tab_count);
-				if(!remainder)
-					remove_c=tab_count;
-				else
-					remove_c=remainder;
-				if(remove_c>(int)whitespace_px/dx)
-					remove_c=0;
-
-				ws_infos[k].set(start, end, width1, whitespace_px, remove_c);
-				if(min_ws>whitespace_px)
-					min_ws=whitespace_px;
-				if(max_ws<whitespace_px)
-					max_ws=whitespace_px;
-				if(min_rem>(unsigned)remove_c)
-					min_rem=remove_c;
-			}
-			if((int)min_rem>0)//if there is anything to remove
-			{
-				for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
-				{
-					auto &range=ranges[k];
-					auto &wsk=ws_infos[k];
-					range.linestart-=cumulative_delta;
-
-					int start=0, rem_idx=0;
-					int idx=range.linestart+range.i;
-					if(idx>0)
-					{
-						if(AT(idx-1)=='\t')
-							start=idx-1, rem_idx=1;
-						else if(AT(idx-1)==' ')
-							start=idx-wsk.rem_c, rem_idx=wsk.rem_c;
-					}
-					if(rem_idx)
-					{
-						data.push_back(ActionFragment(start, text->c_str()+start, rem_idx));
-						text->erase(start, rem_idx);
-						cumulative_delta+=rem_idx;
-					}
-				}
-				cur->ccx-=min_rem;//ccx & scx can be different here in case of indent
-				cur->scx-=min_rem;
-				history->push_back(HistoryAction(ACTION_ERASE_RECT_SELECTION, std::move(data), cur0, *cur));
-				++*histpos;
-			/*	for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
-				{
-					auto &range=ranges[k];
-					range.linestart+=cumulative_delta;
-
-					int idx=range.linestart+range.i-1;
-					if(idx>=0&&AT(idx)=='\t')
-					{
-						range.linestart+=cumulative_delta;
-						int width1=calc_width(0, 0, text->c_str()+range.linestart, range.i-1, 0, 1);
-						int pxchange=calc_width(width1, 0, text->c_str()+range.linestart+range.i-1, 1, 0, 1);
-						if(max_px_change<pxchange)
-							max_px_change=pxchange;
-
-						data.push_back(ActionFragment(idx, text->c_str()+idx, 1));
-
-						text->erase(idx, 1);
-
-						--cumulative_delta;
-						range.lineend+=cumulative_delta;
-					}
-				}//*/
-			}
-		}
-		else//insert text or indent
-		{
-			int max_px_change=0;
-			if(padded||erased||!hist_cont||*histpos<0||ACTION(*histpos).type!=ACTION_INSERT_RECT||ACTION(*histpos).data.size()!=ranges.size())//new history
-			{
-				for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
-				{
-					auto &range=ranges[k];
-					range.linestart+=cumulative_delta;
-
-					if(strings)
-					{
-						auto &str=strings->operator[](k);
-						text->insert(text->begin()+range.linestart+range.i, str.begin(), str.end());
-						len=str.size();
-					}
-					else
-						text->insert(text->begin()+range.linestart+range.i, a, a+len);
-
-					int width1=calc_width(0, 0, text->c_str()+range.linestart, range.i, 0, 1);
-					int pxchange=calc_width(width1, 0, text->c_str()+range.linestart+range.i, len, 0, 1);
-					if(max_px_change<pxchange)
-						max_px_change=pxchange;
-					//int width2=calc_width(0, 0, text->c_str()+range.linestart, range.i+len-range.linestart, 0, 1);
-					//if(maxwidth<width2-width1)
-					//	maxwidth=width2-width1;
-
-					data.push_back(ActionFragment(range.linestart+range.i, text->c_str()+range.linestart+range.i, len));
-					//data.push_back(ActionFragment(range.linestart+range.i, a, len));
-					cumulative_delta+=len;
-					range.lineend+=cumulative_delta;
-				}
-				history->push_back(HistoryAction(ACTION_INSERT_RECT, std::move(data), cur0, *cur));
-				++*histpos;
-			}
-			else if(len)//continue history
-			{
-				auto &h=ACTION(*histpos);
-				for(int k=0, cumulative_delta=0;k<(int)ranges.size();++k)
-				{
-					auto &range=ranges[k];
-					range.linestart+=cumulative_delta;
-					h.data[k].idx+=cumulative_delta;
-
-					text->insert(text->begin()+range.linestart+range.i, a, a+len);
-				
-					int width1=calc_width(0, 0, text->c_str()+range.linestart, range.i, 0, 1);
-					int pxchange=calc_width(width1, 0, text->c_str()+range.linestart+range.i, len, 0, 1);
-					if(max_px_change<pxchange)
-						max_px_change=pxchange;
-
-					auto &dk=h.data[k];
-					dk.str.insert(dk.str.end(), a, a+len);
-					cumulative_delta+=len;
-					range.lineend+=cumulative_delta;
-				}
-			}
-			int idx_change=max_px_change/dx;
-			cur->ccx+=idx_change;//ccx & scx can be different here in case of indent
-			cur->scx+=idx_change;
-			//cur->ccx=cur->scx+=len;//X  character units, not idx
-			history->back().cur_after=*cur;
-		}
-	}
-	hist_cont=true;
-	dimensions_known=false;
-	wnd_to_cursor=true;
-	set_title();
-}
-void				text_replace(int i, int f, const char *a, int len)
-{
-	auto cur0=*cur;
-	cur->cursor=cur->selcur=i;
-
-	history->resize(*histpos+1);
-	history->push_back(HistoryAction(ACTION_ERASE_SELECTION, i, text->c_str()+i, f-i, cur0, *cur));
-	cur0=*cur;
-
-	text->replace(text->begin()+i, text->begin()+f, a, a+len);
-	
-	cur->cursor=cur->selcur=i+len;
-	calc_cursor_coords(0);
-	history->push_back(HistoryAction(ACTION_INSERT, i, text->c_str()+i, len, cur0, *cur));
-	*histpos+=2;
-	
-	hist_cont=false;
-	dimensions_known=false;
-	wnd_to_cursor=true;
-	set_title();
-}
-void				text_insert(int i, const char *a, int len)
-{
-	text->insert(text->begin()+i, a, a+len);
-
-	auto cur0=*cur;
-	cur->cursor=cur->selcur=i+len;
-	calc_cursor_coords(0);
-
-	++*histpos;
-	history->resize(*histpos);
-	history->push_back(HistoryAction(ACTION_INSERT, i, text->c_str()+i, len, cur0, *cur));
-
-	hist_cont=false;
-	dimensions_known=false;
-	wnd_to_cursor=true;
-	set_title();
-}
-void				text_erase(int i, int f)
-{
-	auto cur0=*cur;
-	cur->cursor=cur->selcur=i;
-	calc_cursor_coords(0);
-
-	++*histpos;
-	history->resize(*histpos);
-	history->push_back(HistoryAction(f-i>2?ACTION_ERASE_SELECTION:ACTION_ERASE, i, text->c_str()+i, f-i, cur0, *cur));
-
-	text->erase(text->begin()+i, text->begin()+f);
-
-	hist_cont=false;
-	dimensions_known=false;
-	wnd_to_cursor=true;
-	set_title();
-}
-void				text_insert1(int i, char c)
-{
-	text->insert(text->begin()+i, c);
-	
-	auto cur0=*cur;
-	cur->cursor=cur->selcur=i+1;
-	calc_cursor_coords(0);
-
-	if(!hist_cont||c=='\n'||*histpos<0||ACTION(*histpos).type!=ACTION_INSERT)
-	{
-		++*histpos;
-		history->resize(*histpos);
-		history->push_back(HistoryAction(ACTION_INSERT, i, text->c_str()+i, 1, cur0, *cur));
-	}
-	else
-	{
-		ACTION(*histpos).data[0].str.push_back(c);
-		history->back().cur_after=*cur;
-	}
-
-	hist_cont=true;
-	dimensions_known=false;
-	wnd_to_cursor=true;
-	set_title();
-}
-void				text_erase1_bksp(int i)
-{
-	if(i<1)
-		return;
-	
-	auto cur0=*cur;
-	cur->cursor=cur->selcur=i-1;
-	calc_cursor_coords(0);
-
-	if(!hist_cont||*histpos<0||ACTION(*histpos).type!=ACTION_ERASE)
-	{
-		++*histpos;
-		history->resize(*histpos);
-		history->push_back(HistoryAction(ACTION_ERASE, i-1, text->c_str()+i-1, 1, cur0, *cur));
-	}
-	else
-	{
-		auto &str=ACTION(*histpos).data[0].str;
-		str.insert(str.begin(), AT(i));
-		history->back().cur_after=*cur;
-	}
-
-	text->erase(text->begin()+i-1);
-
-	hist_cont=true;
-	dimensions_known=false;
-	wnd_to_cursor=true;
-	set_title();
-}
-void				text_erase1_del(int i)
-{
-	if(i>=(int)text->size())
-		return;
-	
-	auto cur0=*cur;
-	cur->cursor=cur->selcur=i;
-	calc_cursor_coords(0);
-
-	if(!hist_cont||*histpos<0||ACTION(*histpos).type!=ACTION_ERASE)
-	{
-		++*histpos;
-		history->resize(*histpos);
-		history->push_back(HistoryAction(ACTION_ERASE, i, text->c_str()+i, 1, cur0, *cur));
-	}
-	else
-	{
-		ACTION(*histpos).data[0].str.push_back(AT(i));
-		history->back().cur_after=*cur;
-	}
-
-	text->erase(text->begin()+i);
-	
-	hist_cont=true;
-	dimensions_known=false;
-	wnd_to_cursor=true;
-	set_title();
-}
-#endif
-
 char				group_char(char c)
 {
 	if(c>='0'&&c<='9'||c=='.')
@@ -2267,163 +1725,16 @@ char				group_char(char c)
 		return '\n';
 	return c;
 }
-
-#if 0
-bool				cursor_to_mouse_full(Text const &text, int &lineno, int &idx, int &col)//returns true if mouse hit text
-{
-	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
-	int dxpx=dx*font_zoom, dypx=dy*font_zoom,
-		lineno_mouse=(wpy+mousey)/dypx, lineno2=0;
-	if(lineno_mouse>0)
-	{
-		lineno2=lineno_mouse;
-		if(lineno2>(int)text.size())
-			lineno2=(int)text.size();
-	}
-	if(lineno2>=0&&lineno2<(int)text.size())
-	{
-		int req_width=wpx+mousex+(dxpx>>1), xpos2=req_width/dxpx;
-		auto &line=text[lineno2];
-		inv_calc_width(-wpx, -wpy, line.c_str(), line.size(), -wpx, font_zoom, req_width, &col, &idx);
-		lineno=lineno2;
-		if(col<xpos2)//if mousex is beyond the reach of the line
-		{
-			col=xpos2;//<- is this assignment needed?
-			idx=line.size();
-			return false;
-		}
-		return true;
-	}
-	return false;
-}
-bool				cursor_to_mouse_full(const char *text, int len, int &idx, int &lineno, int &col, int &linestart)//returns true if mouse hit text
-{
-	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
-	int dxpx=dx*font_zoom, dypx=dy*font_zoom,
-		lineno_mouse=(wpy+mousey)/dypx, lineno2=0;
-	linestart=0;
-	if(lineno_mouse>0)
-	{
-		for(int k=0;k<len;++k)
-		{
-			if(text[k]=='\n')
-			{
-				linestart=k+1, ++lineno2;
-				if(lineno2==lineno_mouse)
-					break;
-			}
-		}
-	}
-	if(lineno2>=0&&lineno2<nlines)
-	{
-		int req_width=wpx+mousex+(dxpx>>1), xpos2=req_width/dxpx;
-		inv_calc_width(-wpx, -wpy, text+linestart, len-linestart, -wpx, font_zoom, req_width, &col, &idx);
-		idx+=linestart;
-		lineno=lineno2;
-		if(col<xpos2)//if mousex is beyond the reach of the line
-		{
-			col=xpos2, idx=find_line_end(linestart+idx);
-			return false;
-		}
-		return true;
-	}
-	return false;
-}
-#endif
 bool				cursor_at_mouse(Text const &text, Bookmark &cursor)//sets the cursor to mouse coordinates, returns true if text was hit
 {
 	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
 	int dypx=dy*font_zoom, dxpx=dx*font_zoom,
 		line=(wpy+mousey)/dypx;
-	//	col=(wpx+mousex+(dx*font_zoom>>1))/dxpx;
 	float col=float(wpx+mousex)/dxpx;
 
+	mline=line, mcol=(int)(col+0.5f);
 	return cursor.set_gui(text, line, col);
-
-	//cur->cursor=0, cur->ccy=0;
-	//if(ypos>0)
-	//{
-	//	for(int k=0;k<len;++k)
-	//	{
-	//		if(text[k]=='\n')
-	//		{
-	//			cur->cursor=k+1, ++cur->ccy;
-	//			if(cur->ccy==ypos)
-	//				break;
-	//		}
-	//	}
-	//}
-	//int d_idx=0;
-	//inv_calc_width(-wpx, -wpy, text+cur->cursor, len-cur->cursor, -wpx, font_zoom, wpx+mousex+(dx*font_zoom>>1), &cur->ccx, &d_idx);
-	//cur->cursor+=d_idx;
 }
-#if 0
-bool				cursor_at_mouse_rect(Text const &text, Bookmark &c)//sets c to mouse coordinates
-{
-	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
-	int dxpx=dx*font_zoom, dypx=dy*font_zoom,
-		xpos=wpx+mousex+(dxpx>>1), ypos0=(wpy+mousey)/dypx;
-	c.line=ypos0;
-	bool oob=false;
-	if(c.line<0)
-		c.line=0, oob=true;
-	int line_max=text.size()-1;
-	if(c.line>line_max)
-		c.line=line_max, oob=true;
-
-	auto &_line=text[c.line];
-	col2idx(_line.c_str(), _line.size(), 0, xpos, &c.idx, &c.col);
-	return oob;
-
-	//int d_idx=0;
-	//inv_calc_width(-wpx, -wpy, _line.c_str(), _line.size(), -wpx, font_zoom, wpx+mousex+(dxpx>>1), &xpos, &d_idx);
-
-	//int ncols=xpos, xpos2=xpos/dxpx;
-	//if(ncols<xpos2)//if mousex is beyond the reach of the line
-	//	xpos=xpos2;
-
-	//if(ypos2>=0&&ypos2<nlines)
-	//{
-	//	ypos=ypos2;
-	//	return true;
-	//}
-	//return false;
-}
-bool				cursor_at_mouse_rect(int &xpos, int &ypos)//sets ccx & ccy dummies
-{
-	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
-	int dxpx=dx*font_zoom, dypx=dy*font_zoom,
-		ypos0=(wpy+mousey)/dypx, linestart=0, ypos2=0;
-	if(ypos0>0)
-	{
-		for(int k=0;k<(int)text->size();++k)
-		{
-			if(AT(k)=='\n')
-			{
-				linestart=k+1, ++ypos2;
-				if(ypos2==ypos0)
-					break;
-			}
-		}
-	}
-	int d_idx=0;
-	inv_calc_width(-wpx, -wpy, text->c_str()+linestart, text->size()-linestart, -wpx, font_zoom, wpx+mousex+(dxpx>>1), &xpos, &d_idx);
-
-	//d_idx=find_line_end(linestart+d_idx);
-	//int ncols=calc_width(-wpx, -wpy, text->c_str()+linestart, d_idx-linestart, -wpx, font_zoom)/dxpx;
-	int ncols=xpos;
-	int xpos2=(wpx+mousex+(dxpx>>1))/dxpx;
-	if(ncols<xpos2)//if mousex is beyond the reach of the line
-		xpos=xpos2;
-
-	if(ypos2>=0&&ypos2<nlines)
-	{
-		ypos=ypos2;
-		return true;
-	}
-	return false;
-}
-#endif
 
 //scrollbar functions
 const int			color_barbk=0x30F0F0F0, color_slider=0x50CDCDCD, color_button=0x50E5E5E5;//0x80DDDDDD
@@ -2463,7 +1774,6 @@ void				scrollbar_scroll(int &winpos_ip, int imsize_ip, int winsize, int barsize
 }
 void				draw_vscrollbar(int x, int sbwidth, int y1, int y2, int &winpos, int content_h, int vscroll_s0, int vscroll_my_start, double zoom, short &vscroll_start, short &vscroll_size, int dragtype)//vertical scrollbar
 {
-//	const int scrollbarwidth=17;
 	draw_rectangle_i(x, x+sbwidth, y1, y1+sbwidth, color_button);//up
 	draw_rectangle_i(x, x+sbwidth, y1+sbwidth, y2-sbwidth, color_barbk);//vertical
 	draw_rectangle_i(x, x+sbwidth, y2-sbwidth, y2, color_button);//down
@@ -2507,7 +1817,6 @@ int					tabbar_printname(int x, int y, int tab_idx, bool test=false, bool qualif
 	{
 		if(tab_idx==current_file)
 			set_text_colors(colors_selection);
-	//	msg_width=print_line(x, y, g_buf+not_modified, printed+!not_modified, 0, font_zoom);
 		msg_width=print_line(x, y, g_buf+not_modified, printed+!not_modified, 0, 1);
 		if(tab_idx==current_file)
 			set_text_colors(colors_text);
@@ -2570,6 +1879,8 @@ void				general_selection_erase()
 			if(colstart>cur->selcur.col)
 				colstart=cur->selcur.col;
 			cur->selcur.col=cur->cursor.col=colstart;
+			cur->cursor.update_idx(*text);
+			cur->selcur.update_idx(*text);
 		}
 		else
 		{
@@ -2673,7 +1984,6 @@ void				print_text(int tab_origin, int x0, int x, int y, Text const &text, Bookm
 	for(;k<f;k.increment_idx(text))
 	{
 		char c=k.dereference_idx(text);
-		//char c=text[k.line][k.idx];
 		//char c=msg[k];
 		if(c>=32&&c<0xFF)
 			width=dxpx;
@@ -2828,7 +2138,6 @@ void				print_text(int tab_origin, int x0, int x, int y, const char *msg, int ms
 		*final_x=(int)currentX;
 	if(final_y)
 		*final_y=(int)currentY;
-	//return nextY-y;
 }
 void				tabbar_draw_horizontal(int ty1, int ty2, int wy1, int wy2)
 {
@@ -2911,8 +2220,6 @@ void				wnd_on_render()
 	get_current_region_abs(x1, x2, y1, y2);
 
 	//calculate text dimensions & cursor coordinates
-	//auto arr=text->c_str();
-	//int textlen=text->size();
 	if(drag==DRAG_MOVE_SELECTION||drag==DRAG_COPY_SELECTION)
 		std::swap(*cur, drag_cursor);
 	if(!dimensions_known)
@@ -2920,15 +2227,6 @@ void				wnd_on_render()
 		dimensions_known=true;
 		calc_cols(*text);
 	}
-	//if(!dimensions_known)
-	//{
-	//	dimensions_known=true;
-	//	if(cur->rectsel)
-	//		calc_dimensions_chars(x1-wpx, y1-wpy, arr, textlen, x1-wpx, text_width, nlines, -1, cur->ccx, cur->ccy, -1, cur->scx, cur->scy);
-	//	else
-	//		calc_dimensions_chars(x1-wpx, y1-wpy, arr, textlen, x1-wpx, text_width, nlines, cur->cursor, cur->ccx, cur->ccy, cur->selcur, cur->scx, cur->scy);
-	//	prof_add("calc dimensions");
-	//}
 	int dxpx=dx*font_zoom, dypx=dy*font_zoom;//non-tab character dimensions in pixels
 	int iw=text_width*dxpx, ih=text->size()*dypx;
 	
@@ -3018,122 +2316,7 @@ void				wnd_on_render()
 		else//no selection
 			print_text(x1-wpx, x1-wpx, x1-wpx, y1-wpy, *text, i, f, font_zoom);
 		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy-wpy+dypx, 0xFFFFFFFF);//draw cursor
-
-	/*	Bookmark i, f;
-		cur->get_selection(i, f);
-		for(int kl=0, x=x1, y=y1;kl<(int)text->size();++kl)
-		{
-			auto &line=text->operator[](kl);
-			if(kl==i.line)
-			{
-				x+=print_line(x-wpx, y-wpy, line.c_str(), i.idx, x1-wpx, font_zoom);
-				set_text_colors(colors_selection);
-				if(i.line==f.line)
-				{
-					x+=print_line(x-wpx, y-wpy, line.c_str()+i.idx, f.idx-i.idx, x1-wpx, font_zoom);
-					set_text_colors(colors_text);
-					x+=print_line(x-wpx, y-wpy, line.c_str()+f.idx, line.size()-f.idx, x1-wpx, font_zoom);
-				}
-				else
-					x+=print_line(x-wpx, y-wpy, line.c_str()+i.idx, line.size()-i.idx, x1-wpx, font_zoom);
-				x=x1;
-			}
-			else if(kl==f.line)
-			{
-				x+=print_line(x-wpx, y-wpy, line.c_str()+i.idx, f.idx-i.idx, x1-wpx, font_zoom);
-				set_text_colors(colors_text);
-				x+=print_line(x-wpx, y-wpy, line.c_str()+f.idx, line.size()-f.idx, x1-wpx, font_zoom);
-			}
-			else
-			{
-			}
-		}//*/
 	}
-#if 0
-	//sprintf_s(g_buf, g_buf_size, "cc(%d, %d), sc(%d, %d)", *ccx, *ccy, *scx, *scy);//
-	//set_window_title_a(g_buf);//
-	if(cur->rectsel)//rectangular selection
-	{
-		draw_rectangle_i(x1, x2, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
-		int rx1, rx2, ry1, ry2;//rect coordinates in characters
-		cur->get_rectsel(ry1, ry2, rx1, rx2);
-		int px1=x1+rx1*dxpx, px2=x1+rx2*dxpx, py1=y1+ry1*dypx, py2=y1+ry2*dypx;
-		draw_rectangle_i(px1-wpx, px2-wpx, py1-wpy, py2+dypx-wpy, colors_selection.hi);//selection rectangle
-		for(int start=0, line_start=0, lineno=0, x=x1, y=y1, k=0;;++k)
-		{
-			if(lineno>=ry1&&lineno<=ry2)
-			{
-				int ypos=y-wpy, d_idx=0;
-				inv_calc_width(x-wpx, ypos, arr+start, textlen-start, x1-wpx, font_zoom, px1-x1, nullptr, &d_idx);
-				k=start+d_idx;
-				if(ypos>-dxpx&&ypos<h+dxpx)
-					x+=print_line(x-wpx, ypos, arr+start, k-start, x1-wpx, -1, font_zoom);
-				if(k<textlen&&AT(k)=='\n')
-					start=k+1, x=x1, y+=dypx, line_start=start=k+1, ++lineno;
-				else
-				{
-					start=k;
-					if(k>=textlen)
-						break;
-					set_text_colors(colors_selection);
-					inv_calc_width(x-wpx, ypos, arr+start, textlen-start, x1-wpx, font_zoom, px2-px1, nullptr, &d_idx);
-					k=start+d_idx;
-					int nconsumed=0;
-					if(ypos>-dxpx&&ypos<h+dxpx)
-						x+=print_line_rect(x-wpx, ypos, arr+start, k-start, x1-wpx, font_zoom, rx2-rx1, nconsumed);
-					start+=nconsumed, k=start;
-					set_text_colors(colors_text);
-
-					if(k>=textlen)
-						break;
-					if(AT(k)!='\n')
-					{
-						k=find_line_end(k);
-						int ypos=y-wpy;
-						if(ypos>-dxpx&&ypos<h+dxpx)
-							x+=print_line(x-wpx, ypos, arr+start, k-start, x1-wpx, -1, font_zoom);
-						if(k>=textlen)
-							break;
-					}
-					x=x1, y+=dypx, line_start=start=k+1, ++lineno;
-				}
-			}
-			else if(k>=textlen||AT(k)=='\n')
-			{
-				int ypos=y-wpy;
-				if(ypos>-dxpx&&ypos<h+dxpx)
-					x+=print_line(x-wpx, ypos, arr+start, k-start, x1-wpx, -1, font_zoom);
-				y+=dypx;
-				if(k>=textlen)
-					break;
-				x=x1, line_start=start=k+1, ++lineno;
-			}
-		}
-		draw_line_i(cpx-wpx, py1-wpy, cpx-wpx, py2+dypx-wpy, 0xFFFFFFFF);//draw cursor
-	}
-	else
-	{
-		draw_rectangle_i(x1, x2, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
-		if(cur->cursor!=cur->selcur)//normal selection
-		{
-			int selstart, selend;
-			if(cur->cursor<cur->selcur)
-				selstart=cur->cursor, selend=cur->selcur;
-			else
-				selstart=cur->selcur, selend=cur->cursor;
-		
-			int x=x1-wpx, y=y1-wpy;
-			print_text(x1-wpx, x, x1-wpx, y, arr, selstart, font_zoom, &x, &y);
-			set_text_colors(colors_selection);
-			print_text(x1-wpx, x, x1-wpx, y, arr+selstart, selend-selstart, font_zoom, &x, &y);
-			set_text_colors(colors_text);
-			print_text(x1-wpx, x, x1-wpx, y, arr+selend, textlen-selend, font_zoom, &x, &y);
-		}
-		else//no selection
-			print_text(x1-wpx, x1-wpx, x1-wpx, y1-wpy, arr, textlen, font_zoom);
-		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
-	}
-#endif
 	prof_add("text");
 
 	//draw possible scrollbars
@@ -3403,7 +2586,6 @@ bool				drag_selection_click(DragType drag_type)//checks if you clicked on the s
 		Bookmark click;
 		mx-=dx*font_zoom>>1;
 		bool hit=cursor_at_mouse(*text, click);
-	//	bool hit=cursor_to_mouse_full(*text, click.line, click.idx, click.col);
 		mx+=dx*font_zoom>>1;
 		if(hit)
 		{
@@ -3448,7 +2630,6 @@ void				lbutton_down_text()
 				break;
 		}
 		cur->selcur.increment_idx(*text);
-		//for(;cur->selcur>start&&group_char(AT(cur->selcur-1))==initial;--cur->selcur);
 
 		cur->cursor.increment_idx(*text);
 		while(cur->cursor<finish)
@@ -3457,12 +2638,9 @@ void				lbutton_down_text()
 				break;
 			cur->cursor.increment_idx(*text);
 		}
-		//++cur->cursor;
-		//for(;cur->cursor<(int)text->size()&&group_char(AT(cur->cursor))==initial;++cur->cursor);
 
 		cur->cursor.update_col(*text);
 		cur->selcur.update_col(*text);
-		//calc_cursor_coords(0);
 	}
 	else
 	{
@@ -3475,11 +2653,6 @@ void				lbutton_down_text()
 				drag=DRAG_RECT, cur->cursor=temp;
 			if(!is_shift_down())
 				cur->selcur=cur->cursor;
-			//int xpos=0, ypos=0;
-			//if(cursor_at_mouse_rect(xpos, ypos))
-			//	drag=DRAG_RECT, cur->ccx=xpos, cur->ccy=ypos;
-			//if(!is_shift_down())
-			//	cur->scx=cur->ccx, cur->scy=cur->ccy;
 		}
 		else//place cursor / normal selection
 		{
@@ -3552,7 +2725,6 @@ bool				wnd_on_lbuttondown()
 		{
 			if(mx<tabbar_dx)
 			{
-				//tabs_switchto(clamp(0, (tabbar_wpy+my)/dy, openfiles.size()-1));
 				int k=tab_drag_get_v_idx();
 				if(k>(int)openfiles.size()-1)
 					k=openfiles.size()-1;
@@ -3568,7 +2740,6 @@ bool				wnd_on_lbuttondown()
 		{
 			if(mx>w-tabbar_dx)
 			{
-				//tabs_switchto(clamp(0, (tabbar_wpy+my)/dy, openfiles.size()-1));
 				int k=tab_drag_get_v_idx();
 				if(k>(int)openfiles.size()-1)
 					k=openfiles.size()-1;
@@ -3688,11 +2859,6 @@ bool				wnd_on_lbuttonup()
 					text_erase(*text, drag_cursor.cursor.line, drag_cursor.cursor.idx, drag_cursor.selcur.line, drag_cursor.selcur.idx);
 					if(cur->cursor>f)
 						relocate_bookmark(i, f, cur->cursor, *text);
-					//{
-					//	for(Bookmark temp=f;temp!=i;temp.decrement_idx(*text), drag_cursor.cursor.decrement_idx(*text));
-					//	//drag_cursor.cursor.line-=f.line+1-i.line;//X
-					//	//drag_cursor.cursor.idx-=f.idx-i.idx;
-					//}
 				}
 				selection_insert(selection, cur->cursor.line, cur->cursor.idx, *text);
 
@@ -3707,66 +2873,6 @@ bool				wnd_on_lbuttonup()
 					relocate_bookmark(f, cur->cursor, drag_cursor.selcur, *text);
 				}
 			}
-#if 0
-			std::vector<std::string> selection;
-			int idx=0, lineno=0, col=0, linestart=0;
-			cursor_to_mouse_full(*text, lineno, idx, col);
-			if(drag_cursor.rectsel)
-			{
-				Ranges ranges;
-				std::swap(*cur, drag_cursor);
-				calc_ranges(ranges);
-				std::swap(*cur, drag_cursor);
-				cur->rectsel=false, cur->cursor=cur->selcur=idx, cur->ccx=cur->scx=col, cur->ccy=cur->scy=lineno;
-				auto r=drag_cursor.get_rectsel();
-				int ch=idx-linestart;
-				if(ch>=r.x1&&ch<=r.x2&&lineno>=r.y1&&lineno<r.y2)
-					break;
-				selection.resize(ranges.size());
-				for(int k=0;k<(int)ranges.size();++k)
-				{
-					auto &range=ranges[k];
-					selection[k].assign(text->begin()+range.linestart+range.i, text->begin()+range.linestart+range.f);
-				}
-				if(drag==DRAG_MOVE_SELECTION)
-					text_replace_rect(ranges, nullptr, 0, 0);//erase selection
-				int xoffset=dx*font_zoom>>1;
-				auto r2=cur->get_rectsel();
-				if(lineno>=r2.y1&&lineno<=r2.y2)
-					xoffset+=r2.x2-r2.x1;
-				mx-=xoffset;
-				cursor_to_mouse_full(*text, lineno, idx, col);
-				mx+=xoffset;
-				int nlines_total=lineno+count_lines(idx, text->size());
-				if(nlines_total<lineno+(int)ranges.size())
-				{
-					for(int k=0, lines_change=lineno+ranges.size()-1-nlines_total;k<lines_change;++k)
-						text_insert1(text->size(), '\n');
-				}
-				cur->rectsel=true, cur->cursor=idx, cur->ccx=cur->scx=col, cur->scy=lineno, cur->ccy=lineno+ranges.size()-1;
-				ranges.clear();
-				calc_ranges(ranges);
-				text_replace_rect(ranges, nullptr, 0, 0, &selection);
-			}
-			else
-			{
-				int i, f;
-				drag_cursor.get_selection(i, f);
-				if(idx<i)
-				{
-					selection.push_back(std::string(text->begin()+i, text->begin()+f));
-					text_erase(i, f);
-					text_insert(idx, selection[0].c_str(), selection[0].size());
-				}
-				else if(idx>f)
-				{
-					selection.push_back(std::string(text->begin()+i, text->begin()+f));
-					text_erase(i, f);
-					int change=f-i;
-					text_insert(idx-change, selection[0].c_str(), selection[0].size());
-				}
-			}
-#endif
 		}
 		break;
 	}
@@ -3847,14 +2953,12 @@ bool				wnd_on_toggle_profiler()
 bool				wnd_on_select_all()
 {
 	cur->selcur.setzero(), cur->cursor.setend(*text), cur->rectsel=false;
-	//cur->ccy=nlines-1, cur->ccx=cur->cursor-find_line_start(cur->cursor);
 	wnd_to_cursor=true, hist_cont=false;
 	return true;
 }
 bool				wnd_on_deselect()
 {
 	cur->selcur=cur->cursor;
-	//cur->scx=cur->ccx, cur->scy=cur->ccy;
 	cur->rectsel=false;
 	wnd_to_cursor=true;
 	return true;
@@ -3918,46 +3022,6 @@ bool				wnd_on_copy(bool cut)
 		copy_to_clipboard_c(str.c_str(), str.size());
 		return cut;
 	}
-#if 0
-	if(cur->rectsel)
-	{
-		if(cur->ccx!=cur->scx||cur->ccy!=cur->scy)
-		{
-			std::string str;
-			int rx1, rx2, ry1, ry2;//rect coordinates in character units
-			cur->get_rectsel(ry1, ry2, rx1, rx2);
-			str.reserve((rx2-rx1)*(ry2-ry1));
-			for(int k=0, linecols=0, lineno=0;k<(int)text->size();++k)
-			{
-				if(lineno>=ry1&&lineno<=ry2&&linecols>=rx1&&linecols<rx2)
-					str+=AT(k);
-				if(AT(k)=='\n')
-				{
-					if(lineno>=ry1&&lineno<=ry2)
-						str+='\n';
-					linecols=0, ++lineno;
-				}
-				else if(AT(k)=='\t')
-					linecols+=tab_count-mod(-wpx+linecols-(-wpx), tab_count);
-				else
-					++linecols;
-			}
-			if(str.back()!='\n')
-				str+='\n';
-			copy_to_clipboard(str);
-		}
-	}
-	else if(cur->cursor!=cur->selcur)
-	{
-		int start, end;
-		cur->get_selection(start, end);
-		//if(cur->selcur<cur->cursor)
-		//	start=cur->selcur, end=cur->cursor;
-		//else
-		//	start=cur->cursor, end=cur->selcur;
-		copy_to_clipboard_c(text->c_str()+start, end-start);
-	}
-#endif
 	return false;
 }
 bool				wnd_on_paste()
@@ -3972,34 +3036,6 @@ bool				wnd_on_paste()
 	cur->cursor.update_col(*text);
 	if(!is_shift_down())
 		cur->deselect(*text, 0);
-
-#if 0
-	char *str=nullptr;
-	int len=0;
-	if(!paste_from_clipboard(str, len))
-		return false;
-	if(cur->rectsel)
-	{
-		Ranges ranges;
-		calc_ranges(ranges);
-		text_replace_rect(ranges, str, len);
-		cur->ccx=cur->scx=minimum(cur->ccx, cur->scx);
-	}
-	else if(cur->cursor!=cur->selcur)
-	{
-		int start, end;
-		cur->get_selection(start, end);
-		//if(cur->selcur<cur->cursor)
-		//	start=cur->selcur, end=cur->cursor;
-		//else
-		//	start=cur->cursor, end=cur->selcur;
-		text_replace(start, end, str, len);
-	}
-	else
-		text_insert(cur->cursor, str, len);
-	delete[] str;
-	calc_cursor_coords(0);
-#endif
 	return true;
 }
 bool				wnd_on_scroll_up_key()
@@ -4030,14 +3066,6 @@ bool				wnd_on_skip_word_left()
 		cur->cursor.update_col(*text);
 	}
 
-	//if(cur->cursor>0)
-	//{
-	//	hist_cont=false;
-	//	--cur->cursor;
-	//	char initial=group_char(AT(cur->cursor));
-	//	for(;cur->cursor&&group_char(AT(cur->cursor-1))==initial;--cur->cursor);
-	//	calc_cursor_coords(0);
-	//}
 	if(!is_shift_down())
 		cur->deselect(*text, -1);
 	wnd_to_cursor=true;
@@ -4056,14 +3084,6 @@ bool				wnd_on_skip_word_right()
 	}
 	cur->cursor.update_col(*text);
 
-	//if(cur->cursor<(int)text->size())
-	//{
-	//	hist_cont=false;
-	//	char initial=group_char(AT(cur->cursor));
-	//	++cur->cursor;
-	//	for(;cur->cursor<(int)text->size()&&group_char(AT(cur->cursor))==initial;++cur->cursor);
-	//	calc_cursor_coords(0);
-	//}
 	if(!is_shift_down())
 		cur->deselect(*text, 1);
 	wnd_to_cursor=true;
@@ -4072,11 +3092,6 @@ bool				wnd_on_skip_word_right()
 bool				wnd_on_goto_file_start()
 {
 	cur->cursor.setzero();
-	//if(cur->cursor)
-	//{
-	//	hist_cont=false;
-	//	cur->cursor=0, cur->ccx=0, cur->ccy=0;
-	//}
 	if(!is_shift_down())
 		cur->deselect(*text, 0);
 	wnd_to_cursor=true;
@@ -4085,12 +3100,6 @@ bool				wnd_on_goto_file_start()
 bool				wnd_on_goto_file_end()
 {
 	cur->cursor.setend(*text);
-	//if(cur->cursor<(int)text->size())
-	//{
-	//	hist_cont=false;
-	//	cur->cursor=text->size();
-	//	calc_cursor_coords(0);
-	//}
 	if(!is_shift_down())
 		cur->deselect(*text, 0);
 	wnd_to_cursor=true;
@@ -4099,12 +3108,6 @@ bool				wnd_on_goto_file_end()
 bool				wnd_on_goto_line_start()
 {
 	cur->cursor.set_linestart();
-	//int c2=find_line_start(cur->cursor);
-	//if(cur->cursor!=c2)
-	//{
-	//	cur->cursor=c2, hist_cont=false;
-	//	calc_cursor_coords(0);
-	//}
 	if(!is_shift_down())
 		cur->deselect(*text, 0);
 	wnd_to_cursor=true;
@@ -4113,12 +3116,6 @@ bool				wnd_on_goto_line_start()
 bool				wnd_on_goto_line_end()
 {
 	cur->cursor.set_lineend(*text);
-	//int c2=find_line_end(cur->cursor);
-	//if(cur->cursor!=c2)
-	//{
-	//	cur->cursor=c2, hist_cont=false;
-	//	calc_cursor_coords(0);
-	//}
 	if(!is_shift_down())
 		cur->deselect(*text, 0);
 	wnd_to_cursor=true;
@@ -4139,32 +3136,6 @@ bool				wnd_on_deletechar()
 		general_selection_erase();
 	else
 		text_erase1_del(*text, cur->cursor.line, cur->cursor.idx);
-/*	if(cur->rectsel)
-	{
-		Ranges ranges;
-		int extent=calc_ranges(ranges);
-		if(!extent)
-		{
-			for(int k=0;k<(int)ranges.size();++k)//selection trick
-			{
-				auto &range=ranges[k];
-				range.f+=range.f<(int)text->size()&&AT(range.f)!='\n';
-			}
-		}
-		text_replace_rect(ranges, nullptr, 0);
-	}
-	else if(cur->cursor!=cur->selcur)
-	{
-		int start, end;
-		cur->get_selection(start, end);
-		//if(cur->selcur<cur->cursor)
-		//	start=cur->selcur, end=cur->cursor;
-		//else
-		//	start=cur->cursor, end=cur->selcur;
-		text_erase(start, end);
-	}
-	else
-		text_erase1_del(cur->cursor);//*/
 	return true;
 }
 bool				wnd_on_backspace()
@@ -4179,33 +3150,6 @@ bool				wnd_on_backspace()
 		cur->selcur=cur->cursor;
 		text_erase1_bksp(*text, l0, idx0);
 	}
-/*	if(cur->rectsel)
-	{
-		Ranges ranges;
-		int extent=calc_ranges(ranges);
-		if(!extent)
-		{
-			for(int k=0;k<(int)ranges.size();++k)//selection trick
-			{
-				auto &range=ranges[k];
-				range.i-=range.i>0&&AT(range.i-1)!='\n';
-			}
-			--cur->ccx, --cur->scx;
-		}
-		text_replace_rect(ranges, nullptr, 0);
-	}
-	else if(cur->cursor!=cur->selcur)
-	{
-		int start, end;
-		cur->get_selection(start, end);
-		//if(cur->selcur<cur->cursor)
-		//	start=cur->selcur, end=cur->cursor;
-		//else
-		//	start=cur->cursor, end=cur->selcur;
-		text_erase(start, end);
-	}
-	else
-		text_erase1_bksp(cur->cursor);//*/
 	return true;
 }
 bool				wnd_on_cursor_up()
@@ -4214,31 +3158,6 @@ bool				wnd_on_cursor_up()
 		cur->cursor.jump_vertical(*text, -1);
 	if(!is_shift_down())
 		cur->deselect(*text, -1);
-#if 0
-	if(!is_shift_down()&&cur->cursor!=cur->selcur)
-	{
-		cur->cursor=cur->selcur=minimum(cur->cursor, cur->selcur), cur->rectsel=false;
-		calc_cursor_coords(0);
-		cur->scx=cur->ccx, cur->scy=cur->ccy;
-	}
-	else
-	{
-		hist_cont=false;
-		int start=find_line_start(cur->cursor);
-		if(!start)
-			cur->cursor=0;
-		else
-		{
-			int width=calc_width(0, 0, text->c_str()+start, cur->cursor-start, 0, font_zoom);
-			int s0=find_line_start(start-1), d_idx=0;
-			inv_calc_width(0, 0, text->c_str()+s0, text->size()-s0, 0, font_zoom, width, nullptr, &d_idx);
-			cur->cursor=s0+d_idx;
-		}
-		calc_cursor_coords(0);
-		if(!is_shift_down())
-			cur->deselect();
-	}
-#endif
 	wnd_to_cursor=true;
 	return true;
 }
@@ -4248,32 +3167,6 @@ bool				wnd_on_cursor_down()
 		cur->cursor.jump_vertical(*text, 1);
 	if(!is_shift_down())
 		cur->deselect(*text, 1);
-#if 0
-	if(!is_shift_down()&&cur->cursor!=cur->selcur)
-	{
-		cur->cursor=cur->selcur=maximum(cur->cursor, cur->selcur), cur->rectsel=false;
-		calc_cursor_coords(0);
-		cur->scx=cur->ccx, cur->scy=cur->ccy;
-	}
-	else
-	{
-		hist_cont=false;
-		int end=find_line_end(cur->cursor);
-		if(end>=(int)text->size())
-			cur->cursor=text->size();
-		else
-		{
-			int start=find_line_start(cur->cursor);
-			int width=calc_width(0, 0, text->c_str()+start, cur->cursor-start, 0, font_zoom);
-			int s2=end+1, d_idx=0;
-			inv_calc_width(0, 0, text->c_str()+s2, text->size()-s2, 0, font_zoom, width, nullptr, &d_idx);
-			cur->cursor=s2+d_idx;
-		}
-		calc_cursor_coords(0);
-		if(!is_shift_down())
-			cur->deselect();
-	}
-#endif
 	wnd_to_cursor=true;
 	return true;
 }
@@ -4286,23 +3179,6 @@ bool				wnd_on_cursor_left()
 	}
 	if(!is_shift_down())
 		cur->deselect(*text, -1);
-/*	if(!is_shift_down()&&cur->cursor!=cur->selcur)
-	{
-		cur->cursor=cur->selcur=minimum(cur->cursor, cur->selcur), cur->rectsel=false;
-		calc_cursor_coords(0);
-		cur->scx=cur->ccx, cur->scy=cur->ccy;
-	}
-	else
-	{
-		if(cur->cursor>0)
-		{
-			hist_cont=false;
-			--cur->cursor;
-			calc_cursor_coords(0);
-		}
-		if(!is_shift_down())
-			cur->deselect();
-	}//*/
 	wnd_to_cursor=true;
 	return true;
 }
@@ -4315,23 +3191,6 @@ bool				wnd_on_cursor_right()
 	}
 	if(!is_shift_down())
 		cur->deselect(*text, 1);
-/*	if(!is_shift_down()&&cur->cursor!=cur->selcur)
-	{
-		cur->cursor=cur->selcur=maximum(cur->cursor, cur->selcur), cur->rectsel=false;
-		calc_cursor_coords(0);
-		cur->scx=cur->ccx, cur->scy=cur->ccy;
-	}
-	else
-	{
-		if(cur->cursor<(int)text->size())
-		{
-			hist_cont=false;
-			++cur->cursor;
-			calc_cursor_coords(0);
-		}
-		if(!is_shift_down())
-			cur->deselect();
-	}//*/
 	wnd_to_cursor=true;
 	return true;
 }
@@ -4370,6 +3229,10 @@ bool				wnd_on_type(char character)
 		}
 		else
 		{
+			//while typing a character with rectsel, if a tab causes misalign:
+			//	either	1) insert (tab_count-mod(col, tab_count)) spaces before the character in lines without tab, so that all typed characters are aligned (probably not what was intended)
+			//	or		2) relocate the cursor to tab (unpredictable)
+			//	or		3) (best solution) break (replace) each encountered tab into spaces
 			for(int kl=r.y1;kl<=r.y2;++kl)
 			{
 				auto &line=text->operator[](kl);
@@ -4390,9 +3253,23 @@ bool				wnd_on_type(char character)
 					line.replace(line.begin()+idx1, line.begin()+idx2, &character, &character+1);
 				}
 			}
-			cur->selcur.idx=++cur->cursor.idx;
-			cur->cursor.update_col(*text);
-			cur->selcur.update_col(*text);
+			if(cur->cursor.col<cur->selcur.col)
+			{
+				++cur->cursor.idx;
+				cur->cursor.update_col(*text);
+				cur->selcur.col=cur->cursor.col;
+				cur->selcur.update_idx(*text);
+			}
+			else
+			{
+				++cur->selcur.idx;
+				cur->selcur.update_col(*text);
+				cur->cursor.col=cur->selcur.col;
+				cur->cursor.update_idx(*text);
+			}
+			//cur->selcur.idx=++cur->cursor.idx;
+			//cur->cursor.update_col(*text);
+			//cur->selcur.update_col(*text);
 			return true;
 		}
 	}
@@ -4400,38 +3277,6 @@ bool				wnd_on_type(char character)
 	cur->cursor.increment_idx(*text);
 	cur->cursor.update_col(*text);
 	cur->selcur=cur->cursor;
-#if 0
-	if(cur->rectsel)
-	{
-		Ranges ranges;
-		calc_ranges(ranges);
-		text_replace_rect(ranges, &character, 1, (character=='\t')+is_shift_down());
-	}
-	else if(cur->cursor!=cur->selcur)
-	{
-		int start, end;
-		cur->get_selection(start, end);
-		if(character=='\t')//indent text
-		{
-			int line1=count_lines(0, start), line2=line1+count_lines(start, end);
-			if(line1!=line2)
-			{
-				Ranges ranges;
-				cur->set_rectsel(0, 0, line1, line2);
-				calc_ranges(ranges);
-				text_replace_rect(ranges, &character, 1, 1+is_shift_down());
-				if(cur->selcur<cur->cursor)
-					++cur->selcur, cur->cursor+=line2-line1+1;
-				else
-					++cur->cursor, cur->selcur+=line2-line1+1;
-				return true;
-			}
-		}
-		text_replace(start, end, &character, 1);
-	}
-	else
-		text_insert1(cur->cursor, character);
-#endif
 	return true;
 }
 
