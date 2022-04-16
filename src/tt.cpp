@@ -19,7 +19,7 @@
 #define				STB_IMAGE_IMPLEMENTATION
 #include			"stb_image.h"//https://github.com/nothings/stb
 
-	#define			DEBUG_CURSOR
+//	#define			DEBUG_CURSOR
 //	#define			HELP_SHOWALL
 
 const char			file[]=__FILE__;
@@ -685,6 +685,26 @@ struct				Bookmark
 		idx=text[line].size();
 		update_col(text);
 	}
+	int get_absidx(Text const &text)const
+	{
+		int absidx=0;
+		for(int kl=0;kl<line;++kl)
+			absidx+=text[kl].size()+1;
+		absidx+=idx;
+		return absidx;
+	}
+	void set_absidx(Text const &text, int absidx)
+	{
+		for(line=0;;++line)
+		{
+			int delta=text[line].size()+1;
+			if(absidx<delta)
+				break;
+			absidx-=delta;
+		}
+		idx=absidx;
+		update_col(text);
+	}
 
 	void jump_vertical(Text const &text, int delta_line)
 	{
@@ -776,10 +796,11 @@ bool				operator<(Bookmark const &left, Bookmark const &right)
 bool				operator<=(Bookmark const &left, Bookmark const &right){return !(right<left);}
 bool				operator>(Bookmark const &left, Bookmark const &right){return right<left;}
 bool				operator>=(Bookmark const &left, Bookmark const &right){return right<=left;}
-int					bookmark_subtract(Bookmark const &a, Bookmark const &b, Text const &text)
+int					bookmark_subtract(Bookmark const &a, Bookmark const &b, Text const &text)//returns a-b
 {
 	Bookmark const *p1, *p2;
-	if(a<b)
+	bool negative=a<b;
+	if(negative)
 		p1=&a, p2=&b;
 	else
 		p1=&b, p2=&a;
@@ -793,6 +814,8 @@ int					bookmark_subtract(Bookmark const &a, Bookmark const &b, Text const &text
 			diff-=text[kl].size()+1;//account for newline
 		diff-=p2->idx;
 	}
+	if(!negative)
+		diff=-diff;
 	return diff;
 }
 int					bookmark_add(Bookmark &b, int offset, Text const &text)//returns remainder on overflow
@@ -847,7 +870,7 @@ int					bookmark_add(Bookmark &b, int offset, Text const &text)//returns remaind
 	}
 	return offset;
 }
-void				relocate_bookmark(Bookmark const &i, Bookmark const &f, Bookmark &b, Text const &text)
+void				bookmark_relocate(Bookmark const &i, Bookmark const &f, Bookmark &b, Text const &text)
 {
 	int diff=bookmark_subtract(f, i, text);
 	bookmark_add(b, diff, text);
@@ -1450,14 +1473,14 @@ void				text_erase_rect(Text &text, int l1, int l2, int col1, int col2)
 		col2idx(line.c_str(), line.size(), 0, col1, &idx1, &c1);
 		if(c1!=col1)//tab caused misalign
 		{
-			if(idx1>0&&line[idx1-1]=='\t')
-			{
-				replace_tab_with_spaces(line, idx1-1);
-				col2idx(line.c_str(), line.size(), 0, col1, &idx1, &c1);
-			}
-			else if(idx1<(int)line.size()&&line[idx1]=='\t')
+			if(idx1<(int)line.size()&&line[idx1]=='\t')
 			{
 				replace_tab_with_spaces(line, idx1);
+				col2idx(line.c_str(), line.size(), 0, col1, &idx1, &c1);
+			}
+			else if(idx1>0&&line[idx1-1]=='\t')
+			{
+				replace_tab_with_spaces(line, idx1-1);
 				col2idx(line.c_str(), line.size(), 0, col1, &idx1, &c1);
 			}
 		}
@@ -2307,7 +2330,7 @@ void				wnd_on_render()
 			cur->get_selection(sel_i, sel_f);
 		
 			int x=x1-wpx, y=y1-wpy;
-			print_text(x1-wpx, x, x1-wpx, y, *text, i, sel_i, font_zoom, &x, &y);
+			print_text(x1-wpx, x, x1-wpx, y, *text, i, sel_i, font_zoom, &x, &y);//BROKEN
 			set_text_colors(colors_selection);
 			print_text(x1-wpx, x, x1-wpx, y, *text, sel_i, sel_f, font_zoom, &x, &y);
 			set_text_colors(colors_text);
@@ -2825,6 +2848,7 @@ bool				wnd_on_lbuttonup()
 	case DRAG_COPY_SELECTION:
 		if(drag_cursor.selection_exists()&&!drag_cursor.does_contain(cur->cursor))
 		{
+			//drag_cursor is selection, cur->cursor is target
 			Text selection;
 			if(drag_cursor.rectsel)
 			{
@@ -2853,25 +2877,27 @@ bool				wnd_on_lbuttonup()
 			{
 				Bookmark i, f;
 				drag_cursor.get_selection(i, f);
+				int selsize=bookmark_subtract(f, i, *text);
 				selection_copy(*text, drag_cursor, selection);
 				if(drag==DRAG_MOVE_SELECTION)
 				{
+					bool relocate=cur->cursor>f;
+					int absidx=0;
+					if(relocate)
+						absidx=cur->cursor.get_absidx(*text);
 					text_erase(*text, drag_cursor.cursor.line, drag_cursor.cursor.idx, drag_cursor.selcur.line, drag_cursor.selcur.idx);
-					if(cur->cursor>f)
-						relocate_bookmark(i, f, cur->cursor, *text);
+					if(relocate)
+						cur->cursor.set_absidx(*text, absidx-selsize);
 				}
 				selection_insert(selection, cur->cursor.line, cur->cursor.idx, *text);
 
-				if(cur->cursor<i)
-				{
-					relocate_bookmark(i, cur->cursor, drag_cursor.cursor, *text);
-					relocate_bookmark(i, cur->cursor, drag_cursor.selcur, *text);
-				}
-				else if(cur->cursor>f)
-				{
-					relocate_bookmark(f, cur->cursor, drag_cursor.cursor, *text);
-					relocate_bookmark(f, cur->cursor, drag_cursor.selcur, *text);
-				}
+				cur->selcur=cur->cursor;
+				if(drag_cursor.cursor<drag_cursor.selcur)
+					bookmark_add(cur->selcur, selsize, *text);
+				else//selcur<cursor
+					bookmark_add(cur->cursor, selsize, *text);
+				cur->selcur.update_col(*text);
+				cur->cursor.update_col(*text);
 			}
 		}
 		break;
