@@ -391,15 +391,19 @@ int					main(int argc, char **argv)
 				break;
 			case SDL_MOUSEBUTTONDOWN:
 				if(e->button.button==SDL_BUTTON_LEFT)
-					redraw|=wnd_on_lbuttondown();
+					redraw|=wnd_on_lbuttondown(e->button.clicks==2);
 				else if(e->button.button==SDL_BUTTON_RIGHT)
-					redraw|=wnd_on_rbuttondown();
+					redraw|=wnd_on_rbuttondown(e->button.clicks==2);
+				else if(e->button.button==SDL_BUTTON_MIDDLE)
+					redraw|=wnd_on_mbuttondown(e->button.clicks==2);
 				break;
 			case SDL_MOUSEBUTTONUP:
 				if(e->button.button==SDL_BUTTON_LEFT)
 					redraw|=wnd_on_lbuttonup();
 				else if(e->button.button==SDL_BUTTON_RIGHT)
 					redraw|=wnd_on_rbuttonup();
+				else if(e->button.button==SDL_BUTTON_MIDDLE)
+					redraw|=wnd_on_mbuttonup();
 				break;
 			case SDL_KEYDOWN:
 				{

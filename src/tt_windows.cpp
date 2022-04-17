@@ -752,7 +752,7 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK:
-		if(wnd_on_lbuttondown())
+		if(wnd_on_lbuttondown(message==WM_LBUTTONDBLCLK))
 			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[VK_LBUTTON]=true;
 		break;
@@ -764,7 +764,7 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 
 	case WM_MBUTTONDOWN:
 	case WM_MBUTTONDBLCLK:
-		if(wnd_on_mbuttondown())
+		if(wnd_on_mbuttondown(message==WM_LBUTTONDBLCLK))
 			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[VK_MBUTTON]=true;
 		break;
@@ -776,7 +776,7 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 
 	case WM_RBUTTONDOWN:
 	case WM_RBUTTONDBLCLK:
-		if(wnd_on_rbuttondown())
+		if(wnd_on_rbuttondown(message==WM_LBUTTONDBLCLK))
 			InvalidateRect(hWnd, nullptr, 0);
 		keyboard[VK_RBUTTON]=true;
 		break;

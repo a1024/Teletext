@@ -19,7 +19,7 @@
 #define				STB_IMAGE_IMPLEMENTATION
 #include			"stb_image.h"//https://github.com/nothings/stb
 
-//	#define			DEBUG_CURSOR
+	#define			DEBUG_CURSOR
 //	#define			HELP_SHOWALL
 
 const char			file[]=__FILE__;
@@ -309,25 +309,20 @@ void				set_text_colors(U64 const &colors)
 	send_color(ns_text::u_txtColor, colors.lo);
 	send_color(ns_text::u_bkColor, colors.hi);
 }
-void				col2idx(const char *text, int text_length, int tab0_cols, float req_col, int *ret_idx, int *ret_col)
+void				col2idx(const char *text, int text_length, int tab0_cols, int idx0, int col0, float req_col, int *ret_idx, int *ret_col)
 {
-	int idx=0, col=0;
+	int idx=idx0, col=col0;
 	for(;idx<text_length;++idx)
 	{
 		char c=text[idx];
 		int dcol=0;
-		if(c=='\n')
-			break;
 		if(c=='\t')
 			dcol=tab_count-mod(col-tab0_cols, tab_count);
 		else if(c>=32&&c<0xFF)
 			dcol=1;
-		if(dcol)
-		{
-			if(col+dcol*0.5f>=req_col)
-				break;
-			col+=dcol;
-		}
+		if(col+dcol*0.5f>=req_col)
+			break;
+		col+=dcol;
 	}
 	if(ret_col)
 		*ret_col=col;
@@ -340,8 +335,6 @@ int					idx2col(const char *text, int text_length, int tab0_cols)
 	for(;idx<text_length;++idx)
 	{
 		char c=text[idx];
-		if(c=='\n')
-			break;
 		if(c=='\t')
 			col+=tab_count-mod(col-tab0_cols, tab_count);
 		else if(c>=32&&c<0xFF)
@@ -617,7 +610,8 @@ void				relocate_range(int dst, int &a, int &b)
 //U64				colors_text=0xFFABABABFF000000;//black on white		0xBKBKBKBK_TXTXTXTX
 U64					colors_text=0x20ABABABFFABABAB;//dark mode
 //U64				colors_text=0xFF000000FFABABAB;//dark mode, opaque black on black?
-U64					colors_selection=0xA0FF0000FFABABAB;
+U64					colors_selection=0xA0FF9933FFFFFFFF;
+//U64				colors_selection=0xA0FF0000FFABABAB;
 int					color_cursorlinebk=0xFF202020;
 U64					colors_cursorline=(u64)color_cursorlinebk<<32|0xFFABABAB;
 struct				SmallRect
@@ -660,7 +654,7 @@ struct				Bookmark
 		auto &_line=text[line];
 		this->col=col;
 		//col2idx(_line.c_str(), _line.size(), 0, col, &this->idx, nullptr);//
-		col2idx(_line.c_str(), _line.size(), 0, col, &this->idx, &this->col);
+		col2idx(_line.c_str(), _line.size(), 0, 0, 0, col, &this->idx, &this->col);
 	//	update_idx(text);
 		return hit;
 	}
@@ -782,7 +776,7 @@ struct				Bookmark
 	void update_idx(Text const &text)
 	{
 		auto &_line=text[line];
-		col2idx(_line.c_str(), _line.size(), 0, col, &this->idx, &this->col);
+		col2idx(_line.c_str(), _line.size(), 0, 0, 0, col, &this->idx, &this->col);
 	}
 };
 bool				operator==(Bookmark const &left, Bookmark const &right){return left.line==right.line&&left.idx==right.idx;}
@@ -994,14 +988,34 @@ void				rectsel_copy(Text const &src, Cursor const &cur, Text &dst)
 	dst.clear();
 	int l1, l2, col1, col2;
 	cur.get_rectsel(l1, l2, col1, col2);
+	std::string temp;
 	for(int kl=l1;kl<=l2;++kl)
 	{
 		auto &line=src[kl];
-		int idx1, idx2, c1, c2;
-		col2idx(line.c_str(), line.size(), 0, col1, &idx1, &c1);
-		col2idx(line.c_str(), line.size(), 0, col2, &idx2, &c2);
+
+		int idx1, c1, prepad=0,
+			idx2, c2;
+
+		col2idx(line.c_str(), line.size(), 0, 0, 0, col1, &idx1, &c1);
+		if(c1<col1&&idx1<(int)line.size())
+		{
+			int c1_2=c1+tab_count-mod(c1, tab_count);
+			if(c1_2<=col2)
+				++idx1, c1=c1_2;
+		}
+		if(c1>col1)
+			prepad=c1-col1;
+
+		col2idx(line.c_str(), line.size(), 0, idx1, c1, col2, &idx2, &c2);
+		idx2-=c2>col2;
+		//if(c2>col2)
+		//	--idx2, c2-=mod(c2, tab_count);
+
+		temp.append(prepad, ' ');
 		if(idx1<idx2)
-			dst.push_back(std::string(line.begin()+idx1, line.begin()+idx2));
+			temp.append(line.begin()+idx1, line.begin()+idx2);
+		temp.append(col2-col1-temp.size(), ' ');
+		dst.push_back(std::move(temp));
 	}
 }
 void				rectsel_insert(Text const &src, int l1, int col1, Text &dst)
@@ -1012,7 +1026,12 @@ void				rectsel_insert(Text const &src, int l1, int col1, Text &dst)
 		auto &srcline=src[kls];
 		auto &dstline=dst[kld];
 		int idx1, c1;
-		col2idx(dstline.c_str(), dstline.size(), 0, col1, &idx1, &c1);
+		col2idx(dstline.c_str(), dstline.size(), 0, 0, 0, col1, &idx1, &c1);
+		if(c1<col1)
+		{
+			dstline.insert(dstline.begin()+idx1, col1-c1, ' ');
+			idx1+=col1-c1;
+		}
 		dstline.insert(dstline.begin()+idx1, srcline.begin(), srcline.end());
 	}
 	for(;kls<(int)src.size();++kls)
@@ -1470,25 +1489,25 @@ void				text_erase_rect(Text &text, int l1, int l2, int col1, int col2)
 	{
 		auto &line=text[kl];
 		int idx1=0, c1=0;
-		col2idx(line.c_str(), line.size(), 0, col1, &idx1, &c1);
+		col2idx(line.c_str(), line.size(), 0, 0, 0, col1, &idx1, &c1);
 		if(c1!=col1)//tab caused misalign
 		{
 			if(idx1<(int)line.size()&&line[idx1]=='\t')
 			{
 				replace_tab_with_spaces(line, idx1);
-				col2idx(line.c_str(), line.size(), 0, col1, &idx1, &c1);
+				col2idx(line.c_str(), line.size(), 0, 0, 0, col1, &idx1, &c1);
 			}
 			else if(idx1>0&&line[idx1-1]=='\t')
 			{
 				replace_tab_with_spaces(line, idx1-1);
-				col2idx(line.c_str(), line.size(), 0, col1, &idx1, &c1);
+				col2idx(line.c_str(), line.size(), 0, 0, 0, col1, &idx1, &c1);
 			}
 		}
 		if(c1==col1)
 		{
 			int idx2=0, c2=0;
 			//col2idx(line.c_str()+idx1, line.size()-idx1, -c1, col2-c1, &idx2, &c2);
-			col2idx(line.c_str(), line.size(), 0, col2, &idx2, &c2);
+			col2idx(line.c_str(), line.size(), 0, 0, 0, col2, &idx2, &c2);
 			if(idx1<idx2)
 				line.erase(line.begin()+idx1, line.begin()+idx2);
 		}
@@ -1500,7 +1519,7 @@ void				text_insert_rect(Text &text, int l1, int l2, int col0, const char *a, in
 	{
 		auto &line=text[kl];
 		int idx1=0, c1=0;
-		col2idx(line.c_str(), line.size(), 0, col0, &idx1, &c1);
+		col2idx(line.c_str(), line.size(), 0, 0, 0, col0, &idx1, &c1);
 		if(c1<col0)
 		{
 			int ntabs=col0/tab_count-c1/tab_count, nspaces=mod(col0, tab_count);
@@ -1561,7 +1580,7 @@ void				indent_rectsel_back(Cursor &cur)
 		//aa  [b]b
 		auto &line=text->operator[](kl);
 		int idx, c;
-		col2idx(line.c_str(), line.size(), 0, col0, &idx, &c);
+		col2idx(line.c_str(), line.size(), 0, 0, 0, col0, &idx, &c);
 		for(;idx<(int)line.size()&&!isspace(line[idx]);++idx, ++c);
 		if(dst_col<c)
 		{
@@ -1579,8 +1598,8 @@ void				indent_rectsel_back(Cursor &cur)
 		{
 			auto &line=text->operator[](kl);
 			int idx1, c1, idx2, c2;
-			col2idx(line.c_str(), line.size(), 0, dst_col, &idx1, &c1);
-			col2idx(line.c_str(), line.size(), 0, col1, &idx2, &c2);
+			col2idx(line.c_str(), line.size(), 0, 0, 0, dst_col, &idx1, &c1);
+			col2idx(line.c_str(), line.size(), 0, 0, 0, col1, &idx2, &c2);
 			line.erase(line.begin()+idx1, line.begin()+idx2);
 		}
 		int col_diff=col1-dst_col;
@@ -1598,7 +1617,7 @@ void				indent_rectsel_forward(Cursor &cur)
 	{
 		auto &line=text->operator[](kl);
 		int idx1, c1;
-		col2idx(line.c_str(), line.size(), 0, col1, &idx1, &c1);
+		col2idx(line.c_str(), line.size(), 0, 0, 0, col1, &idx1, &c1);
 		line.insert(line.begin()+idx1, '\t');
 	}
 	int col_diff=tab_count-mod(col1, tab_count);
@@ -1616,7 +1635,7 @@ void				indent_selection_back(Cursor &cur)
 	{
 		auto &line=text->operator[](kl);
 		int idx1, c1;
-		col2idx(line.c_str(), line.size(), 0, tab_count, &idx1, &c1);
+		col2idx(line.c_str(), line.size(), 0, 0, 0, tab_count, &idx1, &c1);
 		int kc=0;
 		for(;kc<idx1&&isspace(line[kc]);++kc);
 		if(kl==i.line)
@@ -2615,7 +2634,7 @@ bool				drag_selection_click(DragType drag_type)//checks if you clicked on the s
 			if(cur->rectsel)
 			{
 				auto r=cur->get_rectsel();
-				if(click.line>=r.y1&&click.line<=r.y2&&click.idx>=r.x1&&click.idx<r.x2)
+				if(click.line>=r.y1&&click.line<=r.y2&&click.col>=r.x1&&click.col<r.x2)
 				{
 					drag=drag_type, drag_cursor=*cur;
 					return true;
@@ -2635,9 +2654,9 @@ bool				drag_selection_click(DragType drag_type)//checks if you clicked on the s
 	}
 	return false;
 }
-void				lbutton_down_text()
+void				lbutton_down_text(bool doubleclick)
 {
-	if(is_ctrl_down())//select word
+	if(doubleclick||is_ctrl_down())//select word
 	{
 		if(drag_selection_click(DRAG_COPY_SELECTION))
 			return;
@@ -2702,7 +2721,7 @@ inline void			drag_tab()
 		mouse_capture();
 	}
 }
-bool				wnd_on_lbuttondown()
+bool				wnd_on_lbuttondown(bool doubleclick)
 {
 	int x1=0, x2=w, y1=0, y2=h;
 	switch(tabbar_position)
@@ -2781,7 +2800,7 @@ bool				wnd_on_lbuttondown()
 			if(mx<x2-scrollbarwidth)
 			{
 				if(my<y2-scrollbarwidth)
-					lbutton_down_text();
+					lbutton_down_text(doubleclick);
 				else
 					drag=DRAG_HSCROLL, hscroll.click_on_slider(mx);
 			}
@@ -2794,7 +2813,7 @@ bool				wnd_on_lbuttondown()
 		else				//only vscroll present
 		{
 			if(mx<x2-scrollbarwidth)
-				lbutton_down_text();
+				lbutton_down_text(doubleclick);
 			else
 				drag=DRAG_VSCROLL, vscroll.click_on_slider(my);
 		}
@@ -2804,12 +2823,12 @@ bool				wnd_on_lbuttondown()
 		if(hscroll.dwidth)	//only hscroll present
 		{
 			if(my<y2-scrollbarwidth)
-				lbutton_down_text();
+				lbutton_down_text(doubleclick);
 			else
 				drag=DRAG_HSCROLL, hscroll.click_on_slider(mx);
 		}
 		else				//no scrollbars
-			lbutton_down_text();
+			lbutton_down_text(doubleclick);
 	}
 	mouse_capture();
 	return true;
@@ -2846,7 +2865,7 @@ bool				wnd_on_lbuttonup()
 		break;
 	case DRAG_MOVE_SELECTION:
 	case DRAG_COPY_SELECTION:
-		if(drag_cursor.selection_exists()&&!drag_cursor.does_contain(cur->cursor))
+		if(drag_cursor.selection_exists())
 		{
 			//drag_cursor is selection, cur->cursor is target
 			Text selection;
@@ -2872,8 +2891,10 @@ bool				wnd_on_lbuttonup()
 				relocate_range(cur->cursor.col, drag_cursor.cursor.col, drag_cursor.selcur.col);
 				drag_cursor.cursor.update_idx(*text);
 				drag_cursor.selcur.update_idx(*text);
+				cur->cursor=drag_cursor.cursor;
+				cur->selcur=drag_cursor.selcur;
 			}
-			else
+			else if(!drag_cursor.does_contain(cur->cursor))
 			{
 				Bookmark i, f;
 				drag_cursor.get_selection(i, f);
@@ -2900,13 +2921,15 @@ bool				wnd_on_lbuttonup()
 				cur->cursor.update_col(*text);
 			}
 		}
+		else
+			*cur=drag_cursor;
 		break;
 	}
 	mouse_release();
 	drag=DRAG_NONE;
 	return true;
 }
-bool				wnd_on_mbuttondown()
+bool				wnd_on_mbuttondown(bool doubleclick)
 {
 	int k=0;
 	switch(tabbar_position)
@@ -2963,7 +2986,7 @@ bool				wnd_on_mbuttondown()
 	return false;
 }
 bool				wnd_on_mbuttonup(){return false;}
-bool				wnd_on_rbuttondown(){return false;}
+bool				wnd_on_rbuttondown(bool doubleclick){return false;}
 bool				wnd_on_rbuttonup(){return false;}
 
 bool				wnd_on_display_help()
@@ -3263,7 +3286,7 @@ bool				wnd_on_type(char character)
 			{
 				auto &line=text->operator[](kl);
 				int idx1=0, col1=0, idx2=0, col2=0;
-				col2idx(line.c_str(), line.size(), 0, r.x1, &idx1, &col1);
+				col2idx(line.c_str(), line.size(), 0, 0, 0, r.x1, &idx1, &col1);
 				if(col1<r.x1)//line is not long enough
 				{
 					int ntabs=r.x1/tab_count-line.size()/tab_count, nspaces=mod(r.x1, tab_count);
@@ -3275,7 +3298,7 @@ bool				wnd_on_type(char character)
 				}
 				else
 				{
-					col2idx(line.c_str(), line.size(), 0, r.x2, &idx2, &col2);
+					col2idx(line.c_str(), line.size(), 0, 0, 0, r.x2, &idx2, &col2);
 					line.replace(line.begin()+idx1, line.begin()+idx2, &character, &character+1);
 				}
 			}
