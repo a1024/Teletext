@@ -19,8 +19,12 @@
 #define				STB_IMAGE_IMPLEMENTATION
 #include			"stb_image.h"//https://github.com/nothings/stb
 
-	#define			DEBUG_CURSOR
+//	#define			DEBUG_CURSOR
 //	#define			HELP_SHOWALL
+
+//on: rectsel target horizontally starts at mouse
+//off: rectsel target horizontally shifted by mouse
+//	#define			DRAG_RECTSEL_X_AT_MOUSE
 
 const char			file[]=__FILE__;
 char				g_buf[G_BUF_SIZE]={};
@@ -295,6 +299,28 @@ void				draw_rectangle(float x1, float x2, float y1, float y2, int color)
 	glDisableVertexAttribArray(ns_2d::a_coords);GL_CHECK();
 }
 void				draw_rectangle_i(int x1, int x2, int y1, int y2, int color){draw_rectangle((float)x1, (float)x2, (float)y1, (float)y2, color);}
+void				draw_rectangle_hollow(int x1, int x2, int y1, int y2, int color)
+{
+	toNDC(x1, y1, g_fbuf[0], g_fbuf[1]);
+	toNDC(x1, y2, g_fbuf[2], g_fbuf[3]);
+	toNDC(x2, y2, g_fbuf[4], g_fbuf[5]);
+	toNDC(x2, y1, g_fbuf[6], g_fbuf[7]);
+	//toNDC(x1, y1, g_fbuf[8], g_fbuf[9]);
+	setGLProgram(shader_2d.program);			GL_CHECK();
+	send_color(ns_2d::u_color, color);			GL_CHECK();
+	glEnableVertexAttribArray(ns_2d::a_coords);	GL_CHECK();
+	
+	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);							GL_CHECK();
+	glBufferData(GL_ARRAY_BUFFER, 8*sizeof(float), g_fbuf, GL_STATIC_DRAW);	GL_CHECK();
+	glVertexAttribPointer(ns_2d::a_coords, 2, GL_FLOAT, GL_FALSE, 0, 0);	GL_CHECK();
+	
+//	glBindBuffer(GL_ARRAY_BUFFER, 0);											GL_CHECK();
+//	glVertexAttribPointer(ns_2d::a_coords, 2, GL_FLOAT, GL_FALSE, 0, g_fbuf);	GL_CHECK();
+	
+	glEnableVertexAttribArray(ns_2d::a_coords);	GL_CHECK();
+	glDrawArrays(GL_LINE_LOOP, 0, 4);			GL_CHECK();
+	glDisableVertexAttribArray(ns_2d::a_coords);GL_CHECK();
+}
 
 struct				QuadCoords
 {
@@ -1008,8 +1034,6 @@ void				rectsel_copy(Text const &src, Cursor const &cur, Text &dst)
 
 		col2idx(line.c_str(), line.size(), 0, idx1, c1, col2, &idx2, &c2);
 		idx2-=c2>col2;
-		//if(c2>col2)
-		//	--idx2, c2-=mod(c2, tab_count);
 
 		temp.append(prepad, ' ');
 		if(idx1<idx2)
@@ -1485,6 +1509,7 @@ void				text_erase_rect(Text &text, int l1, int l2, int col1, int col2)
 		std::swap(l1, l2);
 	if(col2<col1)
 		std::swap(col1, col2);
+	//int before=idx2col(text[l1].c_str(), text[l1].size(), 0);
 	for(int kl=l1;kl<=l2&&kl<(int)text.size();++kl)
 	{
 		auto &line=text[kl];
@@ -1512,6 +1537,8 @@ void				text_erase_rect(Text &text, int l1, int l2, int col1, int col2)
 				line.erase(line.begin()+idx1, line.begin()+idx2);
 		}
 	}
+	//int after=idx2col(text[l1].c_str(), text[l1].size(), 0);
+	//return after-before;
 }
 void				text_insert_rect(Text &text, int l1, int l2, int col0, const char *a, int len)
 {
@@ -2434,12 +2461,37 @@ void				wnd_on_render()
 			set_text_colors(colors_text);
 		}
 		break;
-	case DRAG_MOVE_SELECTION:
+	case DRAG_MOVE_SELECTION://draw drag target cursor
 	case DRAG_COPY_SELECTION:
-		std::swap(*cur, drag_cursor);
-		cpx=x1+cur->cursor.col*dxpx;
-		cpy=y1+cur->cursor.line*dypx;
-		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy+dypx-wpy, 0xFFFFFFFF);//draw cursor
+		{
+			std::swap(*cur, drag_cursor);
+			if(drag_cursor.rectsel)
+			{
+				auto r=drag_cursor.get_rectsel();
+#ifdef DRAG_RECTSEL_X_AT_MOUSE
+				relocate_range(cur->cursor.col, r.x1, r.x2);
+#else
+				int dcol=cur->cursor.col-cur->selcur.col;
+				r.x1+=dcol, r.x2+=dcol;
+#endif
+				int dline=cur->cursor.line-cur->selcur.line;
+				r.y1+=dline, r.y2+=dline+1;
+				if(r.x1<0)
+					r.x2-=r.x1, r.x1=0;
+				if(r.y1<0)
+					r.y2-=r.y1, r.y1=0;
+				int Lx=x1+r.x1*dxpx-wpx, Ty=y1+r.y1*dypx-wpy,
+					Rx=x1+r.x2*dxpx-wpx, By=y1+r.y2*dypx-wpy;
+				draw_rectangle_hollow(Lx, Rx, Ty, By, 0xFF808080);
+				draw_line_i(Lx, Ty, Lx, By, 0xFFFFFFFF);
+			}
+			else
+			{
+				int dstpx=x1+cur->cursor.col*dxpx-wpx,
+					dstpy=y1+cur->cursor.line*dypx-wpy;
+				draw_line_i(dstpx, dstpy, dstpx, dstpy, 0xFFFFFFFF);
+			}
+		}
 		break;
 	}
 
@@ -2636,7 +2688,9 @@ bool				drag_selection_click(DragType drag_type)//checks if you clicked on the s
 				auto r=cur->get_rectsel();
 				if(click.line>=r.y1&&click.line<=r.y2&&click.col>=r.x1&&click.col<r.x2)
 				{
-					drag=drag_type, drag_cursor=*cur;
+					drag=drag_type;
+					drag_cursor=*cur;
+					cur->cursor=cur->selcur=click;
 					return true;
 				}
 			}
@@ -2646,7 +2700,9 @@ bool				drag_selection_click(DragType drag_type)//checks if you clicked on the s
 				cur->get_selection(i, f);
 				if(click>=i&&click<f)
 				{
-					drag=drag_type, drag_cursor=*cur;
+					drag=drag_type;
+					drag_cursor=*cur;
+					cur->cursor=cur->selcur=click;
 					return true;
 				}
 			}
@@ -2656,10 +2712,11 @@ bool				drag_selection_click(DragType drag_type)//checks if you clicked on the s
 }
 void				lbutton_down_text(bool doubleclick)
 {
-	if(doubleclick||is_ctrl_down())//select word
+	bool ctrldown=is_ctrl_down();
+	if(drag_selection_click(ctrldown?DRAG_COPY_SELECTION:DRAG_MOVE_SELECTION))
+		return;
+	if(doubleclick||ctrldown)//select word
 	{
-		if(drag_selection_click(DRAG_COPY_SELECTION))
-			return;
 		cursor_at_mouse(*text, cur->cursor);
 		cur->selcur=cur->cursor;
 		char initial=group_char(cur->cursor.dereference_idx(*text));
@@ -2686,8 +2743,6 @@ void				lbutton_down_text(bool doubleclick)
 	}
 	else
 	{
-		if(drag_selection_click(DRAG_MOVE_SELECTION))
-			return;
 		if(cur->rectsel=is_alt_down())//rectsel
 		{
 			Bookmark temp;
@@ -2872,23 +2927,34 @@ bool				wnd_on_lbuttonup()
 			if(drag_cursor.rectsel)
 			{
 				rectsel_copy(*text, drag_cursor, selection);
+				auto r=drag_cursor.get_rectsel();
 				if(drag==DRAG_MOVE_SELECTION)
 				{
-					text_erase_rect(*text, drag_cursor.cursor.line, drag_cursor.selcur.line, drag_cursor.cursor.col, drag_cursor.selcur.col);
-					auto r=drag_cursor.get_rectsel();
+					int before=idx2col(text[0][r.y1].c_str(), text[0][r.y1].size(), 0);
+					text_erase_rect(*text, r.y1, r.y2, r.x1, r.x2);
+					int after=idx2col(text[0][r.y1].c_str(), text[0][r.y1].size(), 0);
 					if(cur->cursor.line>=r.y1&&cur->cursor.line<=r.y2)
 					{
 						if(cur->cursor.col>r.x2)
-							cur->cursor.col-=r.x2-r.x1;
+							cur->cursor.col+=after-before;
 						else if(cur->cursor.col>r.x1)
 							cur->cursor.col=r.x1;
-						cur->cursor.update_idx(*text);
 					}
 				}
-				rectsel_insert(selection, cur->cursor.line, cur->cursor.col, *text);
+				int dstline=r.y1+cur->cursor.line-cur->selcur.line,
+#ifdef DRAG_RECTSEL_X_AT_MOUSE
+					dstcol=cur->cursor.col;
+#else
+					dstcol=r.x1+cur->cursor.col-cur->selcur.col;
+#endif
+				if(dstline<0)
+					dstline=0;
+				if(dstcol<0)
+					dstcol=0;
+				rectsel_insert(selection, dstline, dstcol, *text);
 
-				relocate_range(cur->cursor.line, drag_cursor.cursor.line, drag_cursor.selcur.line);
-				relocate_range(cur->cursor.col, drag_cursor.cursor.col, drag_cursor.selcur.col);
+				relocate_range(dstline, drag_cursor.cursor.line, drag_cursor.selcur.line);
+				relocate_range(dstcol, drag_cursor.cursor.col, drag_cursor.selcur.col);
 				drag_cursor.cursor.update_idx(*text);
 				drag_cursor.selcur.update_idx(*text);
 				cur->cursor=drag_cursor.cursor;
