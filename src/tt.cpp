@@ -677,7 +677,7 @@ struct				Bookmark
 			line=(int)text.size()-1, hit=false;
 		this->line=line;
 		auto &_line=text[line];
-		this->col=col;
+		this->col=(int)col;
 		//col2idx(_line.c_str(), _line.size(), 0, col, &this->idx, nullptr);//
 		col2idx(_line.c_str(), _line.size(), 0, 0, 0, col, &this->idx, &this->col);
 	//	update_idx(text);
@@ -3075,164 +3075,6 @@ bool				wnd_on_deselect()
 	wnd_to_cursor=true;
 	return true;
 }
-bool				wnd_on_save(bool save_as)
-{
-	if(save_as||!filename->size())
-	{
-		auto path=save_file_dialog();
-		if(path)
-		{
-			std::string str;
-			text2str(*text, str);
-			if(save_text_file(path, str))
-				*filename=path;
-		}
-	}
-	else
-	{
-		std::string str;
-		text2str(*text, str);
-		save_text_file(filename->c_str(), str);
-	}
-	set_title();
-	openfiles[current_file].m_histpos_saved=openfiles[current_file].m_histpos;
-	return true;
-}
-bool				wnd_on_clear_hist()
-{
-	if(!messagebox_okcancel("Teletext", "Are you sure you want to clear the undo/redo history?"))
-	{
-		*histpos=-1;
-		history->clear();
-		set_title();
-	}
-	return true;
-}
-bool				wnd_on_undo()
-{
-	hist_undo();
-	return true;
-}
-bool				wnd_on_redo()
-{
-	hist_redo();
-	return true;
-}
-bool				wnd_on_copy(bool cut)
-{
-	if(cur->selection_exists())
-	{
-		std::string str;
-		Text selection;
-		if(cur->rectsel)
-			rectsel_copy(*text, *cur, selection);
-		else
-			selection_copy(*text, *cur, selection);
-		if(cut)
-			general_selection_erase();
-		text2str(selection, str);
-		copy_to_clipboard_c(str.c_str(), str.size());
-		return cut;
-	}
-	return false;
-}
-bool				wnd_on_paste()
-{
-	char *str=nullptr;
-	int len=0;
-	if(!paste_from_clipboard(str, len))
-		return false;
-	general_selection_erase();
-	text_insert(*text, cur->cursor.line, cur->cursor.idx, str, len, &cur->cursor.line, &cur->cursor.idx);
-	delete[] str;
-	cur->cursor.update_col(*text);
-	if(!is_shift_down())
-		cur->deselect(*text, 0);
-	return true;
-}
-bool				wnd_on_scroll_up_key()
-{
-	wpy-=dy*font_zoom;
-	return true;
-}
-bool				wnd_on_scroll_down_key()
-{
-	wpy+=dy*font_zoom;
-	return true;
-}
-bool				wnd_on_skip_word_left()
-{
-	Bookmark start(0, 0, 0);
-	if(cur->cursor.decrement_idx(*text))
-	{
-		char initial=group_char(cur->cursor.dereference_idx(*text));
-		while(cur->cursor>start)
-		{
-			if(group_char(cur->cursor.dereference_idx(*text))!=initial)
-			{
-				cur->cursor.increment_idx(*text);
-				break;
-			}
-			cur->cursor.decrement_idx(*text);
-		}
-		cur->cursor.update_col(*text);
-	}
-
-	if(!is_shift_down())
-		cur->deselect(*text, -1);
-	wnd_to_cursor=true;
-	return true;
-}
-bool				wnd_on_skip_word_right()
-{
-	Bookmark finish(text->size()-1, text->operator[](text->size()-1).size(), 0);
-	char initial=group_char(cur->cursor.dereference_idx(*text));
-	cur->cursor.increment_idx(*text);
-	while(cur->cursor<finish)
-	{
-		if(group_char(cur->cursor.dereference_idx(*text))!=initial)
-			break;
-		cur->cursor.increment_idx(*text);
-	}
-	cur->cursor.update_col(*text);
-
-	if(!is_shift_down())
-		cur->deselect(*text, 1);
-	wnd_to_cursor=true;
-	return true;
-}
-bool				wnd_on_goto_file_start()
-{
-	cur->cursor.setzero();
-	if(!is_shift_down())
-		cur->deselect(*text, 0);
-	wnd_to_cursor=true;
-	return true;
-}
-bool				wnd_on_goto_file_end()
-{
-	cur->cursor.setend(*text);
-	if(!is_shift_down())
-		cur->deselect(*text, 0);
-	wnd_to_cursor=true;
-	return true;
-}
-bool				wnd_on_goto_line_start()
-{
-	cur->cursor.set_linestart();
-	if(!is_shift_down())
-		cur->deselect(*text, 0);
-	wnd_to_cursor=true;
-	return true;
-}
-bool				wnd_on_goto_line_end()
-{
-	cur->cursor.set_lineend(*text);
-	if(!is_shift_down())
-		cur->deselect(*text, 0);
-	wnd_to_cursor=true;
-	return true;
-}
 bool				wnd_on_begin_rectsel()
 {
 	if(drag==DRAG_SELECT)
@@ -3242,74 +3084,7 @@ bool				wnd_on_begin_rectsel()
 	}
 	return false;
 }
-bool				wnd_on_deletechar()
-{
-	if(cur->selection_exists())
-		general_selection_erase();
-	else
-		text_erase1_del(*text, cur->cursor.line, cur->cursor.idx);
-	return true;
-}
-bool				wnd_on_backspace()
-{
-	if(cur->selection_exists())
-		general_selection_erase();
-	else
-	{
-		int l0=cur->cursor.line, idx0=cur->cursor.idx;
-		cur->cursor.decrement_idx(*text);
-		cur->cursor.update_col(*text);
-		cur->selcur=cur->cursor;
-		text_erase1_bksp(*text, l0, idx0);
-	}
-	return true;
-}
-bool				wnd_on_cursor_up()
-{
-	bool shiftdown=is_shift_down();
-	//if(!cur->selection_exists()||shiftdown)
-		cur->cursor.jump_vertical(*text, -1);
-	if(!shiftdown)
-		cur->deselect(*text, -1);
-	wnd_to_cursor=true;
-	return true;
-}
-bool				wnd_on_cursor_down()
-{
-	bool shiftdown=is_shift_down();
-	//if(!cur->selection_exists()||shiftdown)
-		cur->cursor.jump_vertical(*text, 1);
-	if(!shiftdown)
-		cur->deselect(*text, 1);
-	wnd_to_cursor=true;
-	return true;
-}
-bool				wnd_on_cursor_left()
-{
-	bool shiftdown=is_shift_down();
-	if(!cur->selection_exists()||shiftdown)
-	{
-		cur->cursor.decrement_idx(*text);
-		cur->cursor.update_col(*text);
-	}
-	if(!shiftdown)
-		cur->deselect(*text, -1);
-	wnd_to_cursor=true;
-	return true;
-}
-bool				wnd_on_cursor_right()
-{
-	bool shiftdown=is_shift_down();
-	if(!cur->selection_exists()||shiftdown)
-	{
-		cur->cursor.increment_idx(*text);
-		cur->cursor.update_col(*text);
-	}
-	if(!shiftdown)
-		cur->deselect(*text, 1);
-	wnd_to_cursor=true;
-	return true;
-}
+
 bool				wnd_on_type(char character)
 {
 	if(cur->selection_exists())
@@ -3393,6 +3168,234 @@ bool				wnd_on_type(char character)
 	cur->cursor.increment_idx(*text);
 	cur->cursor.update_col(*text);
 	cur->selcur=cur->cursor;
+	return true;
+}
+bool				wnd_on_deletechar()
+{
+	if(cur->selection_exists())
+		general_selection_erase();
+	else
+		text_erase1_del(*text, cur->cursor.line, cur->cursor.idx);
+	return true;
+}
+bool				wnd_on_backspace()
+{
+	if(cur->selection_exists())
+		general_selection_erase();
+	else
+	{
+		int l0=cur->cursor.line, idx0=cur->cursor.idx;
+		cur->cursor.decrement_idx(*text);
+		cur->cursor.update_col(*text);
+		cur->selcur=cur->cursor;
+		text_erase1_bksp(*text, l0, idx0);
+	}
+	return true;
+}
+bool				wnd_on_undo()
+{
+	hist_undo();
+	return true;
+}
+bool				wnd_on_redo()
+{
+	hist_redo();
+	return true;
+}
+bool				wnd_on_clear_hist()
+{
+	if(!messagebox_okcancel("Teletext", "Are you sure you want to clear the undo/redo history?"))
+	{
+		*histpos=-1;
+		history->clear();
+		set_title();
+	}
+	return true;
+}
+
+bool				wnd_on_copy(bool cut)
+{
+	if(cur->selection_exists())
+	{
+		std::string str;
+		Text selection;
+		if(cur->rectsel)
+			rectsel_copy(*text, *cur, selection);
+		else
+			selection_copy(*text, *cur, selection);
+		if(cut)
+			general_selection_erase();
+		text2str(selection, str);
+		copy_to_clipboard_c(str.c_str(), str.size());
+		return cut;
+	}
+	return false;
+}
+bool				wnd_on_paste()
+{
+	char *str=nullptr;
+	int len=0;
+	if(!paste_from_clipboard(str, len))
+		return false;
+	general_selection_erase();
+	text_insert(*text, cur->cursor.line, cur->cursor.idx, str, len, &cur->cursor.line, &cur->cursor.idx);
+	delete[] str;
+	cur->cursor.update_col(*text);
+	if(!is_shift_down())
+		cur->deselect(*text, 0);
+	return true;
+}
+
+bool				wnd_on_scroll_up_key()
+{
+	wpy-=dy*font_zoom;
+	return true;
+}
+bool				wnd_on_scroll_down_key()
+{
+	wpy+=dy*font_zoom;
+	return true;
+}
+bool				wnd_on_pageup()
+{
+	int fontH=dy*font_zoom;
+	int delta=h-fontH*3;
+	if(delta<fontH)
+		delta=fontH;
+	wpy-=delta;
+	return true;
+}
+bool				wnd_on_pagedown()
+{
+	int fontH=dy*font_zoom;
+	int delta=h-fontH*3;
+	if(delta<fontH)
+		delta=fontH;
+	wpy+=delta;
+	return true;
+}
+
+bool				wnd_on_cursor_up()
+{
+	bool shiftdown=is_shift_down(), altdown=is_alt_down();
+	//if(!cur->selection_exists()||shiftdown||altdown)
+		cur->cursor.jump_vertical(*text, -1);
+	cur->rectsel=altdown;
+	if(!shiftdown&&!altdown)
+		cur->deselect(*text, -1);
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_cursor_down()
+{
+	bool shiftdown=is_shift_down(), altdown=is_alt_down();
+	//if(!cur->selection_exists()||shiftdown||altdown)
+		cur->cursor.jump_vertical(*text, 1);
+	cur->rectsel=altdown;
+	if(!shiftdown&&!altdown)
+		cur->deselect(*text, 1);
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_cursor_left()
+{
+	bool shiftdown=is_shift_down(), altdown=is_alt_down();
+	if(!cur->selection_exists()||shiftdown||altdown)
+	{
+		cur->cursor.decrement_idx(*text);
+		cur->cursor.update_col(*text);
+		cur->rectsel=altdown;
+	}
+	if(!shiftdown&&!altdown)
+		cur->deselect(*text, -1);
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_cursor_right()
+{
+	bool shiftdown=is_shift_down(), altdown=is_alt_down();
+	if(!cur->selection_exists()||shiftdown||altdown)
+	{
+		cur->cursor.increment_idx(*text);
+		cur->cursor.update_col(*text);
+		cur->rectsel=altdown;
+	}
+	if(!shiftdown&&!altdown)
+		cur->deselect(*text, 1);
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_skip_word_left()
+{
+	Bookmark start(0, 0, 0);
+	if(cur->cursor.decrement_idx(*text))
+	{
+		char initial=group_char(cur->cursor.dereference_idx(*text));
+		while(cur->cursor>start)
+		{
+			if(group_char(cur->cursor.dereference_idx(*text))!=initial)
+			{
+				cur->cursor.increment_idx(*text);
+				break;
+			}
+			cur->cursor.decrement_idx(*text);
+		}
+		cur->cursor.update_col(*text);
+	}
+
+	if(!is_shift_down()&&!is_alt_down())
+		cur->deselect(*text, -1);
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_skip_word_right()
+{
+	Bookmark finish(text->size()-1, text->operator[](text->size()-1).size(), 0);
+	char initial=group_char(cur->cursor.dereference_idx(*text));
+	cur->cursor.increment_idx(*text);
+	while(cur->cursor<finish)
+	{
+		if(group_char(cur->cursor.dereference_idx(*text))!=initial)
+			break;
+		cur->cursor.increment_idx(*text);
+	}
+	cur->cursor.update_col(*text);
+
+	if(!is_shift_down()&&!is_alt_down())
+		cur->deselect(*text, 1);
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_goto_line_start()
+{
+	cur->cursor.set_linestart();
+	if(!is_shift_down()&&!is_alt_down())
+		cur->deselect(*text, 0);
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_goto_line_end()
+{
+	cur->cursor.set_lineend(*text);
+	if(!is_shift_down()&&!is_alt_down())
+		cur->deselect(*text, 0);
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_goto_file_start()
+{
+	cur->cursor.setzero();
+	if(!is_shift_down()&&!is_alt_down())
+		cur->deselect(*text, 0);
+	wnd_to_cursor=true;
+	return true;
+}
+bool				wnd_on_goto_file_end()
+{
+	cur->cursor.setend(*text);
+	if(!is_shift_down()&&!is_alt_down())
+		cur->deselect(*text, 0);
+	wnd_to_cursor=true;
 	return true;
 }
 
@@ -3496,6 +3499,29 @@ bool				wnd_on_barorient()
 	return true;
 }
 
+bool				wnd_on_save(bool save_as)
+{
+	if(save_as||!filename->size())
+	{
+		auto path=save_file_dialog();
+		if(path)
+		{
+			std::string str;
+			text2str(*text, str);
+			if(save_text_file(path, str))
+				*filename=path;
+		}
+	}
+	else
+	{
+		std::string str;
+		text2str(*text, str);
+		save_text_file(filename->c_str(), str);
+	}
+	set_title();
+	openfiles[current_file].m_histpos_saved=openfiles[current_file].m_histpos;
+	return true;
+}
 bool				wnd_on_quit()//return false to deny exit
 {
 	for(int k=0;k<(int)openfiles.size();++k)

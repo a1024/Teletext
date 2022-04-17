@@ -738,6 +738,11 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 	case WM_PAINT:
 		wnd_on_render();
 		break;
+	case WM_ACTIVATE:
+		keyboard[VK_CONTROL]=is_ctrl_down();
+		keyboard[VK_SHIFT]=is_shift_down();
+		keyboard[VK_MENU]=is_alt_down();
+		break;
 
 	case WM_MOUSEMOVE:
 		mx=(short&)lParam, my=((short*)&lParam)[1];
@@ -841,6 +846,8 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 					else
 						redraw|=wnd_on_toggle_profiler();
 					break;
+				case VK_PRIOR:	redraw|=wnd_on_pageup();			break;
+				case VK_NEXT:	redraw|=wnd_on_pagedown();			break;
 				case VK_UP:		redraw|=wnd_on_cursor_up();			break;
 				case VK_DOWN:	redraw|=wnd_on_cursor_down();		break;
 				case VK_LEFT:	redraw|=wnd_on_cursor_left();		break;
@@ -1000,6 +1007,10 @@ int					__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, ch
 
 		if(!wnd_on_init())
 			return EXIT_FAILURE;
+
+		keyboard[VK_CONTROL]=is_ctrl_down();
+		keyboard[VK_SHIFT]=is_shift_down();
+		keyboard[VK_MENU]=is_alt_down();
 
 	ShowWindow(ghWnd, nCmdShow);
 	

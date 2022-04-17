@@ -348,28 +348,33 @@ bool				wnd_on_display_help();
 bool				wnd_on_toggle_profiler();
 bool				wnd_on_select_all();
 bool				wnd_on_deselect();
-bool				wnd_on_save(bool save_as);
-bool				wnd_on_clear_hist();
-bool				wnd_on_undo();
-bool				wnd_on_redo();
-bool				wnd_on_copy(bool cut);
-bool				wnd_on_paste();
-bool				wnd_on_scroll_up_key();
-bool				wnd_on_scroll_down_key();
-bool				wnd_on_skip_word_left();
-bool				wnd_on_skip_word_right();
-bool				wnd_on_goto_file_start();
-bool				wnd_on_goto_file_end();
-bool				wnd_on_goto_line_start();
-bool				wnd_on_goto_line_end();
 bool				wnd_on_begin_rectsel();
+
+bool				wnd_on_type(char character);
 bool				wnd_on_deletechar();
 bool				wnd_on_backspace();
+bool				wnd_on_undo();
+bool				wnd_on_redo();
+bool				wnd_on_clear_hist();
+
+bool				wnd_on_copy(bool cut);
+bool				wnd_on_paste();
+
+bool				wnd_on_scroll_up_key();
+bool				wnd_on_scroll_down_key();
+bool				wnd_on_pageup();
+bool				wnd_on_pagedown();
+
 bool				wnd_on_cursor_up();
 bool				wnd_on_cursor_down();
 bool				wnd_on_cursor_left();
 bool				wnd_on_cursor_right();
-bool				wnd_on_type(char character);
+bool				wnd_on_skip_word_left();
+bool				wnd_on_skip_word_right();
+bool				wnd_on_goto_line_start();
+bool				wnd_on_goto_line_end();
+bool				wnd_on_goto_file_start();
+bool				wnd_on_goto_file_end();
 
 bool				wnd_on_newtab();
 bool				wnd_on_open();
@@ -378,6 +383,7 @@ bool				wnd_on_next_tab();
 bool				wnd_on_prev_tab();
 bool				wnd_on_barorient();
 
+bool				wnd_on_save(bool save_as);
 bool				wnd_on_quit();//return false to deny exit
 
 void				report_errors();
