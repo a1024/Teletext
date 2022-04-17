@@ -15,7 +15,6 @@
 //along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include			"tt.h"
-//#include			<algorithm>
 #define				STB_IMAGE_IMPLEMENTATION
 #include			"stb_image.h"//https://github.com/nothings/stb
 
@@ -2489,7 +2488,7 @@ void				wnd_on_render()
 			{
 				int dstpx=x1+cur->cursor.col*dxpx-wpx,
 					dstpy=y1+cur->cursor.line*dypx-wpy;
-				draw_line_i(dstpx, dstpy, dstpx, dstpy, 0xFFFFFFFF);
+				draw_line_i(dstpx, dstpy, dstpx, dstpy+dypx, 0xFFFFFFFF);
 			}
 		}
 		break;
@@ -2678,9 +2677,7 @@ bool				drag_selection_click(DragType drag_type)//checks if you clicked on the s
 	if(cur->selection_exists())
 	{
 		Bookmark click;
-		mx-=dx*font_zoom>>1;
 		bool hit=cursor_at_mouse(*text, click);
-		mx+=dx*font_zoom>>1;
 		if(hit)
 		{
 			if(cur->rectsel)
@@ -2986,9 +2983,9 @@ bool				wnd_on_lbuttonup()
 				cur->selcur.update_col(*text);
 				cur->cursor.update_col(*text);
 			}
+			else if(cur->cursor!=cur->selcur)
+				*cur=drag_cursor;
 		}
-		else
-			*cur=drag_cursor;
 		break;
 	}
 	mouse_release();
@@ -3269,42 +3266,46 @@ bool				wnd_on_backspace()
 }
 bool				wnd_on_cursor_up()
 {
-	if(!cur->selection_exists())
+	bool shiftdown=is_shift_down();
+	//if(!cur->selection_exists()||shiftdown)
 		cur->cursor.jump_vertical(*text, -1);
-	if(!is_shift_down())
+	if(!shiftdown)
 		cur->deselect(*text, -1);
 	wnd_to_cursor=true;
 	return true;
 }
 bool				wnd_on_cursor_down()
 {
-	if(!cur->selection_exists())
+	bool shiftdown=is_shift_down();
+	//if(!cur->selection_exists()||shiftdown)
 		cur->cursor.jump_vertical(*text, 1);
-	if(!is_shift_down())
+	if(!shiftdown)
 		cur->deselect(*text, 1);
 	wnd_to_cursor=true;
 	return true;
 }
 bool				wnd_on_cursor_left()
 {
-	if(!cur->selection_exists())
+	bool shiftdown=is_shift_down();
+	if(!cur->selection_exists()||shiftdown)
 	{
 		cur->cursor.decrement_idx(*text);
 		cur->cursor.update_col(*text);
 	}
-	if(!is_shift_down())
+	if(!shiftdown)
 		cur->deselect(*text, -1);
 	wnd_to_cursor=true;
 	return true;
 }
 bool				wnd_on_cursor_right()
 {
-	if(!cur->selection_exists())
+	bool shiftdown=is_shift_down();
+	if(!cur->selection_exists()||shiftdown)
 	{
 		cur->cursor.increment_idx(*text);
 		cur->cursor.update_col(*text);
 	}
-	if(!is_shift_down())
+	if(!shiftdown)
 		cur->deselect(*text, 1);
 	wnd_to_cursor=true;
 	return true;
