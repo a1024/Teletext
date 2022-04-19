@@ -31,6 +31,7 @@ TODO:
 - State file
 - Config file
 - Save on write
+- Hex mode
 
 DONE:
 - Rectangular selection

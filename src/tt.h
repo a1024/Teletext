@@ -364,7 +364,6 @@ bool				wnd_on_scroll_up_key();
 bool				wnd_on_scroll_down_key();
 bool				wnd_on_pageup();
 bool				wnd_on_pagedown();
-
 bool				wnd_on_cursor_up();
 bool				wnd_on_cursor_down();
 bool				wnd_on_cursor_left();
