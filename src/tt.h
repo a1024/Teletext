@@ -325,6 +325,7 @@ int					calc_width		(int x, int y, const char *msg, int msg_length, int tab_orig
 void				inv_calc_width	(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom, int width, int *out_cols, int *out_k);//returns index to fit [msg, msg+index[ in width
 int					print_line		(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom, int req_cols=-1, int *ret_idx=nullptr);
 int					print(short zoom, int tab_origin, int x, int y, const char *format, ...);
+void				tabbar_calc_positions();
 
 void				hist_undo();//ctrl z
 void				hist_redo();//ctrl y

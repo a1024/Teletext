@@ -641,9 +641,10 @@ void				relocate_range(int dst, int &a, int &b)
 //U64				colors_text=0xFFABABABFF000000;//black on white		0xBKBKBKBK_TXTXTXTX
 U64					colors_text=0x20ABABABFFABABAB;//dark mode
 //U64				colors_text=0xFF000000FFABABAB;//dark mode, opaque black on black?
-U64					colors_selection=0xA0FF9933FFFFFFFF;
+U64					colors_selection=0xA0FF9933FFFFFFFF;//colors of selected text
 //U64				colors_selection=0xA0FF0000FFABABAB;
-int					color_cursorlinebk=0xFF202020;
+int					color_cursor=0xFFFFFFFF,//color of the cursor stick
+					color_cursorlinebk=0xFF202020;//color of current line highlight
 U64					colors_cursorline=(u64)color_cursorlinebk<<32|0xFFABABAB;
 struct				SmallRect
 {
@@ -1414,6 +1415,8 @@ void				set_title()
 
 	printed+=sprintf_s(g_buf+printed, g_buf_size-printed, "Teletext");
 	set_window_title(g_buf);
+	
+	tabbar_calc_positions();
 }
 void				debug_set_window_title(const char *format, ...)
 {
@@ -2539,9 +2542,9 @@ void				wnd_on_render()
 				print_line(x-wpx, y-wpy, line, len, x1-wpx, font_zoom);
 		}
 		if(cpy<cpy2)//draw cursor
-			draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy2-wpy+dypx, 0xFFFFFFFF);
+			draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy2-wpy+dypx, color_cursor);
 		else
-			draw_line_i(cpx-wpx, cpy2-wpy, cpx-wpx, cpy-wpy+dypx, 0xFFFFFFFF);
+			draw_line_i(cpx-wpx, cpy2-wpy, cpx-wpx, cpy-wpy+dypx, color_cursor);
 	}
 	else
 	{
@@ -2561,7 +2564,7 @@ void				wnd_on_render()
 		}
 		else//no selection
 			print_text(x1-wpx, x1-wpx, x1-wpx, y1-wpy, *text, i, f, font_zoom);
-		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy-wpy+dypx, 0xFFFFFFFF);//draw cursor
+		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy-wpy+dypx, color_cursor);//draw cursor
 	}
 	prof_add("text");
 
@@ -2614,8 +2617,8 @@ void				wnd_on_render()
 						my1=(dy<<1)+1, my2=my1+marker_size, xtip=mx, ytip=my+20;
 					else
 						my1=h-(dy<<1)-1, my2=my1-marker_size, xtip=mx, ytip=my-dy-20;
-					draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx-marker_size, my2, 0xFFFFFFFF);
-					draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx+marker_size, my2, 0xFFFFFFFF);
+					draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx-marker_size, my2, color_cursor);
+					draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx+marker_size, my2, color_cursor);
 				}
 				break;
 			case TABBAR_LEFT:
@@ -2627,14 +2630,14 @@ void				wnd_on_render()
 						mx1=tabbar_dx+1, mx2=mx1+marker_size, xtip=mx+20, ytip=my;
 					else
 						mx1=w-tabbar_dx-1, mx2=mx1-marker_size, xtip=mx-msg_width-20, ytip=my;
-					draw_line_i(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy-marker_size, 0xFFFFFFFF);
-					draw_line_i(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy+marker_size, 0xFFFFFFFF);
+					draw_line_i(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy-marker_size, color_cursor);
+					draw_line_i(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy+marker_size, color_cursor);
 				}
 				break;
 			}
 			draw_rectangle_i(xtip, xtip+msg_width+4, ytip, ytip+dy+4, 0x40FFFFFF);
 			set_text_colors(colors_selection);
-			print_line(xtip+2, ytip+2, buf, len, 0, -1, 1);
+			print_line(xtip+2, ytip+2, buf, len, 0, 1);
 			set_text_colors(colors_text);
 		}
 		break;
@@ -2660,13 +2663,13 @@ void				wnd_on_render()
 				int Lx=x1+r.x1*dxpx-wpx, Ty=y1+r.y1*dypx-wpy,
 					Rx=x1+r.x2*dxpx-wpx, By=y1+r.y2*dypx-wpy;
 				draw_rectangle_hollow(Lx, Rx, Ty, By, 0xFF808080);
-				draw_line_i(Lx, Ty, Lx, By, 0xFFFFFFFF);
+				draw_line_i(Lx, Ty, Lx, By, color_cursor);
 			}
 			else
 			{
 				int dstpx=x1+cur->cursor.col*dxpx-wpx,
 					dstpy=y1+cur->cursor.line*dypx-wpy;
-				draw_line_i(dstpx, dstpy, dstpx, dstpy+dypx, 0xFFFFFFFF);
+				draw_line_i(dstpx, dstpy, dstpx, dstpy+dypx, color_cursor);
 			}
 		}
 		break;
@@ -3404,8 +3407,8 @@ bool				wnd_on_deletechar()
 			auto line=text_get_line(*text, kl, &len);
 			int idx1=0, c1=0;
 			//int c0=0;
-			bool line_OOB=col2idx(line, len, 0, 0, 0, r.x1, &idx1, &c1);
-			if(!line_OOB&&idx1<len)
+			bool line_OOB=col2idx(line, len, 0, 0, 0, (float)r.x1, &idx1, &c1);
+			if(!line_OOB&&idx1<(int)len)
 			{
 				//if(line[idx1]=='\t')//break tab into spaces
 				//{
@@ -3443,7 +3446,7 @@ bool				wnd_on_backspace()
 			size_t len=0;
 			auto line=text_get_line(*text, kl, &len);
 			int idx1=0, c1=0, c0=0;
-			bool line_OOB=col2idx(line, len, 0, 0, 0, r.x1, &idx1, &c1);
+			bool line_OOB=col2idx(line, len, 0, 0, 0, (float)r.x1, &idx1, &c1);
 			if(!line_OOB&&idx1>0)
 			{
 				--idx1;
