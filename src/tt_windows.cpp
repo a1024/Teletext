@@ -745,7 +745,7 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 		break;
 
 	case WM_MOUSEMOVE:
-		mx=(short&)lParam, my=((short*)&lParam)[1];
+		mx=(short&)lParam, my=((short*)&lParam)[1];//32bit
 		if(wnd_on_mousemove())
 			InvalidateRect(hWnd, nullptr, 0);
 		break;

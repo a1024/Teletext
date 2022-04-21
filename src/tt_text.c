@@ -338,7 +338,7 @@ static void lines_add(Text *text, size_t l1, size_t l2)//not history-tracked
 	if(l1<l2)
 	{
 		text->nlines+=l2-l1;
-		text->lines=realloc(text->lines, text->nlines*sizeof(void*));
+		text->lines=(Line**)realloc(text->lines, text->nlines*sizeof(void*));
 		if(text->nlines)
 			ASSERT_R(text->lines);
 		memmove(text->lines+l2, text->lines+l1, (text->nlines-l2)*sizeof(void*));
@@ -368,7 +368,7 @@ static void	lines_erase(Text *text, size_t l1, size_t l2)//not history-tracked
 		if(l2<text->nlines)
 			memmove(text->lines+l1, text->lines+l2, (text->nlines-l2)*sizeof(void*));
 		text->nlines-=l2-l1;
-		text->lines=realloc(text->lines, text->nlines*sizeof(void*));
+		text->lines=(Line**)realloc(text->lines, text->nlines*sizeof(void*));
 		if(text->nlines)
 			ASSERT_R(text->lines);
 	}
@@ -410,7 +410,7 @@ static void	line_erase(Line **line, size_t idx1, size_t idx2)//not history-track
 //API
 size_t		text_get_nlines(const void *hText)
 {
-	const Text *text=(const Text*)hText;
+	Text const *text=(Text const*)hText;
 	ASSERT_P(text);
 	ASSERT_P(text->lines);
 
@@ -418,7 +418,7 @@ size_t		text_get_nlines(const void *hText)
 }
 size_t		text_get_len(const void *hText, size_t line)
 {
-	const Text *text=(const Text*)hText;
+	Text const *text=(Text const*)hText;
 	ASSERT_P(text);
 	ASSERT_P(text->lines);
 	ASSERT_IDX(line, text->nlines);
@@ -427,7 +427,7 @@ size_t		text_get_len(const void *hText, size_t line)
 }
 char*		text_get_line(const void *hText, size_t line, size_t *ret_len)
 {
-	Text *text=(Text*)hText;
+	Text const *text=(Text const*)hText;
 	ASSERT_P(text);
 	ASSERT_P(text->lines);
 	ASSERT_IDX(line, text->nlines);
@@ -457,10 +457,10 @@ void		text_erase_lines(void *hText, size_t l0, size_t nlines)
 	{
 		ASSERT_P(text->hist);
 
-		for(kl=l0, l0+=nlines;kl<l0;++kl)
+		for(kl=l0+nlines-1;kl>=l0;--kl)
 			hist_insert(&text->hist, ACTION_REMOVE_LINE, kl, 0, text->lines[kl]->data, text->lines[kl]->len, 1);
 	}
-	lines_erase(text, l0-nlines, l0);
+	lines_erase(text, l0, l0+nlines);
 }
 void		text_init(void *hText, TextType type, const void *payload, size_t p_bytes)
 {
@@ -508,7 +508,8 @@ void*		text_create(TextType type, const void *payload, size_t p_bytes)
 }
 void*		text_deepcopy(const void *hText)
 {
-	Text *src=(Text*)hText, *dst;
+	Text const *src=(Text const*)hText;
+	Text *dst;
 	ASSERT_P(src);
 
 	dst=(Text*)malloc(sizeof(Text));
@@ -579,15 +580,15 @@ void		text_replace(void *hText, size_t l0, size_t idx1, size_t idx2, const char 
 	ASSERT_R(line[0]);
 	if(inssize)
 	{
-		memmove(line[0]->data+idx1+len, line[0]->data+idx1, (line[0]->len+1-len)-idx1);//make way for array insertion
+		memmove(line[0]->data+idx1+inssize, line[0]->data+idx1, (line[0]->len+1-inssize)-idx1);//make way for array insertion
 		memfill(line[0]->data+idx1, str, inssize, len);
 		if(text->type!=TEXT_NO_HISTORY)
-			hist_insert(&text->hist, ACTION_INSERT, l0, idx1, line[0]->data+idx1, len*repeat, 1);
+			hist_insert(&text->hist, ACTION_INSERT, l0, idx1, line[0]->data+idx1, len, repeat);
 	}
 }
 ActionType	text_get_last_action(const void *hText)
 {
-	Text *text=(Text*)hText;
+	Text const *text=(Text const*)hText;
 	ASSERT_P(text);
 	if(text->type==TEXT_NO_HISTORY)
 		return ACTION_ERROR;
@@ -731,15 +732,16 @@ int			text_is_modified(void *hText)
 	Text *text=(Text*)hText;
 	ASSERT_P(text);
 
-	return text->checkpoint==text->hist;
+	return text->checkpoint!=text->hist;
 }
 void		text_clear_history(void *hText)
 {
 	Text *text=(Text*)hText;
 	ASSERT_P(text);
-
 	if(text->type==TEXT_NO_HISTORY)
 		return;
+	ASSERT_P(text->hist);
+
 	hist_erase_all(&text->hist);
 	text->hist=hist_node_alloc(ACTION_CHECKPOINT, 0, 0, 0, 0, 1);
 }

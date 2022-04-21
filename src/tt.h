@@ -22,7 +22,7 @@ extern char			g_buf[G_BUF_SIZE];
 extern wchar_t		g_wbuf[G_BUF_SIZE];
 
 extern int			w, h;
-extern short		mx, my, dx, dy;
+extern short		mx, my, start_mx, start_my, dx, dy;
 extern int			*rgb, rgbn;
 extern char			keyboard[256];
 extern int			font_idx, font_size;

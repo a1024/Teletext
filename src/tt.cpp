@@ -29,6 +29,7 @@ const char			file[]=__FILE__;
 char				g_buf[G_BUF_SIZE]={};
 int					w=0, h=0;
 short				mx=0, my=0, mline=0, mcol=0,//current mouse coordinates
+					start_mx=0, start_my=0,//LBUTTON down coordinates
 					dx=0, dy=0,//non-tab character dimensions
 					tab_count=4;
 std::string			exe_dir;
@@ -334,8 +335,9 @@ void				set_text_colors(U64 const &colors)
 	send_color(ns_text::u_txtColor, colors.lo);
 	send_color(ns_text::u_bkColor, colors.hi);
 }
-void				col2idx(const char *text, int text_length, int tab0_cols, int idx0, int col0, float req_col, int *ret_idx, int *ret_col, float round_ratio)
+bool				col2idx(const char *text, int text_length, int tab0_cols, int idx0, int col0, float req_col, int *ret_idx, int *ret_col)//returns true when runs out of characters (OOB)
 {
+	bool line_too_short=true;
 	int idx=idx0, col=col0;
 	for(;idx<text_length;++idx)
 	{
@@ -345,14 +347,18 @@ void				col2idx(const char *text, int text_length, int tab0_cols, int idx0, int 
 			dcol=tab_count-mod(col-tab0_cols, tab_count);
 		else if(c>=32&&c<0xFF)
 			dcol=1;
-		if(col+dcol*round_ratio>=req_col)//dcol in [1 ~ tab_count]
+		if(col+dcol*0.5f>=req_col)//dcol in [1 ~ tab_count]
+		{
+			line_too_short=false;
 			break;
+		}
 		col+=dcol;
 	}
 	if(ret_col)
 		*ret_col=col;
 	if(ret_idx)
 		*ret_idx=idx;
+	return line_too_short;
 }
 int					idx2col(const char *text, int text_length, int tab0_cols)
 {
@@ -665,10 +671,12 @@ struct				Rect
 SmallRect			window_tabbar, window_editor;
 struct				Bookmark
 {
-	int line, idx, col;
+	int line,
+		idx,//-1 means OOB, deduce it from col
+		col;
 	Bookmark():line(0), idx(0), col(0){}
 	Bookmark(int line, int idx, int col):line(line), idx(idx), col(col){}
-	bool set_gui(Text const &text, int line, float col)//returns true if text is hit
+	bool set_gui(Text const &text, int line, float col, bool clampcol)//returns true if text is hit
 	{
 		bool hit=true;
 		size_t nlines=text_get_nlines(text);
@@ -677,13 +685,13 @@ struct				Bookmark
 		else if(line>(int)nlines-1)
 				line=nlines-1, hit=false;
 		this->line=line;
+
 		size_t len=0;
 		auto _line=text_get_line(text, line, &len);
-		//auto &_line=text[line];
-		this->col=(int)col;
-		//col2idx(_line.c_str(), _line.size(), 0, col, &this->idx, nullptr);//
-		col2idx(_line, len, 0, 0, 0, col, &this->idx, &this->col, 0.5f);
-	//	update_idx(text);
+		//this->col=(int)col;
+		col2idx(_line, len, 0, 0, 0, col, &this->idx, clampcol?&this->col:nullptr);
+		if(!clampcol)
+			this->col=(int)(col+0.5f);
 		return hit;
 	}
 	void set_text(Text const &text, int line, int idx)
@@ -816,7 +824,7 @@ struct				Bookmark
 	{
 		size_t len=0;
 		auto _line=text_get_line(text, line, &len);
-		col2idx(_line, len, 0, 0, 0, (float)col, &this->idx, &this->col, 0.5f);
+		col2idx(_line, len, 0, 0, 0, (float)col, &this->idx, &this->col);
 	}
 };
 bool				operator==(Bookmark const &left, Bookmark const &right){return left.line==right.line&&left.idx==right.idx;}
@@ -926,9 +934,9 @@ struct				Cursor
 			{
 				auto r=get_rectsel();
 				if(direction==-1)
-					cursor.set_gui(text, r.y1, (float)r.x1);
+					cursor.set_gui(text, r.y1, (float)r.x1, true);
 				else
-					cursor.set_gui(text, r.y2, (float)r.x2);
+					cursor.set_gui(text, r.y2, (float)r.x2, true);
 			}
 			else
 			{
@@ -969,8 +977,8 @@ struct				Cursor
 	}
 	void set_rectsel(Text const &text, int l1, int l2, int col1, int col2)
 	{
-		cursor.set_gui(text, l1, (float)col1);
-		selcur.set_gui(text, l2, (float)col2);
+		cursor.set_gui(text, l1, (float)col1, false);
+		selcur.set_gui(text, l2, (float)col2, false);
 	}
 	bool selection_exists()const
 	{
@@ -1054,7 +1062,7 @@ void				rectsel_copy(Text const &src, Cursor const &cur, Text &dst)
 			int idx1, c1, prepad=0,
 				idx2, c2;
 
-			col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1, 0.5f);
+			col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1);
 			if(c1<col1&&idx1<(int)len)
 			{
 				int c1_2=c1+tab_count-mod(c1, tab_count);
@@ -1064,7 +1072,7 @@ void				rectsel_copy(Text const &src, Cursor const &cur, Text &dst)
 			if(c1>col1)
 				prepad=c1-col1;
 
-			col2idx(line, len, 0, idx1, c1, (float)col2, &idx2, &c2, 0.5f);
+			col2idx(line, len, 0, idx1, c1, (float)col2, &idx2, &c2);
 			idx2-=c2>col2;
 
 			temp.clear();
@@ -1088,12 +1096,17 @@ void				rectsel_insert(Text const &src, int l1, int col1, Text &dst)
 		auto srcline=text_get_line(src, kls, &srclen);
 		auto dstline=text_get_line(dst, kld, &dstlen);
 		int idx1, c1;
-		col2idx(dstline, dstlen, 0, 0, 0, (float)col1, &idx1, &c1, 0.5f);
+		col2idx(dstline, dstlen, 0, 0, 0, (float)col1, &idx1, &c1);
 		if(c1<col1)
 		{
-			text_replace(dst, kld, idx1, idx1, " ", 1, col1-c1);
+			int ntabs=col1/tab_count-c1/tab_count, nspaces=mod(col1, tab_count);
+			text_replace(dst, kld, idx1, idx1, "\t", 1, ntabs);
+			idx1+=ntabs;
+			text_replace(dst, kld, idx1, idx1, " ", 1, nspaces);
+			idx1+=nspaces;
+			//text_replace(dst, kld, idx1, idx1, " ", 1, col1-c1);
 			//dstline.insert(dstline.begin()+idx1, col1-c1, ' ');
-			idx1+=col1-c1;
+			//idx1+=col1-c1;
 		}
 		text_replace(dst, kld, idx1, idx1, srcline, srclen, 1);
 		//dstline.insert(dstline.begin()+idx1, srcline.begin(), srcline.end());
@@ -1125,7 +1138,7 @@ void				selection_copy(Text const &src, Cursor const &cur, Text &dst)
 	//dst.clear();
 	Bookmark i, f;
 	cur.get_selection(i, f);
-	text_insert_lines(dst, 0, f.line-i.line+1);
+	text_insert_lines(dst, 0, f.line-i.line);//one line is already there
 	if(i.line==f.line)
 	{
 		size_t len=0;
@@ -1139,7 +1152,7 @@ void				selection_copy(Text const &src, Cursor const &cur, Text &dst)
 	{
 		size_t len=0;
 		auto line=text_get_line(src, i.line, &len);
-		text_replace(dst, text_get_nlines(dst), 0, 0, line+i.idx, len-i.idx, 1);
+		text_replace(dst, 0, 0, 0, line+i.idx, len-i.idx, 1);
 		for(int kl=i.line+1;kl<f.line;++kl)
 		{
 			line=text_get_line(src, kl, &len);
@@ -1473,9 +1486,9 @@ void				text_erase(Text &text, int l1, int idx1, int l2, int idx2)
 			std::swap(l1, l2);
 			std::swap(idx1, idx2);
 		}
-		size_t len1=0, len2=0;
-		auto line1=text_get_line(text, l1, &len1), line2=text_get_line(text, l2, &len2);
-		text_replace(text, l1, idx1, len1, line2, len2, 1);
+		size_t len1=text_get_len(text, l1), len2=0;
+		auto line2=text_get_line(text, l2, &len2);
+		text_replace(text, l1, idx1, len1, line2+idx2, len2-idx2, 1);
 		text_erase_lines(text, l1+1, l2-l1);
 
 		//auto &line1=text[l1], &line2=text[l2];
@@ -1549,30 +1562,34 @@ void				text_erase_rect(Text &text, int l1, int l2, int col1, int col2)
 		size_t len=0;
 		auto line=text_get_line(text, kl, &len);
 		int idx1=0, c1=0;
-		col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1, 0.5f);
-		if(c1!=col1)//tab caused misalign
+		bool line_OOB=col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1);
+		if(!line_OOB)
 		{
-			if(idx1<(int)len&&line[idx1]=='\t')
+			if(c1!=col1)//tab caused misalign
 			{
-				replace_tab_with_spaces(text, kl, idx1);
-				col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1, 0.5f);
+				if(idx1<(int)len&&line[idx1]=='\t')
+				{
+					replace_tab_with_spaces(text, kl, idx1);
+					col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1);
+				}
+				else if(idx1>0&&line[idx1-1]=='\t')
+				{
+					replace_tab_with_spaces(text, kl, idx1-1);
+					col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1);
+				}
 			}
-			else if(idx1>0&&line[idx1-1]=='\t')
+			if(c1==col1)
 			{
-				replace_tab_with_spaces(text, kl, idx1-1);
-				col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1, 0.5f);
+				int idx2=0, c2=0;
+				col2idx(line, len, 0, 0, 0, (float)col2, &idx2, &c2);
+				if(idx1<idx2)
+					text_replace(text, kl, idx1, idx2, 0, 0, 0);
+				//	line.erase(line.begin()+idx1, line.begin()+idx2);
 			}
-		}
-		if(c1==col1)
-		{
-			int idx2=0, c2=0;
-			col2idx(line, len, 0, 0, 0, (float)col2, &idx2, &c2, 0.5f);
-			if(idx1<idx2)
-				text_replace(text, kl, idx1, idx2, 0, 0, 0);
-			//	line.erase(line.begin()+idx1, line.begin()+idx2);
 		}
 	}
 }
+#if 0
 void				text_insert_rect(Text &text, int l1, int l2, int col0, const char *a, int len)
 {
 	for(int kl=l1;kl<=l2;++kl)
@@ -1581,15 +1598,15 @@ void				text_insert_rect(Text &text, int l1, int l2, int col0, const char *a, in
 		auto line=text_get_line(text, kl, &len2);
 		//auto &line=text[kl];
 		int idx1=0, c1=0;
-		col2idx(line, len2, 0, 0, 0, (float)col0, &idx1, &c1, 0.5f);
+		col2idx(line, len2, 0, 0, 0, (float)col0, &idx1, &c1);
 		if(c1<col0)
 		{
 			int ntabs=col0/tab_count-c1/tab_count, nspaces=mod(col0, tab_count);
 
 			text_replace(text, kl, len2, len2, "\t", 1, ntabs);
-			len2=text_get_len(text, kl);
+			len2+=ntabs;
 			text_replace(text, kl, len2, len2, " ", 1, nspaces);
-			idx1=len2=text_get_len(text, kl);
+			idx1=len2+=nspaces;
 
 			//line.insert(line.end(), ntabs, '\t');
 			//line.insert(line.end(), nspaces, ' ');
@@ -1600,6 +1617,7 @@ void				text_insert_rect(Text &text, int l1, int l2, int col0, const char *a, in
 		//line.insert(line.begin()+idx1, a, a+len);
 	}
 }
+#endif
 void				text_insert1(Text &text, int l0, int idx0, char c)
 {
 	if(c=='\n')
@@ -1674,7 +1692,7 @@ void				indent_rectsel_back(Cursor &cur)
 		auto line=text_get_line(text, kl, &len);
 		//auto &line=text->operator[](kl);
 		int idx, c;
-		col2idx(line, len, 0, 0, 0, (float)col0, &idx, &c, 0.5f);
+		col2idx(line, len, 0, 0, 0, (float)col0, &idx, &c);
 		for(;idx<(int)len&&!isspace(line[idx]);++idx, ++c);
 		if(dst_col<c)
 		{
@@ -1694,8 +1712,8 @@ void				indent_rectsel_back(Cursor &cur)
 			auto line=text_get_line(text, kl, &len);
 			//auto &line=text->operator[](kl);
 			int idx1, c1, idx2, c2;
-			col2idx(line, len, 0, 0, 0, (float)dst_col, &idx1, &c1, 0.5f);
-			col2idx(line, len, 0, 0, 0, (float)col1, &idx2, &c2, 0.5f);
+			col2idx(line, len, 0, 0, 0, (float)dst_col, &idx1, &c1);
+			col2idx(line, len, 0, 0, 0, (float)col1, &idx2, &c2);
 			text_replace(text, kl, idx1, idx2, 0, 0, 0);
 			//line.erase(line.begin()+idx1, line.begin()+idx2);
 		}
@@ -1716,7 +1734,7 @@ void				indent_rectsel_forward(Cursor &cur)
 		auto line=text_get_line(text, kl, &len);
 		//auto &line=text->operator[](kl);
 		int idx1, c1;
-		col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1, 0.5f);
+		col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1);
 		text_replace(text, kl, idx1, idx1, "\t", 1, 1);
 		//line.insert(line.begin()+idx1, '\t');
 	}
@@ -1737,7 +1755,7 @@ void				indent_selection_back(Cursor &cur)
 		auto line=text_get_line(text, kl, &len);
 		//auto &line=text->operator[](kl);
 		int idx1, c1;
-		col2idx(line, len, 0, 0, 0, (float)tab_count, &idx1, &c1, 0.5f);
+		col2idx(line, len, 0, 0, 0, (float)tab_count, &idx1, &c1);
 		int kc=0;
 		for(;kc<idx1&&isspace(line[kc]);++kc);
 		if(kl==i.line)
@@ -1781,14 +1799,14 @@ void				line_insert(Text &text, int l0, int c1, int c2, const char *src, int len
 		auto line=text_get_line(text, l0, &len2);
 		//auto &line=text[l0];
 		int idx1, col1, idx2, col2;
-		col2idx(line, len2, 0, 0, 0, (float)c1, &idx1, &col1, 0.5f);
+		col2idx(line, len2, 0, 0, 0, (float)c1, &idx1, &col1);
 
 		if(col1>c1)//a tab caused misalign
 		{
 			--idx1;
 			col1=idx2col(line, idx1, 0);
 		}
-		col2idx(line, len2, 0, idx1, col1, (float)c2, &idx2, &col2, 0.5f);
+		col2idx(line, len2, 0, idx1, col1, (float)c2, &idx2, &col2);
 		if(col1<c1)//a tab caused misalign or line is not long enough
 		{
 			int ntabs=c1/tab_count-col1/tab_count, nspaces=mod(c1, tab_count);
@@ -1799,6 +1817,7 @@ void				line_insert(Text &text, int l0, int c1, int c2, const char *src, int len
 				text_replace(text, l0, idx1, idx1, " ", 1, nspaces);
 			if(ntabs>0)
 				text_replace(text, l0, idx1, idx1, "\t", 1, ntabs);
+
 			//line.replace(line.begin()+idx1, line.begin()+idx2, src, src+len);
 			//if(nspaces>0)
 			//	line.insert(idx1, nspaces, ' ');
@@ -1926,7 +1945,7 @@ char				group_char(char c)
 		return '\n';
 	return c;
 }
-bool				cursor_at_mouse(Text const &text, Bookmark &cursor)//sets the cursor to mouse coordinates, returns true if text was hit
+bool				cursor_at_mouse(Text const &text, short mx, short my, Bookmark &cursor, bool clampcol)//sets the cursor to mouse coordinates, returns true if text was hit
 {
 	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
 	int dypx=dy*font_zoom, dxpx=dx*font_zoom,
@@ -1934,7 +1953,28 @@ bool				cursor_at_mouse(Text const &text, Bookmark &cursor)//sets the cursor to 
 	float col=float(wpx+mousex)/dxpx;
 
 	mline=line, mcol=(int)(col+0.5f);
-	return cursor.set_gui(text, line, col);
+	size_t nlines=text_get_nlines(text);
+	return cursor.set_gui(text, line, col, clampcol);
+
+/*	cursor.line=line;
+	if(cursor.line<0)
+		cursor.line=0;
+	else if(cursor.line>=nlines)
+		cursor.line=nlines-1;
+	cursor.col=(int)(col+0.5f);
+
+	size_t len=0;
+	auto _line=text_get_line(text, line, &len);
+	int hit_idx=0, hit_col=0;
+	col2idx(_line, len, 0, 0, 0, col, &hit_idx, &hit_col);
+	if(hit_col<col)
+		cursor.idx=-1;
+	else
+		cursor.idx=hit_idx;//*/
+	//cursor.idx=hit_idx + col/tab_count-hit_col/tab_count+mod(col, tab_count);//padded with tabs and spaces
+	//cursor.idx=-1;//means OOB, deduce it from col
+
+	return true;
 }
 
 //scrollbar functions
@@ -1991,7 +2031,7 @@ inline void			tabbar_printnames_init(){g_buf[0]='*';}//don't use g_buf while pri
 int					tabbar_printname(int x, int y, int tab_idx, bool test=false, bool qualified=false, const char **pbuf=nullptr, int *len=nullptr)
 {
 	auto &f=openfiles[tab_idx];
-	int not_modified=text_is_modified(f.m_text);
+	int modified=text_is_modified(f.m_text);
 	//int not_modified=f.m_histpos==f.m_histpos_saved;
 	int printed=0;
 	if(f.m_filename.size())
@@ -2009,17 +2049,17 @@ int					tabbar_printname(int x, int y, int tab_idx, bool test=false, bool qualif
 	int msg_width=0;
 	if(test)
 	{
-		msg_width=calc_width(x, y, g_buf+not_modified, printed+!not_modified, 0, 1);
+		msg_width=calc_width(x, y, g_buf+!modified, printed+modified, 0, 1);
 		if(pbuf)
-			*pbuf=g_buf+not_modified;
+			*pbuf=g_buf+!modified;
 		if(len)
-			*len=printed+!not_modified;
+			*len=printed+modified;
 	}
 	else
 	{
 		if(tab_idx==current_file)
 			set_text_colors(colors_selection);
-		msg_width=print_line(x, y, g_buf+not_modified, printed+!not_modified, 0, 1);
+		msg_width=print_line(x, y, g_buf+!modified, printed+modified, 0, 1);
 		if(tab_idx==current_file)
 			set_text_colors(colors_text);
 	}
@@ -2702,7 +2742,7 @@ bool				wnd_on_mousemove()
 			drag=DRAG_RECT;
 		else
 			drag=DRAG_SELECT;
-		cursor_at_mouse(*text, cur->cursor);
+		cursor_at_mouse(*text, mx, my, cur->cursor, !cur->rectsel);
 #ifdef DEBUG_CURSOR
 		{
 			const char *selectiontype=nullptr;
@@ -2725,7 +2765,17 @@ bool				wnd_on_mousemove()
 		return true;
 	case DRAG_MOVE_SELECTION:
 	case DRAG_COPY_SELECTION:
-		cursor_at_mouse(*text, cur->cursor);
+		//if(drag_cursor.rectsel)
+		//{
+		//	int sx=window_editor.x1+cur->selcur.col*dx*font_zoom-wpx,
+		//		sy=window_editor.y1+cur->selcur.line*dy*font_zoom-wpy;
+		//	auto r=drag_cursor.get_rectsel();
+		//	int rx=window_editor.x1+r.x2*dx*font_zoom-wpx,
+		//		by=window_editor.y1+r.y2*dy*font_zoom-wpy;
+		//	cursor_at_mouse(*text, mx-(start_mx-cpx), my-(start_my-cpy), cur->cursor);
+		//}
+		//else
+			cursor_at_mouse(*text, mx, my, cur->cursor, !cur->rectsel);
 		return true;
 	}
 	return false;
@@ -2815,7 +2865,7 @@ bool				drag_selection_click(DragType drag_type)//checks if you clicked on the s
 	if(cur->selection_exists())
 	{
 		Bookmark click;
-		bool hit=cursor_at_mouse(*text, click);
+		bool hit=cursor_at_mouse(*text, mx, my, click, !cur->rectsel);
 		if(hit)
 		{
 			if(cur->rectsel)
@@ -2847,12 +2897,13 @@ bool				drag_selection_click(DragType drag_type)//checks if you clicked on the s
 }
 void				lbutton_down_text(bool doubleclick)
 {
+	start_mx=mx, start_my=my;
 	bool ctrldown=is_ctrl_down();
 	if(drag_selection_click(ctrldown?DRAG_COPY_SELECTION:DRAG_MOVE_SELECTION))
 		return;
 	if(doubleclick||ctrldown)//select word
 	{
-		cursor_at_mouse(*text, cur->cursor);
+		cursor_at_mouse(*text, mx, my, cur->cursor, true);
 		cur->selcur=cur->cursor;
 		char initial=group_char(cur->cursor.dereference_idx(*text));
 		int nlines=text_get_nlines(*text);
@@ -2882,7 +2933,7 @@ void				lbutton_down_text(bool doubleclick)
 		if(cur->rectsel=is_alt_down())//rectsel
 		{
 			Bookmark temp;
-			if(cursor_at_mouse(*text, temp))
+			if(cursor_at_mouse(*text, mx, my, temp, false))
 				drag=DRAG_RECT, cur->cursor=temp;
 			if(!is_shift_down())
 				cur->selcur=cur->cursor;
@@ -2890,7 +2941,7 @@ void				lbutton_down_text(bool doubleclick)
 		else//place cursor / normal selection
 		{
 			drag=DRAG_SELECT;
-			cursor_at_mouse(*text, cur->cursor);
+			cursor_at_mouse(*text, mx, my, cur->cursor, true);
 			if(!is_shift_down())
 				cur->selcur=cur->cursor, cur->selcur=cur->cursor;
 		}
@@ -3243,14 +3294,14 @@ bool				wnd_on_type(char character)
 		bool multiline_selection=cur->cursor.line!=cur->selcur.line;
 		if(character=='\t'&&multiline_selection)//indentation
 		{
-			if(cur->rectsel)
+			if(cur->rectsel)//indent rectsel
 			{
 				if(is_shift_down())//shift tab
 					indent_rectsel_back(*cur);
 				else//tab
 					indent_rectsel_forward(*cur);
 			}
-			else
+			else//indent selection
 			{
 				if(is_shift_down())//shift tab
 					indent_selection_back(*cur);
@@ -3258,27 +3309,33 @@ bool				wnd_on_type(char character)
 					indent_selection_forward(*cur);
 			}
 			return true;
-		}
+		}//else erase selection and continue below
 		general_selection_erase();
 	}
-	if(cur->rectsel)
+	if(cur->rectsel)//tall cursor
 	{
 		auto r=cur->get_rectsel();
-		if(character=='\n')
+		if(character=='\n')//remove tall cursor, continue below to insert newline
 		{
-			cur->cursor.set_gui(*text, r.y2, (float)r.x2);
+			cur->cursor.set_gui(*text, r.y2, (float)r.x2, true);
 			cur->selcur=cur->cursor;
 		}
-		else
+		else//rectangular typing
 		{
+			auto action=text_get_last_action(*text);
+			if(action==ACTION_INSERT)
+				text_pop_checkpoint(*text);
+			else if(action!=ACTION_CHECKPOINT)
+				text_push_checkpoint(*text, cur, sizeof(*cur));
 			//while typing a character with rectsel, if a tab causes misalign:
 			//	either	1) insert (tab_count-mod(col, tab_count)) spaces before the character in lines without tab, so that all typed characters are aligned (probably not what was intended)
 			//	or		2) relocate the cursor to tab (unpredictable)
 			//	or		3) (best solution) break (replace) each encountered tab into spaces
 			for(int kl=r.y1;kl<=r.y2;++kl)
 				line_insert(*text, kl, r.x1, r.x2, &character, 1);
-			if(cur->cursor.col<cur->selcur.col)
+			if(cur->cursor.col<cur->selcur.col)//TODO: optimize this
 			{
+				cur->cursor.update_idx(*text);
 				++cur->cursor.idx;
 				cur->cursor.update_col(*text);
 				cur->selcur.col=cur->cursor.col;
@@ -3286,17 +3343,36 @@ bool				wnd_on_type(char character)
 			}
 			else
 			{
+				cur->selcur.update_idx(*text);
 				++cur->selcur.idx;
 				cur->selcur.update_col(*text);
 				cur->cursor.col=cur->selcur.col;
 				cur->cursor.update_idx(*text);
 			}
+			//if(cur->cursor.col<cur->selcur.col)
+			//{
+			//	++cur->cursor.idx;
+			//	cur->cursor.update_col(*text);
+			//	cur->selcur.col=cur->cursor.col;
+			//	cur->selcur.update_idx(*text);
+			//}
+			//else
+			//{
+			//	++cur->selcur.idx;
+			//	cur->selcur.update_col(*text);
+			//	cur->cursor.col=cur->selcur.col;
+			//	cur->cursor.update_idx(*text);
+			//}
+			text_push_checkpoint(*text, cur, sizeof(*cur));
+			dimensions_known=false;
 			return true;
 		}
 	}
 	auto action=text_get_last_action(*text);
 	if(action==ACTION_INSERT)
 		text_pop_checkpoint(*text);
+	else if(action!=ACTION_CHECKPOINT)
+		text_push_checkpoint(*text, cur, sizeof(*cur));
 
 	text_insert1(*text, cur->cursor.line, cur->cursor.idx, character);
 
@@ -3306,34 +3382,87 @@ bool				wnd_on_type(char character)
 
 	text_push_checkpoint(*text, cur, sizeof(*cur));
 	dimensions_known=false;
+	set_title();
 	return true;
 }
 bool				wnd_on_deletechar()
 {
-	if(cur->selection_exists())
-		general_selection_erase();
-	else
-	{
-		auto action=text_get_last_action(*text);
-		if(action==ACTION_REMOVE)
-			text_pop_checkpoint(*text);
+	auto action=text_get_last_action(*text);
+	if(action==ACTION_REMOVE)
+		text_pop_checkpoint(*text);
+	else if(action!=ACTION_CHECKPOINT)
+		text_push_checkpoint(*text, cur, sizeof(*cur));
 
-		text_erase1_del(*text, cur->cursor.line, cur->cursor.idx);
+	if(cur->selection_exists())//delete selection
+		general_selection_erase();
+	else if(cur->rectsel)//tall cursor delete
+	{
+		auto r=cur->get_rectsel();
+		for(int kl=r.y1;kl<=r.y2;++kl)
+		{
+			size_t len=0;
+			auto line=text_get_line(*text, kl, &len);
+			int idx1=0, c1=0;
+			//int c0=0;
+			bool line_OOB=col2idx(line, len, 0, 0, 0, r.x1, &idx1, &c1);
+			if(!line_OOB&&idx1<len)
+			{
+				//if(line[idx1]=='\t')//break tab into spaces
+				//{
+				//	c0=idx2col(line, idx1, 0);
+				//	text_replace(*text, kl, idx1, idx1+1, " ", 1, c1-c0-1);
+				//}
+				//else
+					text_replace(*text, kl, idx1, idx1+1, 0, 0, 0);
+			}
+		}
 	}
+	else//delete
+		text_erase1_del(*text, cur->cursor.line, cur->cursor.idx);
+
 	text_push_checkpoint(*text, cur, sizeof(*cur));
 	dimensions_known=false;
+	set_title();
 	return true;
 }
 bool				wnd_on_backspace()
 {
-	if(cur->selection_exists())
-		general_selection_erase();
-	else
-	{
-		auto action=text_get_last_action(*text);
-		if(action==ACTION_REMOVE)
-			text_pop_checkpoint(*text);
+	auto action=text_get_last_action(*text);
+	if(action==ACTION_REMOVE)
+		text_pop_checkpoint(*text);
+	else if(action!=ACTION_CHECKPOINT)
+		text_push_checkpoint(*text, cur, sizeof(*cur));
 
+	if(cur->selection_exists())//erase selection
+		general_selection_erase();
+	else if(cur->rectsel)//tall cursor backspace
+	{
+		auto r=cur->get_rectsel();
+		for(int kl=r.y1;kl<=r.y2;++kl)
+		{
+			size_t len=0;
+			auto line=text_get_line(*text, kl, &len);
+			int idx1=0, c1=0, c0=0;
+			bool line_OOB=col2idx(line, len, 0, 0, 0, r.x1, &idx1, &c1);
+			if(!line_OOB&&idx1>0)
+			{
+				--idx1;
+				if(line[idx1]=='\t')//break tab into spaces
+				{
+					c0=idx2col(line, idx1, 0);
+					text_replace(*text, kl, idx1, idx1+1, " ", 1, c1-c0-1);
+				}
+				else
+					text_replace(*text, kl, idx1, idx1+1, 0, 0, 0);
+			}
+		}
+		--cur->cursor.col;
+		--cur->selcur.col;
+		cur->cursor.update_idx(*text);
+		cur->selcur.update_idx(*text);
+	}
+	else//backspace
+	{
 		int l0=cur->cursor.line, idx0=cur->cursor.idx;
 		cur->cursor.decrement_idx(*text);
 		cur->cursor.update_col(*text);
@@ -3342,18 +3471,21 @@ bool				wnd_on_backspace()
 	}
 	text_push_checkpoint(*text, cur, sizeof(*cur));
 	dimensions_known=false;
+	set_title();
 	return true;
 }
 bool				wnd_on_undo()
 {
 	text_undo(*text, cur, 0);
 	dimensions_known=false;
+	set_title();
 	return true;
 }
 bool				wnd_on_redo()
 {
 	text_redo(*text, cur, 0);
 	dimensions_known=false;
+	set_title();
 	return true;
 }
 bool				wnd_on_clear_hist()
@@ -3385,6 +3517,7 @@ bool				wnd_on_copy(bool cut)
 		{
 			text_push_checkpoint(*text, cur, sizeof(*cur));
 			dimensions_known=false;
+			set_title();
 		}
 		return cut;
 	}
@@ -3430,6 +3563,7 @@ bool				wnd_on_paste()
 		cur->deselect(*text, 0);
 	text_push_checkpoint(*text, cur, sizeof(*cur));
 	dimensions_known=false;
+	set_title();
 	return true;
 }
 
@@ -3707,6 +3841,7 @@ bool				wnd_on_save(bool save_as)
 			text2str(*text, str);
 			if(save_text_file(path, str))
 				*filename=path;
+			text_push_checkpoint(*text, cur, sizeof(*cur));
 		}
 	}
 	else
@@ -3714,6 +3849,7 @@ bool				wnd_on_save(bool save_as)
 		std::string str;
 		text2str(*text, str);
 		save_text_file(filename->c_str(), str);
+		text_push_checkpoint(*text, cur, sizeof(*cur));
 	}
 	set_title();
 	text_mark_saved(openfiles[current_file].m_text);
