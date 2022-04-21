@@ -62,7 +62,7 @@ bool				get_key_state(int key)
 	}
 	return false;//*/
 }
-void				messagebox(const char *title, const char *format, ...)
+extern "C" void		messagebox(const char *title, const char *format, ...)
 {
 	va_list args;
 	va_start(args, format);
@@ -70,7 +70,7 @@ void				messagebox(const char *title, const char *format, ...)
 	va_end(args);
 	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, title, g_buf, window);
 }
-int					messagebox_okcancel(const char *title, const char *format, ...)
+extern "C" int		messagebox_okcancel(const char *title, const char *format, ...)
 {
 	va_list args;
 	va_start(args, format);
@@ -98,7 +98,7 @@ int					messagebox_okcancel(const char *title, const char *format, ...)
 		choice=1;
 	return choice;
 }
-int					messagebox_yesnocancel(const char *title, const char *format, ...)
+extern "C" int		messagebox_yesnocancel(const char *title, const char *format, ...)
 {
 	va_list args;
 	va_start(args, format);

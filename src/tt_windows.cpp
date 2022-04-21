@@ -446,12 +446,12 @@ static int			format_utf8_message(const char *title, const char *format, char *ar
 	g_wbuf[len+len2]='\0';
 	return len;
 }
-void				messagebox(const char *title, const char *format, ...)
+extern "C" void		messagebox(const char *title, const char *format, ...)
 {
 	int len=format_utf8_message(title, format, (char*)(&format+1));
 	MessageBoxW(ghWnd, g_wbuf, g_wbuf+len, MB_OK);
 }
-int					messagebox_okcancel(const char *title, const char *format, ...)
+extern "C" int		messagebox_okcancel(const char *title, const char *format, ...)
 {
 	int len=format_utf8_message(title, format, (char*)(&format+1));
 	int result=MessageBoxW(ghWnd, g_wbuf, g_wbuf+len, MB_OKCANCEL);
@@ -462,7 +462,7 @@ int					messagebox_okcancel(const char *title, const char *format, ...)
 	}
 	return 1;
 }
-int					messagebox_yesnocancel(const char *title, const char *format, ...)
+extern "C" int		messagebox_yesnocancel(const char *title, const char *format, ...)
 {
 	int len=format_utf8_message(title, format, (char*)(&format+1));
 	//va_list args;

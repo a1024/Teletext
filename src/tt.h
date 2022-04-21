@@ -135,9 +135,9 @@ void				console_pause();
 #define				console_hide()
 #define				console_pause()
 #endif
-void				messagebox(const char *title, const char *format, ...);
-int					messagebox_okcancel(const char *title, const char *format, ...);//returns 0: OK, 1: cancel
-int					messagebox_yesnocancel(const char *title, const char *format, ...);//returns 0: yes, 1: no, 2: cancel
+extern "C" void		messagebox(const char *title, const char *format, ...);
+extern "C" int		messagebox_okcancel(const char *title, const char *format, ...);//returns 0: OK, 1: cancel
+extern "C" int		messagebox_yesnocancel(const char *title, const char *format, ...);//returns 0: yes, 1: no, 2: cancel
 void				copy_to_clipboard_c(const char *a, int size);
 bool				paste_from_clipboard(char *&str, int &len);//filters out '\r', don't forget to delete[] str
 void				get_window_title(char *str, int size);
@@ -301,7 +301,9 @@ void				toNDC(float xs, float ys, float &xn, float &yn);//2021-01-14 test: fill 
 #endif
 
 //tt
-typedef std::vector<std::string> Text;
+#include"tt_text.h"
+typedef void *Text;
+//typedef std::vector<std::string> Text;
 extern Text			*text;
 extern short		tab_count;
 extern char			caps_lock;
