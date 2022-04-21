@@ -644,7 +644,7 @@ U64					colors_text=0x20ABABABFFABABAB;//dark mode
 U64					colors_selection=0xA0FF9933FFFFFFFF;//colors of selected text
 //U64				colors_selection=0xA0FF0000FFABABAB;
 int					color_cursor=0xFFFFFFFF,//color of the cursor stick
-					color_cursorlinebk=0xFF202020;//color of current line highlight
+					color_cursorlinebk=0xFF202820;//color of current line highlight
 U64					colors_cursorline=(u64)color_cursorlinebk<<32|0xFFABABAB;
 struct				SmallRect
 {
@@ -1255,11 +1255,6 @@ struct				Scrollbar
 };
 Scrollbar			vscroll={}, hscroll={};
 
-//History			*history=nullptr;
-//#define			ACTION(K)	history->operator[](K)
-//int				*histpos=nullptr;//pointing at previous action
-//bool				hist_cont=true;
-
 bool				dimensions_known=false, wnd_to_cursor=false;
 
 struct				TextFile
@@ -1846,96 +1841,6 @@ void				line_insert(Text &text, int l0, int c1, int c2, const char *src, int len
 	}
 }
 
-#if 0
-void				hist_undo()//ctrl z
-{
-	if(*histpos<0)
-		return;
-
-	auto &action=ACTION(*histpos);
-	--*histpos;
-	switch(action.type)
-	{
-	//case ACTION_INSERT:
-	//	text_erase(*text, action.cur_control.cursor.line, action.cur_control.cursor.idx, action.cur_control.selcur.line, action.cur_control.selcur.idx);
-	//	break;
-	//case ACTION_INSERT_RECT:
-	//case ACTION_INDENT_FORWARD:
-	//	text_erase_rect(*text, action.cur_control.cursor.line, action.cur_control.selcur.line, action.cur_control.cursor.col, action.cur_control.selcur.col);
-	//	break;
-	//case ACTION_ERASE:
-	//case ACTION_ERASE_SELECTION:
-	//	selection_insert(action.data, action.cur_control.cursor.line, action.cur_control.cursor.idx, *text);
-	//	break;
-	//case ACTION_ERASE_RECT_SELECTION:
-	//case ACTION_INDENT_BACK:
-	//	rectsel_insert(action.data, action.cur_control.cursor.line, action.cur_control.cursor.col, *text);
-	//	break;
-	case ACTION_REPLACE:
-		if(action.data_ins.size())
-			text_erase(*text, action.cur_control.cursor.line, action.cur_control.cursor.idx, action.cur_control.selcur.line, action.cur_control.selcur.idx);
-		if(action.data_rem.size())
-			selection_insert(action.data_rem, action.cur_control.cursor.line, action.cur_control.cursor.idx, *text);
-		break;
-	case ACTION_REPLACE_RECT:
-		if(action.data_ins.size())
-			text_erase_rect(*text, action.cur_control.cursor.line, action.cur_control.selcur.line, action.cur_control.cursor.col, action.cur_control.selcur.col);
-		if(action.data_rem.size())
-			rectsel_insert(action.data_rem, action.cur_control.cursor.line, action.cur_control.cursor.col, *text);
-		break;
-	}
-	*cur=action.cur_before;
-
-	hist_cont=false;
-	dimensions_known=false;
-	wnd_to_cursor=true;
-	set_title();
-}
-void				hist_redo()//ctrl y
-{
-	if(*histpos>=(int)history->size()-1)
-		return;
-	++*histpos;
-	auto &action=ACTION(*histpos);
-	switch(action.type)
-	{
-	//case ACTION_INSERT:
-	//	selection_insert(action.data, action.cur_control.cursor.line, action.cur_control.cursor.idx, *text);
-	//	break;
-	//case ACTION_INSERT_RECT:
-	//case ACTION_INDENT_FORWARD:
-	//	rectsel_insert(action.data, action.cur_control.cursor.line, action.cur_control.cursor.col, *text);
-	//	break;
-	//case ACTION_ERASE:
-	//case ACTION_ERASE_SELECTION:
-	//	text_erase(*text, action.cur_control.cursor.line, action.cur_control.cursor.idx, action.cur_control.selcur.line, action.cur_control.selcur.idx);
-	//	break;
-	//case ACTION_ERASE_RECT_SELECTION:
-	//case ACTION_INDENT_BACK:
-	//	text_erase_rect(*text, action.cur_control.cursor.line, action.cur_control.selcur.line, action.cur_control.cursor.col, action.cur_control.selcur.col);
-	//	break;
-	case ACTION_REPLACE:
-		if(action.data_rem.size())
-			text_erase(*text, action.cur_control.cursor.line, action.cur_control.cursor.idx, action.cur_control.selcur.line, action.cur_control.selcur.idx);
-		if(action.data_ins.size())
-			selection_insert(action.data_ins, action.cur_control.cursor.line, action.cur_control.cursor.idx, *text);
-		break;
-	case ACTION_REPLACE_RECT:
-		if(action.data_rem.size())
-			text_erase_rect(*text, action.cur_control.cursor.line, action.cur_control.selcur.line, action.cur_control.cursor.col, action.cur_control.selcur.col);
-		if(action.data_ins.size())
-			rectsel_insert(action.data_ins, action.cur_control.cursor.line, action.cur_control.cursor.col, *text);
-		break;
-	}
-	*cur=action.cur_after;
-
-	hist_cont=false;
-	dimensions_known=false;
-	wnd_to_cursor=true;
-	set_title();
-}
-#endif
-
 char				group_char(char c)
 {
 	if(c>='0'&&c<='9'||c=='.')
@@ -2212,7 +2117,7 @@ void				print_text(int tab_origin, int x0, int x, int y, Text const &text, Bookm
 	{
 		++k.line, k.idx=0;
 		size_t nlines=text_get_nlines(text);
-		for(;k.line<(int)nlines;++k.line)
+		for(;k<f;++k.line)
 		{
 			currentY=nextY, nextY+=dypx;
 			if(nextY>=ry1)
@@ -2223,8 +2128,14 @@ void				print_text(int tab_origin, int x0, int x, int y, Text const &text, Bookm
 				break;
 			}
 		}
-		if(k.line>=(int)nlines)//nothing left to print
+		if(k>=f)//nothing left to print
+		{
+			if(final_x)
+				*final_x=(int)currentX;
+			if(final_y)
+				*final_y=(int)currentY;
 			return;
+		}
 	}
 	vrtx.resize((w+dxpx)*(h+dypx)/(dxpx*dypx)<<4);//nchars in grid	*	{vx, vy, txx, txy		x4 vertices/char}	~= 5MB at FHD screen
 	for(;k<f;k.increment_idx(text))
@@ -2556,7 +2467,7 @@ void				wnd_on_render()
 			cur->get_selection(sel_i, sel_f);
 		
 			int x=x1-wpx, y=y1-wpy;
-			print_text(x1-wpx, x, x1-wpx, y, *text, i, sel_i, font_zoom, &x, &y);//BROKEN
+			print_text(x1-wpx, x, x1-wpx, y, *text, i, sel_i, font_zoom, &x, &y);
 			set_text_colors(colors_selection);
 			print_text(x1-wpx, x, x1-wpx, y, *text, sel_i, sel_f, font_zoom, &x, &y);
 			set_text_colors(colors_text);

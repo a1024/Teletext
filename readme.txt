@@ -32,6 +32,7 @@ TODO:
 - Config file
 - Save on write
 - Hex mode
+- Signed Depth Field rendering
 
 DONE:
 - Rectangular selection
