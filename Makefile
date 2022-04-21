@@ -1,6 +1,6 @@
 # -*- Makefile -*-
 PROGRAM = bin/Teletext
-SOURCES = $(wildcard src/*.cpp)
+SOURCES = $(wildcard src/*.cpp) $(wildcard src/*.c)
 CXXFLAGS = `pkg-config --cflags gtk+-3.0`
 LIBS = -lSDL2 -lGL -lGLU `pkg-config --libs gtk+-3.0`
 
