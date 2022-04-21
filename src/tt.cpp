@@ -1042,9 +1042,9 @@ void				rectsel_copy(Text const &src, Cursor const &cur, Text &dst)
 	int l1, l2, col1, col2;
 	cur.get_rectsel(l1, l2, col1, col2);
 	std::string temp;
-	if(l1<l2-1)
+	if(l1<l2+1)
 	{
-		text_insert_lines(dst, 0, l2+1-l1);
+		text_insert_lines(dst, 0, l2-l1);//first line is already there
 		for(int kl=l1;kl<=l2;++kl)
 		{
 			size_t len=0;
@@ -2821,7 +2821,7 @@ bool				drag_selection_click(DragType drag_type)//checks if you clicked on the s
 			if(cur->rectsel)
 			{
 				auto r=cur->get_rectsel();
-				if(click.line>=r.y1&&click.line<=r.y2&&click.col>=r.x1&&click.col<r.x2)
+				if(click.line>=r.y1&&click.line<=r.y2&&click.col>=r.x1&&click.col<=r.x2)
 				{
 					drag=drag_type;
 					drag_cursor=*cur;
