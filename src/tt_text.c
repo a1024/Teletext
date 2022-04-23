@@ -24,6 +24,12 @@
 #if defined CHECK_USAGE || defined CHECK_ALLOC
 #include<stdio.h>
 #include<stdarg.h>
+#ifdef __GNUC__
+#define	EXTERN_C	extern "C"
+#else
+#define EXTERN_C
+#endif
+EXTERN_C int	messagebox_okcancel(const char *title, const char *format, ...);
 int			valid(const void *p)
 {
 	switch((size_t)p)
@@ -40,8 +46,6 @@ int			valid(const void *p)
 	return 1;
 }
 static char g_buf[1024];
-//void		messagebox(const char *title, const char *format, ...);
-int			messagebox_okcancel(const char *title, const char *format, ...);
 static int	error(const char *func, int line, const char *format, ...)
 {
 	va_list args;
@@ -524,7 +528,7 @@ void*		text_deepcopy(const void *hText)
 	else
 		dst->hist=dst->checkpoint=0;
 
-	dst->lines=lines_deepcopy(src->lines, src->nlines);
+	dst->lines=lines_deepcopy((Line const**)src->lines, src->nlines);
 	return dst;
 }
 void		text_destroy(void *hText)

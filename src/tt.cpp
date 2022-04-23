@@ -73,7 +73,9 @@ void				display_help()
 #ifdef HELP_SHOWALL
 		"F11:            Full-screen\n"
 #endif
-		"F4:             Toggle benchmark");
+		"F4:             Toggle benchmark"
+		"\n"
+		"Build: %s %s", __DATE__, __TIME__);
 #else
 	messagebox("Controls",
 		"Ctrl+O:\t\tOpen\n"//TODO: config file
@@ -110,7 +112,9 @@ void				display_help()
 #ifdef HELP_SHOWALL
 		"F11:\tFull-screen\n"
 #endif
-		"F4:\tToggle benchmark");
+		"F4:\tToggle benchmark\n"
+		"\n"
+		"Build: %s %s", __DATE__, __TIME__);
 #endif
 }
 
@@ -1643,7 +1647,7 @@ void				text_erase1_bksp(Text &text, int l0, int idx0)
 		//text[l0].erase(idx0-1, 1);
 	else if(l0>0)
 	{
-		size_t len=0, len2=text_get_len(text, l0+1);
+		size_t len=0, len2=text_get_len(text, l0-1);
 		auto line=text_get_line(text, l0, &len);
 		text_replace(text, l0-1, len2, len2, line, len, 1);
 		text_erase_lines(text, l0, 1);

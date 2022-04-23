@@ -19,7 +19,7 @@ TODO:
 - Find & replace
 - Go to line number
 - Change case
-- Tab character mark
+- Tab & space character marks
 - Non-printable characters & extended ASCII
 - Line operations: sort lines, ...etc
 - Bracket matching: green: matched, red: unmatched

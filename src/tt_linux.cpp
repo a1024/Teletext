@@ -432,7 +432,7 @@ int					main(int argc, char **argv)
 						case SDL_SCANCODE_D:		redraw|=wnd_on_clear_hist();			break;
 						case SDL_SCANCODE_N:		redraw|=wnd_on_newtab();				break;
 						case SDL_SCANCODE_O:		redraw|=wnd_on_open();					break;
-						case SDL_SCANCODE_O:		redraw|=wnd_on_barorient();				break;
+						case SDL_SCANCODE_R:		redraw|=wnd_on_barorient();				break;
 						case SDL_SCANCODE_S:		redraw|=wnd_on_save(is_shift_down());	break;
 						case SDL_SCANCODE_T:		redraw|=wnd_on_newtab();				break;
 						case SDL_SCANCODE_V:		redraw|=wnd_on_paste();					break;
