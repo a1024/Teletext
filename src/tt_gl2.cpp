@@ -356,3 +356,13 @@ void				toNDC(float xs, float ys, float &xn, float &yn)//2021-01-14 test: fill t
 	xn=(xs+0.5f-current_region.x1)*2.f/current_region.dx-1;
 	yn=1-(ys+0.5f-current_region.y1)*2.f/current_region.dy;
 }
+void				NDCtoScreen_nobias(float xn, float yn, float &xs, float &ys)
+{
+	xs=current_region.x1+(1+xn)*current_region.dx/2.f;
+	ys=current_region.y1+(1-yn)*current_region.dy/2.f;
+}
+void				NDCtoScreen(float xn, float yn, float &xs, float &ys)
+{
+	xs=current_region.x1+(1+xn)*current_region.dx/2.f-0.5f;
+	ys=current_region.y1+(1-yn)*current_region.dy/2.f-0.5f;
+}

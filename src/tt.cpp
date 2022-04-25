@@ -34,7 +34,7 @@ short				mx=0, my=0, mline=0, mcol=0,//current mouse coordinates
 float				dx=0, dy=0;//non-tab character dimensions
 char				sdf_available=false, sdf_active=false;
 float				sdf_dx=0, sdf_dy=0;
-float				sdf_dzoom=1.01f;
+float				sdf_dzoom=1.01f, sdf_slope=0.062023f;
 std::string			exe_dir;
 
 void				display_help()
@@ -79,7 +79,8 @@ void				display_help()
 		"F4:             Toggle benchmark\n"
 		"F6:\tToggle signed distance field text render\n"
 		"\n"
-		"Build: %s %s", __DATE__, __TIME__);
+		"OpenGL %s\n"
+		"Build: %s %s", GLversion, __DATE__, __TIME__);
 #else
 	messagebox("Controls",
 		"Ctrl+O:\t\tOpen\n"//TODO: config file
@@ -119,7 +120,8 @@ void				display_help()
 		"F4:\tToggle benchmark\n"
 		"F6:\tToggle signed distance field text render\n"
 		"\n"
-		"Build: %s %s", __DATE__, __TIME__);
+		"OpenGL %s\n"
+		"Build: %s %s", GLversion, __DATE__, __TIME__);
 #endif
 }
 
@@ -332,8 +334,8 @@ void				draw_line_i(int x1, int y1, int x2, int y2, int color){draw_line((float)
 void				draw_rectangle(float x1, float x2, float y1, float y2, int color)
 {
 	float X1, X2, Y1, Y2;
-	toNDC(x1, y1, X1, Y1);
-	toNDC(x2, y2, X2, Y2);
+	toNDC_nobias(x1, y1, X1, Y1);
+	toNDC_nobias(x2, y2, X2, Y2);
 	g_fbuf[0]=X1, g_fbuf[1]=Y1;
 	g_fbuf[2]=X2, g_fbuf[3]=Y1;
 	g_fbuf[4]=X2, g_fbuf[5]=Y2;
@@ -761,7 +763,7 @@ float				print_line		(float x, float y, const char *msg, int msg_length, float t
 			if(sdf_active)
 			{
 				setGLProgram(shader_sdftext.program);
-				glUniform1f(ns_sdftext::u_zoom, zoom/0.06202317352941176470588235294118f);
+				glUniform1f(ns_sdftext::u_zoom, zoom/sdf_slope);
 				select_texture(sdf_atlas_txid, ns_sdftext::u_atlas);
 				glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
 				glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();
@@ -889,7 +891,7 @@ void				print_text(float tab_origin, float x0, float x, float y, Text const &tex
 		if(sdf_active)
 		{
 			setGLProgram(shader_sdftext.program);
-			glUniform1f(ns_sdftext::u_zoom, zoom/0.06202317352941176470588235294118f);
+			glUniform1f(ns_sdftext::u_zoom, zoom/sdf_slope);
 			select_texture(sdf_atlas_txid, ns_sdftext::u_atlas);
 			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
 			glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();
@@ -1940,7 +1942,7 @@ void				draw_vscrollbar(int x, int sbwidth, int y1, int y2, int &winpos, int con
 }
 
 inline void			tabbar_printnames_init(){g_buf[0]='*';}//don't use g_buf while printing tab names
-float				tabbar_printname(int x, int y, int tab_idx, bool test=false, bool qualified=false, const char **pbuf=nullptr, int *len=nullptr)
+float				tabbar_printname(float x, float y, int tab_idx, bool test=false, bool qualified=false, const char **pbuf=nullptr, int *len=nullptr)
 {
 	auto &f=openfiles[tab_idx];
 	int modified=text_is_modified(f.m_text);
@@ -1986,7 +1988,7 @@ void				tabbar_calc_positions()
 		auto &of=openfiles[k];
 		float x0=x;
 		x+=10+tabbar_printname(x, 0, k, true);
-		tabbar_tabs[k].set(x, k);
+		tabbar_tabs[k].set(x, (float)k);
 	}
 }
 void				bring_object_to_view(int &winpos, int winsize, int objstart, int objend)
@@ -2010,13 +2012,13 @@ void				tabbar_scroll_to(int tab_idx)
 	case TABBAR_TOP:
 	case TABBAR_BOTTOM:
 		if(tabbar_tabs.back().right>w)
-			bring_object_to_view(tabbar_wpx, w, tab_idx?tabbar_tabs[tab_idx-1].right:0, tabbar_tabs[tab_idx].right);
+			bring_object_to_view(tabbar_wpx, w, tab_idx?(int)tabbar_tabs[tab_idx-1].right:0, (int)tabbar_tabs[tab_idx].right);
 		break;
 	case TABBAR_LEFT:
 	case TABBAR_RIGHT:
 		if((int)openfiles.size()*dy>h)
 		{
-			int top=tab_idx*dy;
+			float top=tab_idx*dy;
 			bring_object_to_view(tabbar_wpy, h, top, top+dy);
 		}
 		break;
@@ -2047,6 +2049,15 @@ void				general_selection_erase()
 	}
 }
 
+struct				SDFTextureHeader
+{
+	double slope;
+	char
+		grid_start_x, grid_start_y,
+		cell_size_x, cell_size_y,
+		csize_x, csize_y,
+		reserved[2];
+};
 void				wnd_on_create(){}
 bool				wnd_on_init()
 {
@@ -2090,14 +2101,16 @@ bool				wnd_on_init()
 	if(bmp)
 	{
 		sdf_available=true;
-		int grid_x0=bmp[0], grid_y0=bmp[1], cell_w=bmp[2], cell_h=bmp[3];
-		sdf_dx=bmp[4];
-		sdf_dy=bmp[5];
+		SDFTextureHeader header;
+		memcpy(&header, bmp, sizeof(header));
+		sdf_dx=header.csize_x;
+		sdf_dy=header.csize_y;
+		sdf_slope=header.slope;
 		for(int c=32;c<127;++c)
 		{
 			auto rect=sdf_glyph_coords+c-32;
-			int px=grid_x0+cell_w*(c&7),
-				py=grid_y0+cell_h*((c>>3)-4);
+			int px=header.grid_start_x+header.cell_size_x*(c&7),
+				py=header.grid_start_y+header.cell_size_y*((c>>3)-4);
 			rect->x1=(float)px/iw;
 			rect->x2=(float)(px+sdf_dx)/iw;
 			rect->y1=(float)py/ih;
@@ -2140,8 +2153,8 @@ void				tabbar_draw_horizontal(int ty1, int ty2, int wy1, int wy2)
 			x+=10+tabbar_printname(x, ty1, k);
 			//if(k==current_file)
 			//{
-			//	draw_rectangle_i(x-10, x, ty1, ty1+dy, colors_selection.hi);
-			//	draw_rectangle_i(x0, x, ty1+dy, ty1+(dy<<1), colors_selection.hi);
+			//	draw_rectangle(x-10, x, ty1, ty1+dy, colors_selection.hi);
+			//	draw_rectangle(x0, x, ty1+dy, ty1+(dy<<1), colors_selection.hi);
 			//}
 			draw_rectangle(x-10, x-1, ty1, ty1+dy, k==current_file?colors_selection.hi:colors_text.hi);
 			draw_rectangle(x0, x-1, ty1+dy, ty1+dy*2, k==current_file?colors_selection.hi:colors_text.hi);
@@ -2412,6 +2425,13 @@ void				wnd_on_render()
 		break;
 	}
 
+	//for(int k=0;k<w;k+=2)//rounding bias test
+	//{
+	//	int color=k&0xFF;
+	//	//draw_line(k, 0, k, h, 0xFF000000|color<<16|color<<8|color);
+	//	//draw_line(k, k, 0, h, 0xFF000000|color<<16|color<<8|color);
+	//	draw_rectangle(k, k+1, 0, h, 0xFF000000|color<<16|color<<8|color);
+	//}
 #if 0
 	int counter=w;
 	//int counter=text_get_len(*text, 0);
