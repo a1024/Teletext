@@ -377,28 +377,6 @@ void				draw_rectangle_hollow(int x1, int x2, int y1, int y2, int color)
 	glDisableVertexAttribArray(ns_2d::a_coords);GL_CHECK();
 }
 
-struct				QuadCoords
-{
-	float x1, x2, y1, y2;
-};
-QuadCoords			font_coords[128-32]={}, sdf_glyph_coords[128-32]={};
-unsigned			font_txid=0, sdf_atlas_txid=0;
-std::vector<float>	vrtx;
-void				set_text_colors(U64 const &colors)
-{
-	if(sdf_active)
-	{
-		setGLProgram(shader_sdftext.program);
-		send_color(ns_sdftext::u_txtColor, colors.lo);
-		send_color(ns_sdftext::u_bkColor, colors.hi);
-	}
-	else
-	{
-		setGLProgram(shader_text.program);
-		send_color(ns_text::u_txtColor, colors.lo);
-		send_color(ns_text::u_bkColor, colors.hi);
-	}
-}
 bool				col2idx(const char *text, int text_length, int tab0_cols, int idx0, int col0, float req_col, int *ret_idx, int *ret_col)//returns true when runs out of characters (OOB)
 {
 	bool line_too_short=true;
@@ -437,220 +415,6 @@ int					idx2col(const char *text, int text_length, int tab0_cols)
 	}
 	return col;
 }
-float				print_line		(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom, int req_cols, int *ret_idx)
-{
-	if(msg_length<1)
-		return 0;
-	float rect[4]={};
-	QuadCoords *txc=nullptr, *atlas=sdf_active?sdf_glyph_coords:font_coords;
-	if(sdf_active)
-		zoom*=16.f/sdf_dy;
-	float
-		width=(sdf_active?sdf_dx:dx)*zoom, height=(sdf_active?sdf_dy:dy)*zoom,
-		tab_width=tab_count*width, req_width=req_cols*width;
-	tab_origin-=mod(tab_origin, tab_width);//
-	float cursor=0, advance;
-	int idx, printable_count=0;
-	int rx1=0, ry1=0, rdx=0, rdy=0;
-	get_current_region(rx1, ry1, rdx, rdy);
-	if(y+height<ry1||y>=ry1+rdy)//off-screen optimization
-		return idx2col(msg, msg_length, (int)(tab_origin/width))*zoom*sdf_dy/16.f;
-	float CX1=2.f/rdx, CX0=CX1*(x-rx1)-1;//delta optimization
-	rect[1]=1-(y-ry1)*2.f/rdy;
-	rect[3]=1-(y+height-ry1)*2.f/rdy;
-	vrtx.resize(msg_length<<4);//vx, vy, txx, txy		x4 vertices/char
-	int k=ret_idx?*ret_idx:0;
-	if(req_width<0||x+cursor<req_width)
-	{
-		for(;k<msg_length;++k)
-		{
-			char c=msg[k];
-			if(c>=32&&c<0xFF)
-				advance=width;
-			else if(c=='\t')
-				advance=width*(tab_count-mod((int)((cursor-tab_origin+1e-4)/width), tab_count)), c=' ';
-				//advance=tab_width-mod(x+cursor-tab_origin, tab_width), c=' ';//X  tab bounces on continuous zoom
-			else
-				advance=0;
-			if(advance)
-			{
-				if(x+cursor+advance>=rx1&&x+cursor<rx1+rdx)//off-screen optimization
-				{
-					rect[0]=CX1*cursor+CX0;//xn1
-					cursor+=advance;
-					rect[2]=CX1*cursor+CX0;//xn2
-
-					//rect[0]=(x+msg_width-rx1)*2.f/rdx-1;//xn1
-					//rect[1]=1-(y-ry1)*2.f/rdy;//yn1
-					//rect[2]=(x+msg_width+width-rx1)*2.f/rdx-1;//xn2
-					//rect[3]=1-(y+height-ry1)*2.f/rdy;//yn2
-
-					//toNDC_nobias(float(x+msg_width		), float(y			), rect[0], rect[1]);
-					//toNDC_nobias(float(x+msg_width+width	), float(y+height	), rect[2], rect[3]);//y2<y1
-
-					idx=printable_count<<4;
-					txc=atlas+c-32;
-					vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
-					vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
-					vrtx[idx+ 8]=rect[2], vrtx[idx+ 9]=rect[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
-					vrtx[idx+12]=rect[2], vrtx[idx+13]=rect[1],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
-
-					++printable_count;
-				}
-				else
-					cursor+=advance;
-				if(req_width>=0&&x+cursor>=req_width)
-				{
-					++k;
-					break;
-				}
-			}
-		}
-		if(printable_count)
-		{
-			if(sdf_active)
-			{
-				setGLProgram(shader_sdftext.program);
-				glUniform1f(ns_sdftext::u_zoom, zoom/0.06202317352941176470588235294118f);
-				select_texture(sdf_atlas_txid, ns_sdftext::u_atlas);
-				glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
-				glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();
-				glVertexAttribPointer(ns_sdftext::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);		GL_CHECK();
-
-				glEnableVertexAttribArray(ns_sdftext::a_coords);	GL_CHECK();
-				glDrawArrays(GL_QUADS, 0, printable_count<<2);		GL_CHECK();
-				glDisableVertexAttribArray(ns_sdftext::a_coords);	GL_CHECK();
-			}
-			else
-			{
-				setGLProgram(shader_text.program);
-				select_texture(font_txid, ns_text::u_atlas);
-				glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
-				glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
-				glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);			GL_CHECK();
-
-				glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
-				glDrawArrays(GL_QUADS, 0, printable_count<<2);	GL_CHECK();//draw the quads: 4 vertices per character quad
-				glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
-			}
-		}
-	}
-	if(ret_idx)
-		*ret_idx=k;
-	return cursor;
-}
-int					debug_print_cols(int x, int y, short zoom, int req_cols, int den)
-{
-	float rect[4]={};
-	QuadCoords *txc=nullptr;
-	int msg_width=0, width, idx, printable_count=0, tab_width=tab_count*dx*zoom, w2=dx*zoom, height=dy*zoom, req_width=req_cols*dx*zoom;
-	vrtx.resize(req_cols<<4);//vx, vy, txx, txy		x4 vertices/char
-	int rx1=0, ry1=0, rdx=0, rdy=0;
-	get_current_region(rx1, ry1, rdx, rdy);
-	float CX1=2.f/rdx, CX0=CX1*(x-rx1)-1;
-	rect[1]=1-(y-ry1)*2.f/rdy;
-	rect[3]=1-(y+height-ry1)*2.f/rdy;
-	int k=0;
-	for(;;++k)
-	{
-		char c='0'+k/den%10;
-		width=w2;
-		if(x+msg_width+width>=0&&x+msg_width<w)//off-screen optimization
-		{
-			rect[0]=CX1*msg_width+CX0;//xn1
-			msg_width+=width;
-			rect[2]=CX1*msg_width+CX0;//xn2
-
-			idx=printable_count<<4;
-			txc=font_coords+c-32;
-			vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
-			vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
-			vrtx[idx+ 8]=rect[2], vrtx[idx+ 9]=rect[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
-			vrtx[idx+12]=rect[2], vrtx[idx+13]=rect[1],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
-
-			++printable_count;
-		}
-		else
-			msg_width+=width;
-		if(req_width>=0&&x+msg_width>=req_width)
-		{
-			++k;
-			break;
-		}
-	}
-	if(printable_count)
-	{
-		setGLProgram(shader_text.program);
-		select_texture(font_txid, ns_text::u_atlas);
-		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
-		glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
-		glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);			GL_CHECK();
-
-		glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
-		glDrawArrays(GL_QUADS, 0, printable_count<<2);	GL_CHECK();//draw the quads: 4 vertices per character quad
-		glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
-	}
-	return msg_width;
-}
-
-float				print(short zoom, float tab_origin, float x, float y, const char *format, ...)
-{
-	va_list args;
-	va_start(args, format);
-#ifdef _MSC_VER
-	int len=vsprintf_s(g_buf, g_buf_size, format, args);
-#else
-	int len=vsnprintf(g_buf, g_buf_size, format, args);
-#endif
-	va_end(args);
-	return print_line(x, y, g_buf, len, tab_origin, zoom);
-};
-void				relocate_range(int dst, int &a, int &b)
-{
-	if(a<b)
-	{
-		b=dst+(b-a);
-		a=dst;
-	}
-	else
-	{
-		a=dst+(a-b);
-		b=dst;
-	}
-}
-
-//U64				colors_text=0xFFABABABFF000000;//black on white		0xBKBKBKBK_TXTXTXTX
-U64					colors_text=0x20ABABABFFBBBBBB;//dark mode
-//U64				colors_text=0xFF000000FFABABAB;//dark mode, opaque black on black?
-U64					colors_selection=0xA0FF9933FFFFFFFF;//colors of selected text
-//U64				colors_selection=0xA0FF0000FFABABAB;
-int					color_cursor=0xFFFFFFFF,//color of the cursor stick
-					color_cursorlinebk=0xFF202820;//color of current line highlight
-U64					colors_cursorline=(u64)color_cursorlinebk<<32|0xFFABABAB;
-struct				SmallRect
-{
-	short x1, y1, x2, y2;
-	SmallRect():x1(0), y1(0), x2(0), y2(0){}
-	void set(short x1, short x2, short y1, short y2){this->x1=x1, this->x2=x2, this->y1=y1, this->y2=y2;}
-};
-struct				Rect
-{
-	int x1, y1, x2, y2;
-	Rect():x1(0), y1(0), x2(0), y2(0){}
-	void set(int x1, int x2, int y1, int y2){this->x1=x1, this->x2=x2, this->y1=y1, this->y2=y2;}
-	void set_sort(int x1, int x2, int y1, int y2)
-	{
-		if(x1<x2)
-			this->x1=x1, this->x2=x2;
-		else
-			this->x1=x2, this->x2=x1;
-		if(y1<y2)
-			this->y1=y1, this->y2=y2;
-		else
-			this->y1=y2, this->y2=y1;
-	}
-};
-SmallRect			window_tabbar, window_editor;
 struct				Bookmark
 {
 	int line,
@@ -900,6 +664,373 @@ void				bookmark_relocate(Bookmark const &i, Bookmark const &f, Bookmark &b, Tex
 	int diff=bookmark_subtract(f, i, text);
 	bookmark_add(b, diff, text);
 }
+
+struct				QuadCoords
+{
+	float x1, x2, y1, y2;
+};
+QuadCoords			font_coords[128-32]={}, sdf_glyph_coords[128-32]={};
+unsigned			font_txid=0, sdf_atlas_txid=0;
+void				set_text_colors(U64 const &colors)
+{
+	if(sdf_active)
+	{
+		setGLProgram(shader_sdftext.program);
+		send_color(ns_sdftext::u_txtColor, colors.lo);
+		send_color(ns_sdftext::u_bkColor, colors.hi);
+	}
+	else
+	{
+		setGLProgram(shader_text.program);
+		send_color(ns_text::u_txtColor, colors.lo);
+		send_color(ns_text::u_bkColor, colors.hi);
+	}
+}
+std::vector<float>	vrtx;
+float				print_line		(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom, int req_cols, int *ret_idx)
+{
+	if(msg_length<1)
+		return 0;
+	float rect[4]={};
+	QuadCoords *txc=nullptr, *atlas=sdf_active?sdf_glyph_coords:font_coords;
+	if(sdf_active)
+		zoom*=16.f/sdf_dy;
+	float
+		width=(sdf_active?sdf_dx:dx)*zoom, height=(sdf_active?sdf_dy:dy)*zoom,
+		tab_width=tab_count*width, req_width=req_cols*width;
+	tab_origin-=mod(tab_origin, tab_width);//
+	float cursor=0, advance;
+	int idx, printable_count=0;
+	int rx1=0, ry1=0, rdx=0, rdy=0;
+	get_current_region(rx1, ry1, rdx, rdy);
+	if(y+height<ry1||y>=ry1+rdy)//off-screen optimization
+		return idx2col(msg, msg_length, (int)(tab_origin/width))*zoom*sdf_dy/16.f;
+	float CX1=2.f/rdx, CX0=CX1*(x-rx1)-1;//delta optimization
+	rect[1]=1-(y-ry1)*2.f/rdy;
+	rect[3]=1-(y+height-ry1)*2.f/rdy;
+	vrtx.resize(msg_length<<4);//vx, vy, txx, txy		x4 vertices/char
+	int k=ret_idx?*ret_idx:0;
+	if(req_width<0||x+cursor<req_width)
+	{
+		for(;k<msg_length;++k)
+		{
+			char c=msg[k];
+			if(c>=32&&c<0xFF)
+				advance=width;
+			else if(c=='\t')
+				advance=width*(tab_count-mod((int)((cursor-tab_origin+1e-4)/width), tab_count)), c=' ';
+				//advance=tab_width-mod(x+cursor-tab_origin, tab_width), c=' ';//X  tab bounces on continuous zoom
+			else
+				advance=0;
+			if(advance)
+			{
+				if(x+cursor+advance>=rx1&&x+cursor<rx1+rdx)//off-screen optimization
+				{
+					rect[0]=CX1*cursor+CX0;//xn1
+					cursor+=advance;
+					rect[2]=CX1*cursor+CX0;//xn2
+
+					//rect[0]=(x+msg_width-rx1)*2.f/rdx-1;//xn1
+					//rect[1]=1-(y-ry1)*2.f/rdy;//yn1
+					//rect[2]=(x+msg_width+width-rx1)*2.f/rdx-1;//xn2
+					//rect[3]=1-(y+height-ry1)*2.f/rdy;//yn2
+
+					//toNDC_nobias(float(x+msg_width		), float(y			), rect[0], rect[1]);
+					//toNDC_nobias(float(x+msg_width+width	), float(y+height	), rect[2], rect[3]);//y2<y1
+
+					idx=printable_count<<4;
+					txc=atlas+c-32;
+					vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
+					vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
+					vrtx[idx+ 8]=rect[2], vrtx[idx+ 9]=rect[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
+					vrtx[idx+12]=rect[2], vrtx[idx+13]=rect[1],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
+
+					++printable_count;
+				}
+				else
+					cursor+=advance;
+				if(req_width>=0&&x+cursor>=req_width)
+				{
+					++k;
+					break;
+				}
+			}
+		}
+		if(printable_count)
+		{
+			if(sdf_active)
+			{
+				setGLProgram(shader_sdftext.program);
+				glUniform1f(ns_sdftext::u_zoom, zoom/0.06202317352941176470588235294118f);
+				select_texture(sdf_atlas_txid, ns_sdftext::u_atlas);
+				glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
+				glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();
+				glVertexAttribPointer(ns_sdftext::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);		GL_CHECK();
+
+				glEnableVertexAttribArray(ns_sdftext::a_coords);	GL_CHECK();
+				glDrawArrays(GL_QUADS, 0, printable_count<<2);		GL_CHECK();
+				glDisableVertexAttribArray(ns_sdftext::a_coords);	GL_CHECK();
+			}
+			else
+			{
+				setGLProgram(shader_text.program);
+				select_texture(font_txid, ns_text::u_atlas);
+				glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
+				glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
+				glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);			GL_CHECK();
+
+				glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+				glDrawArrays(GL_QUADS, 0, printable_count<<2);	GL_CHECK();//draw the quads: 4 vertices per character quad
+				glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+			}
+		}
+	}
+	if(ret_idx)
+		*ret_idx=k;
+	return cursor;
+}
+void				print_text(float tab_origin, float x0, float x, float y, Text const &text, Bookmark const &i, Bookmark const &f, float zoom, float *final_x=nullptr, float *final_y=nullptr)
+{
+	if(i>=f)
+		return;
+	float ndc[4]={};//x1, x2, y1, y2
+	QuadCoords *txc=nullptr, *atlas=sdf_active?sdf_glyph_coords:font_coords;
+	if(sdf_active)
+		zoom*=16.f/sdf_dy;
+	int idx, printable_count=0;
+	float dxpx=(sdf_active?sdf_dx:dx)*zoom, dypx=(sdf_active?sdf_dy:dy)*zoom, advance;
+	int rx1=0, ry1=0, rdx=0, rdy=0;
+	get_current_region(rx1, ry1, rdx, rdy);
+	float
+		CX1=2.f/rdx, CX0=-CX1*rx1-1,
+		CY1=-2.f/rdy, CY0=1-CY1*ry1;
+	float currentX=(float)x0, currentY=(float)y, nextY=(float)(y+dypx);
+	ndc[2]=CY1*currentY+CY0;
+	ndc[3]=CY1*nextY+CY0;
+	if(currentY>=ry1+rdy)//first line is below region bottom
+	{
+		if(final_x)
+			*final_x=currentX;
+		if(final_y)
+			*final_y=currentY;
+		return;
+	}
+	Bookmark k=i;
+	if(nextY<ry1)//first line is above region top
+	{
+		++k.line, k.idx=0;
+		size_t nlines=text_get_nlines(text);
+		for(;k<f;++k.line)
+		{
+			currentY=nextY, nextY+=dypx;
+			if(nextY>=ry1)
+			{
+				currentX=x;
+				ndc[2]=CY1*currentY+CY0;
+				ndc[3]=CY1*nextY+CY0;
+				break;
+			}
+		}
+		if(k>=f)//nothing left to print
+		{
+			if(final_x)
+				*final_x=currentX;
+			if(final_y)
+				*final_y=currentY;
+			return;
+		}
+	}
+	vrtx.resize(int((rdx+dxpx)*(rdy+dypx)/(dxpx*dypx))<<4);//nchars in grid	*	{vx, vy, txx, txy		x4 vertices/char}	~= 5MB at FHD screen
+	for(;k<f;k.increment_idx(text))
+	{
+		char c=k.dereference_idx(text);
+		//char c=msg[k];
+		if(c>=32&&c<0xFF)
+			advance=dxpx;
+		else if(c=='\t')
+			advance=dxpx*(tab_count-mod((int)((currentX-tab_origin+1e-4)/dxpx), tab_count)), c=' ';
+			//advance=dxpx*tab_count-mod(currentX-tab_origin+1e-4, dxpx*tab_count), c=' ';//X  tab bounces on continuous zoom
+		else
+		{
+			if(c=='\n')
+			{
+				currentX=(float)x, currentY=nextY, nextY+=dypx;
+				if(currentY>=ry1+rdy)//following lines are below region bottom
+					break;
+				ndc[2]=CY1*currentY+CY0;
+				ndc[3]=CY1*nextY+CY0;
+			}
+			advance=0;
+		}
+		if(advance)
+		{
+			if(currentX+advance>=0&&currentX<w)
+			{
+				ndc[0]=CX1*currentX+CX0;//xn1
+				currentX+=advance;
+				ndc[1]=CX1*currentX+CX0;//xn2
+				idx=printable_count<<4;
+				if(idx>=(int)vrtx.size())
+					vrtx.resize(vrtx.size()+(vrtx.size()>>1));//grow by x1.5
+				txc=atlas+c-32;
+				vrtx[idx   ]=ndc[0], vrtx[idx+ 1]=ndc[2],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
+				vrtx[idx+ 4]=ndc[0], vrtx[idx+ 5]=ndc[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
+				vrtx[idx+ 8]=ndc[1], vrtx[idx+ 9]=ndc[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
+				vrtx[idx+12]=ndc[1], vrtx[idx+13]=ndc[2],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
+
+				++printable_count;
+			}
+			else
+				currentX+=advance;
+		}
+	}
+	if(printable_count)
+	{
+		if(sdf_active)
+		{
+			setGLProgram(shader_sdftext.program);
+			glUniform1f(ns_sdftext::u_zoom, zoom/0.06202317352941176470588235294118f);
+			select_texture(sdf_atlas_txid, ns_sdftext::u_atlas);
+			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
+			glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();
+			glVertexAttribPointer(ns_sdftext::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);		GL_CHECK();
+
+			glEnableVertexAttribArray(ns_sdftext::a_coords);	GL_CHECK();
+			glDrawArrays(GL_QUADS, 0, printable_count<<2);		GL_CHECK();
+			glDisableVertexAttribArray(ns_sdftext::a_coords);	GL_CHECK();
+		}
+		else
+		{
+			setGLProgram(shader_text.program);
+			select_texture(font_txid, ns_text::u_atlas);
+			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
+			glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
+			glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);			GL_CHECK();
+
+			glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+			glDrawArrays(GL_QUADS, 0, printable_count<<2);	GL_CHECK();//draw the quads: 4 vertices per character quad
+			glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+		}
+	}
+	if(final_x)
+		*final_x=currentX;
+	if(final_y)
+		*final_y=currentY;
+}
+#ifdef DEBUG_CURSOR
+int					debug_print_cols(int x, int y, short zoom, int req_cols, int den)
+{
+	float rect[4]={};
+	QuadCoords *txc=nullptr;
+	int msg_width=0, width, idx, printable_count=0, tab_width=tab_count*dx*zoom, w2=dx*zoom, height=dy*zoom, req_width=req_cols*dx*zoom;
+	vrtx.resize(req_cols<<4);//vx, vy, txx, txy		x4 vertices/char
+	int rx1=0, ry1=0, rdx=0, rdy=0;
+	get_current_region(rx1, ry1, rdx, rdy);
+	float CX1=2.f/rdx, CX0=CX1*(x-rx1)-1;
+	rect[1]=1-(y-ry1)*2.f/rdy;
+	rect[3]=1-(y+height-ry1)*2.f/rdy;
+	int k=0;
+	for(;;++k)
+	{
+		char c='0'+k/den%10;
+		width=w2;
+		if(x+msg_width+width>=0&&x+msg_width<w)//off-screen optimization
+		{
+			rect[0]=CX1*msg_width+CX0;//xn1
+			msg_width+=width;
+			rect[2]=CX1*msg_width+CX0;//xn2
+
+			idx=printable_count<<4;
+			txc=font_coords+c-32;
+			vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
+			vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
+			vrtx[idx+ 8]=rect[2], vrtx[idx+ 9]=rect[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
+			vrtx[idx+12]=rect[2], vrtx[idx+13]=rect[1],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
+
+			++printable_count;
+		}
+		else
+			msg_width+=width;
+		if(req_width>=0&&x+msg_width>=req_width)
+		{
+			++k;
+			break;
+		}
+	}
+	if(printable_count)
+	{
+		setGLProgram(shader_text.program);
+		select_texture(font_txid, ns_text::u_atlas);
+		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
+		glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
+		glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);			GL_CHECK();
+
+		glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+		glDrawArrays(GL_QUADS, 0, printable_count<<2);	GL_CHECK();//draw the quads: 4 vertices per character quad
+		glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
+	}
+	return msg_width;
+}
+#endif
+
+float				print(short zoom, float tab_origin, float x, float y, const char *format, ...)
+{
+	va_list args;
+	va_start(args, format);
+#ifdef _MSC_VER
+	int len=vsprintf_s(g_buf, g_buf_size, format, args);
+#else
+	int len=vsnprintf(g_buf, g_buf_size, format, args);
+#endif
+	va_end(args);
+	return print_line(x, y, g_buf, len, tab_origin, zoom);
+};
+void				relocate_range(int dst, int &a, int &b)
+{
+	if(a<b)
+	{
+		b=dst+(b-a);
+		a=dst;
+	}
+	else
+	{
+		a=dst+(a-b);
+		b=dst;
+	}
+}
+
+//U64				colors_text=0xFFABABABFF000000;//black on white		0xBKBKBKBK_TXTXTXTX
+U64					colors_text=0x20ABABABFFBBBBBB;//dark mode
+//U64				colors_text=0xFF000000FFABABAB;//dark mode, opaque black on black?
+U64					colors_selection=0xA0FF9933FFFFFFFF;//colors of selected text
+//U64				colors_selection=0xA0FF0000FFABABAB;
+int					color_cursor=0xFFFFFFFF,//color of the cursor stick
+					color_cursorlinebk=0xFF202820;//color of current line highlight
+U64					colors_cursorline=(u64)color_cursorlinebk<<32|0xFFABABAB;
+struct				SmallRect
+{
+	short x1, y1, x2, y2;
+	SmallRect():x1(0), y1(0), x2(0), y2(0){}
+	void set(short x1, short x2, short y1, short y2){this->x1=x1, this->x2=x2, this->y1=y1, this->y2=y2;}
+};
+struct				Rect
+{
+	int x1, y1, x2, y2;
+	Rect():x1(0), y1(0), x2(0), y2(0){}
+	void set(int x1, int x2, int y1, int y2){this->x1=x1, this->x2=x2, this->y1=y1, this->y2=y2;}
+	void set_sort(int x1, int x2, int y1, int y2)
+	{
+		if(x1<x2)
+			this->x1=x1, this->x2=x2;
+		else
+			this->x1=x2, this->x2=x1;
+		if(y1<y2)
+			this->y1=y1, this->y2=y2;
+		else
+			this->y1=y2, this->y2=y1;
+	}
+};
+SmallRect			window_tabbar, window_editor;
 struct				Cursor
 {
 	bool rectsel;
@@ -1335,10 +1466,10 @@ int					tabbar_dx=150,//sidebar width		TODO: resizable
 					tabbar_wpx=0, tabbar_wpy;//scroll position
 struct				TabPosition
 {
-	int right, idx;
+	float right, idx;
 	TabPosition():right(0), idx(0){}
-	TabPosition(int right, int idx):right(right), idx(idx){}
-	void set(int right, int idx){this->right=right, this->idx=idx;}
+	TabPosition(float right, float idx):right(right), idx(idx){}
+	void set(float right, float idx){this->right=right, this->idx=idx;}
 };
 std::vector<TabPosition> tabbar_tabs;//TODO: merge TabPosition with TextFile
 
@@ -1755,7 +1886,7 @@ bool				cursor_at_mouse(Text const &text, short mx, short my, Bookmark &cursor, 
 
 	mline=(int)line, mcol=(int)(col+0.5f);
 	size_t nlines=text_get_nlines(text);
-	return cursor.set_gui(text, line, col, clampcol);
+	return cursor.set_gui(text, (int)line, col, clampcol);
 }
 
 //scrollbar functions
@@ -1809,7 +1940,7 @@ void				draw_vscrollbar(int x, int sbwidth, int y1, int y2, int &winpos, int con
 }
 
 inline void			tabbar_printnames_init(){g_buf[0]='*';}//don't use g_buf while printing tab names
-int					tabbar_printname(int x, int y, int tab_idx, bool test=false, bool qualified=false, const char **pbuf=nullptr, int *len=nullptr)
+float				tabbar_printname(int x, int y, int tab_idx, bool test=false, bool qualified=false, const char **pbuf=nullptr, int *len=nullptr)
 {
 	auto &f=openfiles[tab_idx];
 	int modified=text_is_modified(f.m_text);
@@ -1826,7 +1957,7 @@ int					tabbar_printname(int x, int y, int tab_idx, bool test=false, bool qualif
 	}
 	else
 		printed=sprintf_s(g_buf+1, g_buf_size-1, "Untitled %d", f.m_untitled_idx+1);
-	int msg_width=0;
+	float msg_width=0;
 	if(test)
 	{
 		msg_width=dx*idx2col(g_buf+!modified, printed+modified, 0);
@@ -1849,10 +1980,11 @@ void				tabbar_calc_positions()
 {
 	tabbar_tabs.resize(openfiles.size());
 	tabbar_printnames_init();
-	for(int k=0, x=0;k<(int)openfiles.size();++k)
+	float x=0;
+	for(int k=0;k<(int)openfiles.size();++k)
 	{
 		auto &of=openfiles[k];
-		int x0=x;
+		float x0=x;
 		x+=10+tabbar_printname(x, 0, k, true);
 		tabbar_tabs[k].set(x, k);
 	}
@@ -1989,134 +2121,6 @@ bool				wnd_on_init()
 	return true;
 }
 void				wnd_on_resize(){}
-void				print_text(float tab_origin, float x0, float x, float y, Text const &text, Bookmark const &i, Bookmark const &f, float zoom, float *final_x=nullptr, float *final_y=nullptr)
-{
-	if(i>=f)
-		return;
-	float ndc[4]={};//x1, x2, y1, y2
-	QuadCoords *txc=nullptr, *atlas=sdf_active?sdf_glyph_coords:font_coords;
-	if(sdf_active)
-		zoom*=16.f/sdf_dy;
-	int idx, printable_count=0;
-	float dxpx=(sdf_active?sdf_dx:dx)*zoom, dypx=(sdf_active?sdf_dy:dy)*zoom, advance;
-	int rx1=0, ry1=0, rdx=0, rdy=0;
-	get_current_region(rx1, ry1, rdx, rdy);
-	float
-		CX1=2.f/rdx, CX0=-CX1*rx1-1,
-		CY1=-2.f/rdy, CY0=1-CY1*ry1;
-	float currentX=(float)x0, currentY=(float)y, nextY=(float)(y+dypx);
-	ndc[2]=CY1*currentY+CY0;
-	ndc[3]=CY1*nextY+CY0;
-	if(currentY>=ry1+rdy)//first line is below region bottom
-	{
-		if(final_x)
-			*final_x=currentX;
-		if(final_y)
-			*final_y=currentY;
-		return;
-	}
-	Bookmark k=i;
-	if(nextY<ry1)//first line is above region top
-	{
-		++k.line, k.idx=0;
-		size_t nlines=text_get_nlines(text);
-		for(;k<f;++k.line)
-		{
-			currentY=nextY, nextY+=dypx;
-			if(nextY>=ry1)
-			{
-				currentX=x;
-				ndc[2]=CY1*currentY+CY0;
-				ndc[3]=CY1*nextY+CY0;
-				break;
-			}
-		}
-		if(k>=f)//nothing left to print
-		{
-			if(final_x)
-				*final_x=currentX;
-			if(final_y)
-				*final_y=currentY;
-			return;
-		}
-	}
-	vrtx.resize(int((rdx+dxpx)*(rdy+dypx)/(dxpx*dypx))<<4);//nchars in grid	*	{vx, vy, txx, txy		x4 vertices/char}	~= 5MB at FHD screen
-	for(;k<f;k.increment_idx(text))
-	{
-		char c=k.dereference_idx(text);
-		//char c=msg[k];
-		if(c>=32&&c<0xFF)
-			advance=dxpx;
-		else if(c=='\t')
-			advance=dxpx*(tab_count-mod((int)((currentX-tab_origin+1e-4)/dxpx), tab_count)), c=' ';
-			//advance=dxpx*tab_count-mod(currentX-tab_origin+1e-4, dxpx*tab_count), c=' ';//X  tab bounces on continuous zoom
-		else
-		{
-			if(c=='\n')
-			{
-				currentX=(float)x, currentY=nextY, nextY+=dypx;
-				if(currentY>=ry1+rdy)//following lines are below region bottom
-					break;
-				ndc[2]=CY1*currentY+CY0;
-				ndc[3]=CY1*nextY+CY0;
-			}
-			advance=0;
-		}
-		if(advance)
-		{
-			if(currentX+advance>=0&&currentX<w)
-			{
-				ndc[0]=CX1*currentX+CX0;//xn1
-				currentX+=advance;
-				ndc[1]=CX1*currentX+CX0;//xn2
-				idx=printable_count<<4;
-				if(idx>=(int)vrtx.size())
-					vrtx.resize(vrtx.size()+(vrtx.size()>>1));//grow by x1.5
-				txc=atlas+c-32;
-				vrtx[idx   ]=ndc[0], vrtx[idx+ 1]=ndc[2],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
-				vrtx[idx+ 4]=ndc[0], vrtx[idx+ 5]=ndc[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
-				vrtx[idx+ 8]=ndc[1], vrtx[idx+ 9]=ndc[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
-				vrtx[idx+12]=ndc[1], vrtx[idx+13]=ndc[2],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
-
-				++printable_count;
-			}
-			else
-				currentX+=advance;
-		}
-	}
-	if(printable_count)
-	{
-		if(sdf_active)
-		{
-			setGLProgram(shader_sdftext.program);
-			glUniform1f(ns_sdftext::u_zoom, zoom/0.06202317352941176470588235294118f);
-			select_texture(sdf_atlas_txid, ns_sdftext::u_atlas);
-			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
-			glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();
-			glVertexAttribPointer(ns_sdftext::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);		GL_CHECK();
-
-			glEnableVertexAttribArray(ns_sdftext::a_coords);	GL_CHECK();
-			glDrawArrays(GL_QUADS, 0, printable_count<<2);		GL_CHECK();
-			glDisableVertexAttribArray(ns_sdftext::a_coords);	GL_CHECK();
-		}
-		else
-		{
-			setGLProgram(shader_text.program);
-			select_texture(font_txid, ns_text::u_atlas);
-			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
-			glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
-			glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);			GL_CHECK();
-
-			glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
-			glDrawArrays(GL_QUADS, 0, printable_count<<2);	GL_CHECK();//draw the quads: 4 vertices per character quad
-			glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
-		}
-	}
-	if(final_x)
-		*final_x=currentX;
-	if(final_y)
-		*final_y=currentY;
-}
 void				tabbar_draw_horizontal(int ty1, int ty2, int wy1, int wy2)
 {
 	if(h>ty2-ty1)
@@ -2128,18 +2132,19 @@ void				tabbar_draw_horizontal(int ty1, int ty2, int wy1, int wy2)
 		window_tabbar.set(0, w, ty1, ty2);
 		set_region_immediate(0, w, ty1, ty2);
 		tabbar_printnames_init();
-		for(int k=0, x=-tabbar_wpx;k<(int)openfiles.size();++k)
+		float x=-tabbar_wpx;
+		for(int k=0;k<(int)openfiles.size();++k)
 		{
 			auto &of=openfiles[k];
-			int x0=x;
+			float x0=x;
 			x+=10+tabbar_printname(x, ty1, k);
 			//if(k==current_file)
 			//{
 			//	draw_rectangle_i(x-10, x, ty1, ty1+dy, colors_selection.hi);
 			//	draw_rectangle_i(x0, x, ty1+dy, ty1+(dy<<1), colors_selection.hi);
 			//}
-			draw_rectangle_i(x-10, x-1, ty1, ty1+dy, k==current_file?colors_selection.hi:colors_text.hi);
-			draw_rectangle_i(x0, x-1, ty1+dy, ty1+dy*2, k==current_file?colors_selection.hi:colors_text.hi);
+			draw_rectangle(x-10, x-1, ty1, ty1+dy, k==current_file?colors_selection.hi:colors_text.hi);
+			draw_rectangle(x0, x-1, ty1+dy, ty1+dy*2, k==current_file?colors_selection.hi:colors_text.hi);
 		}
 		window_editor.set(0, w, wy1, wy2);
 		set_region_immediate(0, w, wy1, wy2);
