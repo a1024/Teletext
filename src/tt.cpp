@@ -30,10 +30,10 @@ char				g_buf[G_BUF_SIZE]={};
 int					w=0, h=0;
 short				mx=0, my=0, mline=0, mcol=0,//current mouse coordinates
 					start_mx=0, start_my=0,//LBUTTON down coordinates
-					dx=0, dy=0,//non-tab character dimensions
 					tab_count=4;
+float				dx=0, dy=0;//non-tab character dimensions
 char				sdf_available=false, sdf_active=false;
-short				sdf_dx=0, sdf_dy=0;
+float				sdf_dx=0, sdf_dy=0;
 float				sdf_dzoom=1.01f;
 std::string			exe_dir;
 
@@ -399,12 +399,12 @@ void				set_text_colors(U64 const &colors)
 		send_color(ns_text::u_bkColor, colors.hi);
 	}
 }
-void				set_sdftext_colors(U64 const &colors)//temporary measure
-{
-	setGLProgram(shader_sdftext.program);
-	send_color(ns_text::u_txtColor, colors.lo);
-	send_color(ns_text::u_bkColor, colors.hi);
-}
+//void				set_sdftext_colors(U64 const &colors)//temporary measure
+//{
+//	setGLProgram(shader_sdftext.program);
+//	send_color(ns_text::u_txtColor, colors.lo);
+//	send_color(ns_text::u_bkColor, colors.hi);
+//}
 bool				col2idx(const char *text, int text_length, int tab0_cols, int idx0, int col0, float req_col, int *ret_idx, int *ret_col)//returns true when runs out of characters (OOB)
 {
 	bool line_too_short=true;
@@ -443,6 +443,7 @@ int					idx2col(const char *text, int text_length, int tab0_cols)
 	}
 	return col;
 }
+#if 0
 int					calc_width		(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom)
 {
 	if(msg_length<1)
@@ -502,6 +503,7 @@ void				inv_calc_width	(int x, int y, const char *msg, int msg_length, int tab_o
 	if(out_k)
 		*out_k=k;
 }
+#endif
 float				print_line		(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom, int req_cols, int *ret_idx)
 {
 	if(msg_length<1)
@@ -657,130 +659,6 @@ int					debug_print_cols(int x, int y, short zoom, int req_cols, int den)
 	}
 	return msg_width;
 }
-#if 0
-int					print_line_rect(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom, int nchars, int &nconsumed)
-{
-	if(msg_length<1)
-		return 0;
-	float rect[4]={};
-	QuadCoords *txc=nullptr;
-	int msg_width=0, width, idx, printable_count=0, tab_width=tab_count*dx*zoom, w2=dx*zoom, height=dy*zoom, k2=0;
-	char overflow=false;
-	vrtx.resize(nchars<<4);//vx, vy, txx, txy		x4 vertices/char
-	for(int k=0, k3=0;k3<nchars;++k)
-	{
-		char c;
-		if(overflow||k>=msg_length||msg[k]=='\n')
-			c=' ', overflow=true;
-		else
-			c=msg[k], ++k2;
-		if(c=='\t')
-			width=tab_width-mod(x+msg_width-tab_origin, tab_width), c=' ', k3+=width/w2;
-		else if(c>=32&&c<0xFF)
-			width=w2, ++k3;
-		else
-			width=0, ++k3;
-		if(width)
-		{
-			toNDC_nobias(float(x+msg_width		), float(y			), rect[0], rect[1]);
-			toNDC_nobias(float(x+msg_width+width), float(y+height	), rect[2], rect[3]);//y2<y1
-			idx=k<<4;
-			txc=font_coords+c-32;
-			vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
-			vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
-			vrtx[idx+ 8]=rect[2], vrtx[idx+ 9]=rect[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
-			vrtx[idx+12]=rect[2], vrtx[idx+13]=rect[1],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
-
-			msg_width+=width;
-			++printable_count;
-		}
-	}
-	setGLProgram(shader_text.program);
-	select_texture(font_txid, ns_text::u_atlas);
-	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);								GL_CHECK();
-	glBufferData(GL_ARRAY_BUFFER, msg_length<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
-	glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);		GL_CHECK();
-
-	glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
-	glDrawArrays(GL_QUADS, 0, msg_length<<2);		GL_CHECK();//draw the quads: 4 vertices per character quad
-	glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
-	nconsumed=k2;
-	return msg_width;
-}
-#endif
-
-#if 0
-//struct				SDFGlyphCoords//32 bytes
-//{
-//	float tx1, tx2, ty1, ty2;//texture coords
-//	short sx1, sx2, sy1, sy2;//screen relative coords at x1 zoom
-//};
-float				print_sdf_line	(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom)
-{
-	if(msg_length<1)
-		return 0;
-	float rect[4]={};
-	int k=0, idx, printable_count=0;
-	zoom*=16.f/sdf_dy;
-	float cursor=0, advance,
-		width=sdf_dx*zoom, height=sdf_dy*zoom,
-		tab_width=tab_count*width;
-	QuadCoords *info=nullptr;
-	int rx1=0, ry1=0, rdx=0, rdy=0;
-	get_current_region(rx1, ry1, rdx, rdy);
-	if(!rdy)
-		return 0;
-	vrtx.resize(msg_length<<4);
-	rect[1]=1-(y-ry1)*2.f/rdy;
-	rect[3]=1-(y-ry1+sdf_dy*zoom)*2.f/rdy;
-	float CX1=2.f/rdx, CX0=(x-rx1)*CX1-1;
-	for(;k<msg_length;++k)
-	{
-		char c=msg[k];
-		if(c>=32&&c<0xFF)
-			advance=width;
-		else if(c=='\t')
-			advance=tab_width-mod(x+cursor-tab_origin, tab_width), c=' ';
-		else
-			advance=0;
-		if(advance)
-		{
-			rect[0]=CX1*cursor+CX0;
-			cursor+=advance;
-			rect[2]=CX1*cursor+CX0;
-			
-			//[rx1, rx1+rdx] -> [-1, 1]
-			//rect[0]=(x+cursor-rx1)*2.f/rdx-1;			//x1
-			//rect[2]=(x+cursor-rx1+advance)*2.f/rdx-1;	//x2
-			//rect[1]=1-(y-ry1)*2.f/rdy;				//y1
-			//rect[3]=1-(y-ry1+sdf_dy*zoom)*2.f/rdy;	//y2
-			
-			idx=printable_count<<4;
-			info=sdf_glyph_coords+c-32;
-			vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=info->x1, vrtx[idx+ 3]=info->y1;//top left
-			vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=info->x1, vrtx[idx+ 7]=info->y2;//bottom left
-			vrtx[idx+ 8]=rect[2], vrtx[idx+ 9]=rect[3],		vrtx[idx+10]=info->x2, vrtx[idx+11]=info->y2;//bottom right
-			vrtx[idx+12]=rect[2], vrtx[idx+13]=rect[1],		vrtx[idx+14]=info->x2, vrtx[idx+15]=info->y1;//top right
-
-			++printable_count;
-		}
-	}
-	if(printable_count)
-	{
-		setGLProgram(shader_sdftext.program);
-		glUniform1f(ns_sdftext::u_zoom, zoom/0.06202317352941176470588235294118f);
-		select_texture(sdf_atlas_txid, ns_sdftext::u_atlas);
-		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
-		glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
-		glVertexAttribPointer(ns_sdftext::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);		GL_CHECK();
-
-		glEnableVertexAttribArray(ns_sdftext::a_coords);	GL_CHECK();
-		glDrawArrays(GL_QUADS, 0, printable_count<<2);		GL_CHECK();//draw the quads: 4 vertices per character quad
-		glDisableVertexAttribArray(ns_sdftext::a_coords);	GL_CHECK();
-	}
-	return cursor;
-}
-#endif
 
 float				print(short zoom, float tab_origin, float x, float y, const char *format, ...)
 {
@@ -809,7 +687,7 @@ void				relocate_range(int dst, int &a, int &b)
 }
 
 //U64				colors_text=0xFFABABABFF000000;//black on white		0xBKBKBKBK_TXTXTXTX
-U64					colors_text=0x20ABABABFFABABAB;//dark mode
+U64					colors_text=0x20ABABABFFBBBBBB;//dark mode
 //U64				colors_text=0xFF000000FFABABAB;//dark mode, opaque black on black?
 U64					colors_selection=0xA0FF9933FFFFFFFF;//colors of selected text
 //U64				colors_selection=0xA0FF0000FFABABAB;
@@ -1169,7 +1047,7 @@ struct				Cursor
 		return b>=i&&b<=f;
 	}
 };
-float				font_zoom=1;//font pixel size
+float				font_zoom=1, zoom_min=1, zoom_max=32;//font pixel size
 int					wpx=0, wpy=0,//window position inside the text buffer, in pixels
 					text_width=0;//in characters
 Cursor				*cur=nullptr;
@@ -1228,7 +1106,6 @@ void				rectsel_copy(Text const &src, Cursor const &cur, Text &dst)
 		{
 			size_t len=0;
 			auto line=text_get_line(src, kl, &len);
-			//auto &line=src[kl];
 
 			int idx1, c1, prepad=0,
 				idx2, c2;
@@ -1296,11 +1173,6 @@ void				rectsel_insert(Text const &src, int l1, int col1, Text &dst)
 		text_replace(dst, kld, dstlen, dstlen, " ", 1, mod(col1, tab_count));
 		dstlen=text_get_len(dst, kld);
 		text_replace(dst, kld, dstlen, dstlen, srcline, srclen, 1);
-
-		//dst.push_back(std::string(col1/tab_count, '\t'));
-		//auto &line=dst.back();
-		//line.append(mod(col1, tab_count), ' ');
-		//line+=src[kls];
 	}
 }
 void				selection_copy(Text const &src, Cursor const &cur, Text &dst)
@@ -1315,9 +1187,6 @@ void				selection_copy(Text const &src, Cursor const &cur, Text &dst)
 		size_t len=0;
 		auto line=text_get_line(src, i.line, &len);
 		text_replace(dst, 0, 0, 0, line+i.idx, f.idx-i.idx, 1);
-
-		//auto &line=src[i.line];
-		//dst.push_back(std::string(line.begin()+i.idx, line.begin()+f.idx));
 	}
 	else
 	{
@@ -1331,12 +1200,6 @@ void				selection_copy(Text const &src, Cursor const &cur, Text &dst)
 		}
 		line=text_get_line(src, f.line, &len);
 		text_replace(dst, f.line-i.line, 0, 0, line, f.idx, 1);
-
-		//auto &firstline=src[i.line], &lastline=src[f.line];
-		//dst.push_back(std::string(firstline.begin()+i.idx, firstline.end()));
-		//for(int kl=i.line+1;kl<f.line;++kl)
-		//	dst.push_back(src[kl]);
-		//dst.push_back(std::string(lastline.begin(), lastline.begin()+f.idx));
 	}
 }
 void				selection_insert(Text const &src, int l1, int idx1, Text &dst)
@@ -1373,20 +1236,6 @@ void				selection_insert(Text const &src, int l1, int idx1, Text &dst)
 		len2=text_get_len(dst, l1);
 		text_replace(dst, l1, idx1, len2, line, len, 1);//replace the rest of dstline[0] with srcline[0]
 	}
-
-	//auto &srcline=src[0];
-	//if(src.size()==1)
-	//{
-	//	auto &dstline=dst[l1];
-	//	dstline.insert(dstline.begin()+idx1, srcline.begin(), srcline.end());
-	//}
-	//else if(src.size()>1)
-	//{
-	//	dst.insert(dst.begin()+l1+1, src.begin()+1, src.end());
-	//	auto &dst1=dst[l1], &dst2=dst[l1+src.size()-1];
-	//	dst2.insert(dst2.end(), dst1.begin()+idx1, dst1.end());
-	//	dst1.replace(dst1.begin()+idx1, dst1.end(), srcline.begin(), srcline.end());
-	//}
 }
 
 std::string			*filename;//utf8
@@ -1564,7 +1413,6 @@ bool				tabs_ismodified(int tab_idx)
 {
 	auto &of=openfiles[tab_idx];
 	return text_is_modified(of.m_text)!=0;
-	//return of.m_histpos!=of.m_histpos_saved;
 }
 void				set_title()
 {
@@ -1644,7 +1492,6 @@ void				text_erase(Text &text, int l1, int idx1, int l2, int idx2)
 			if(idx2<idx1)
 				std::swap(idx1, idx2);
 			text_replace(text, l1, idx1, idx2, 0, 0, 0);
-			//line.erase(line.begin()+idx1, line.begin()+idx2);
 		}
 	}
 	else
@@ -1658,10 +1505,6 @@ void				text_erase(Text &text, int l1, int idx1, int l2, int idx2)
 		auto line2=text_get_line(text, l2, &len2);
 		text_replace(text, l1, idx1, len1, line2+idx2, len2-idx2, 1);
 		text_erase_lines(text, l1+1, l2-l1);
-
-		//auto &line1=text[l1], &line2=text[l2];
-		//line1.replace(line1.begin()+idx1, line1.end(), line2.begin()+idx2, line2.end());
-		//text.erase(text.begin()+l1+1, text.begin()+l2+1);
 	}
 }
 void				text_insert(Text &text, int l0, int idx0, const char *a, int len, int *ret_line, int *ret_idx)
@@ -1701,9 +1544,6 @@ void				text_insert(Text &text, int l0, int idx0, const char *a, int len, int *r
 			auto line=text_get_line(text, l0, &len);
 			text_replace(text, l0+1, 0, 0, line+idx0, len-idx0, 1);
 			text_replace(text, l0, idx0, len-idx0, a+k, k2-k, 1);
-
-			//text.insert(text.begin()+l0+1, text[l0].substr(idx0, text[l0].size()-idx0));
-			//text[l0].replace(text[l0].begin()+idx0, text[l0].end(), a+k, a+k2);
 		}
 		++k2;
 		k=k2;
@@ -1716,7 +1556,6 @@ void				replace_tab_with_spaces(Text &text, int l0, int idx)
 	int col0=idx2col(line, idx, 0);
 	int nspaces=tab_count-mod(col0, tab_count);
 	text_replace(text, l0, idx, idx+1, " ", 1, nspaces);
-	//line.replace(idx, 1, nspaces, ' ');
 }
 void				text_erase_rect(Text &text, int l1, int l2, int col1, int col2)
 {
@@ -1752,7 +1591,6 @@ void				text_erase_rect(Text &text, int l1, int l2, int col1, int col2)
 				col2idx(line, len, 0, 0, 0, (float)col2, &idx2, &c2);
 				if(idx1<idx2)
 					text_replace(text, kl, idx1, idx2, 0, 0, 0);
-				//	line.erase(line.begin()+idx1, line.begin()+idx2);
 			}
 		}
 	}
@@ -1764,7 +1602,6 @@ void				text_insert_rect(Text &text, int l1, int l2, int col0, const char *a, in
 	{
 		size_t len2=0;
 		auto line=text_get_line(text, kl, &len2);
-		//auto &line=text[kl];
 		int idx1=0, c1=0;
 		col2idx(line, len2, 0, 0, 0, (float)col0, &idx1, &c1);
 		if(c1<col0)
@@ -1775,14 +1612,8 @@ void				text_insert_rect(Text &text, int l1, int l2, int col0, const char *a, in
 			len2+=ntabs;
 			text_replace(text, kl, len2, len2, " ", 1, nspaces);
 			idx1=len2+=nspaces;
-
-			//line.insert(line.end(), ntabs, '\t');
-			//line.insert(line.end(), nspaces, ' ');
-			//idx1=line.size();
 		}
 		text_replace(text, kl, idx1, len2, a, len, 1);
-
-		//line.insert(line.begin()+idx1, a, a+len);
 	}
 }
 #endif
@@ -1795,12 +1626,6 @@ void				text_insert1(Text &text, int l0, int idx0, char c)
 		auto line=text_get_line(text, l0, &len);
 		text_replace(text, l0+1, 0, 0, line+idx0, len-idx0, 1);
 		text_replace(text, l0, idx0, len, 0, 0, 0);
-
-		//text.insert(text.begin()+l0+1, std::string());
-		//auto &line1=text[l0];
-		//auto &line2=text[l0+1];
-		//line2.insert(line2.begin(), line1.begin()+idx0, line1.end());
-		//line1.erase(line1.begin()+idx0, line1.end());
 	}
 	else
 		text_replace(text, l0, idx0, idx0, &c, 1, 1);
@@ -1810,15 +1635,12 @@ void				text_erase1_bksp(Text &text, int l0, int idx0)
 {
 	if(idx0>0)
 		text_replace(text, l0, idx0-1, idx0, 0, 0, 0);
-		//text[l0].erase(idx0-1, 1);
 	else if(l0>0)
 	{
 		size_t len=0, len2=text_get_len(text, l0-1);
 		auto line=text_get_line(text, l0, &len);
 		text_replace(text, l0-1, len2, len2, line, len, 1);
 		text_erase_lines(text, l0, 1);
-		//text[l0-1].append(text[l0]);
-		//text.erase(text.begin()+l0);
 	}
 }
 void				text_erase1_del(Text &text, int l0, int idx0)
@@ -1833,14 +1655,6 @@ void				text_erase1_del(Text &text, int l0, int idx0)
 		text_replace(text, l0, idx0, idx0, line, len, 1);
 		text_erase_lines(text, l0+1, 1);
 	}
-
-	//if(idx0<(int)text[l0].size())
-	//	text[l0].erase(idx0, 1);
-	//else if(l0<(int)text.size()-1)
-	//{
-	//	text[l0].append(text[l0+1]);
-	//	text.erase(text.begin()+l0+1);
-	//}
 }
 void				indent_rectsel_back(Cursor &cur)
 {
@@ -1850,7 +1664,6 @@ void				indent_rectsel_back(Cursor &cur)
 	remainder+=tab_count&-!remainder;
 	col0=col1-remainder;
 	int dst_col=col0;
-	//std::vector<int> indices(l2+1-l1);
 	for(int kl=l1;kl<=l2;++kl)//find col_clearance
 	{
 		//a   [b]b	here col_clearance = 1 space
@@ -1858,7 +1671,6 @@ void				indent_rectsel_back(Cursor &cur)
 		//aa  [b]b
 		size_t len=0;
 		auto line=text_get_line(text, kl, &len);
-		//auto &line=text->operator[](kl);
 		int idx, c;
 		col2idx(line, len, 0, 0, 0, (float)col0, &idx, &c);
 		for(;idx<(int)len&&!isspace(line[idx]);++idx, ++c);
@@ -1878,12 +1690,10 @@ void				indent_rectsel_back(Cursor &cur)
 		{
 			size_t len=0;
 			auto line=text_get_line(text, kl, &len);
-			//auto &line=text->operator[](kl);
 			int idx1, c1, idx2, c2;
 			col2idx(line, len, 0, 0, 0, (float)dst_col, &idx1, &c1);
 			col2idx(line, len, 0, 0, 0, (float)col1, &idx2, &c2);
 			text_replace(text, kl, idx1, idx2, 0, 0, 0);
-			//line.erase(line.begin()+idx1, line.begin()+idx2);
 		}
 		int col_diff=col1-dst_col;
 		cur.cursor.col-=col_diff;
@@ -1900,11 +1710,9 @@ void				indent_rectsel_forward(Cursor &cur)
 	{
 		size_t len=0;
 		auto line=text_get_line(text, kl, &len);
-		//auto &line=text->operator[](kl);
 		int idx1, c1;
 		col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1);
 		text_replace(text, kl, idx1, idx1, "\t", 1, 1);
-		//line.insert(line.begin()+idx1, '\t');
 	}
 	int col_diff=tab_count-mod(col1, tab_count);
 	cur.cursor.col+=col_diff;
@@ -1921,7 +1729,6 @@ void				indent_selection_back(Cursor &cur)
 	{
 		size_t len=0;
 		auto line=text_get_line(text, kl, &len);
-		//auto &line=text->operator[](kl);
 		int idx1, c1;
 		col2idx(line, len, 0, 0, 0, (float)tab_count, &idx1, &c1);
 		int kc=0;
@@ -1932,7 +1739,6 @@ void				indent_selection_back(Cursor &cur)
 			f_diff=idx2col(line, kc, 0);
 		if(kc)
 			text_replace(text, kl, 0, kc, 0, 0, 0);
-			//line.erase(line.begin(), line.begin()+kc);
 	}
 	if(cur.cursor<cur.selcur)
 		cur.cursor.col-=i_diff, cur.selcur.col-=f_diff;
@@ -1949,9 +1755,7 @@ void				indent_selection_forward(Cursor &cur)
 	{
 		size_t len=0;
 		auto line=text_get_line(text, kl, &len);
-		//auto &line=text->operator[](kl);
 		text_replace(text, kl, 0, 0, "\t", 1, 1);
-		//line.insert(line.begin(), '\t');
 	}
 	cur.cursor.col+=tab_count;
 	cur.selcur.col+=tab_count;
@@ -1965,7 +1769,6 @@ void				line_insert(Text &text, int l0, int c1, int c2, const char *src, int len
 	if(l0<nlines)
 	{
 		auto line=text_get_line(text, l0, &len2);
-		//auto &line=text[l0];
 		int idx1, col1, idx2, col2;
 		col2idx(line, len2, 0, 0, 0, (float)c1, &idx1, &col1);
 
@@ -1985,16 +1788,9 @@ void				line_insert(Text &text, int l0, int c1, int c2, const char *src, int len
 				text_replace(text, l0, idx1, idx1, " ", 1, nspaces);
 			if(ntabs>0)
 				text_replace(text, l0, idx1, idx1, "\t", 1, ntabs);
-
-			//line.replace(line.begin()+idx1, line.begin()+idx2, src, src+len);
-			//if(nspaces>0)
-			//	line.insert(idx1, nspaces, ' ');
-			//if(ntabs>0)
-			//	line.insert(idx1, ntabs, '\t');
 		}
 		else
 			text_replace(text, l0, idx1, idx2, src, len, 1);
-			//line.replace(line.begin()+idx1, line.begin()+idx2, src, src+len);
 	}
 	else
 	{
@@ -2003,11 +1799,6 @@ void				line_insert(Text &text, int l0, int c1, int c2, const char *src, int len
 		text_replace(text, nlines, len2, len2, "\t", 1, ntabs), len2=text_get_len(text, nlines);
 		text_replace(text, nlines, len2, len2, " ", 1, nspaces), len2=text_get_len(text, nlines);
 		text_replace(text, nlines, 0, 0, src, len, 1);
-
-		//text.push_back(std::string(ntabs, '\t'));
-		//auto &line=text.back();
-		//line.append(nspaces, ' ');
-		//line.append(src, src+len);
 	}
 }
 
@@ -2026,33 +1817,12 @@ char				group_char(char c)
 bool				cursor_at_mouse(Text const &text, short mx, short my, Bookmark &cursor, bool clampcol)//sets the cursor to mouse coordinates, returns true if text was hit
 {
 	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
-	int dypx=dy*font_zoom, dxpx=dx*font_zoom,
-		line=(wpy+mousey)/dypx;
-	float col=float(wpx+mousex)/dxpx;
+	float dypx=dy*font_zoom, dxpx=dx*font_zoom,
+		line=(wpy+mousey)/dypx, col=float(wpx+mousex)/dxpx;
 
-	mline=line, mcol=(int)(col+0.5f);
+	mline=(int)line, mcol=(int)(col+0.5f);
 	size_t nlines=text_get_nlines(text);
 	return cursor.set_gui(text, line, col, clampcol);
-
-/*	cursor.line=line;
-	if(cursor.line<0)
-		cursor.line=0;
-	else if(cursor.line>=nlines)
-		cursor.line=nlines-1;
-	cursor.col=(int)(col+0.5f);
-
-	size_t len=0;
-	auto _line=text_get_line(text, line, &len);
-	int hit_idx=0, hit_col=0;
-	col2idx(_line, len, 0, 0, 0, col, &hit_idx, &hit_col);
-	if(hit_col<col)
-		cursor.idx=-1;
-	else
-		cursor.idx=hit_idx;//*/
-	//cursor.idx=hit_idx + col/tab_count-hit_col/tab_count+mod(col, tab_count);//padded with tabs and spaces
-	//cursor.idx=-1;//means OOB, deduce it from col
-
-	return true;
 }
 
 //scrollbar functions
@@ -2110,7 +1880,6 @@ int					tabbar_printname(int x, int y, int tab_idx, bool test=false, bool qualif
 {
 	auto &f=openfiles[tab_idx];
 	int modified=text_is_modified(f.m_text);
-	//int not_modified=f.m_histpos==f.m_histpos_saved;
 	int printed=0;
 	if(f.m_filename.size())
 	{
@@ -2127,7 +1896,8 @@ int					tabbar_printname(int x, int y, int tab_idx, bool test=false, bool qualif
 	int msg_width=0;
 	if(test)
 	{
-		msg_width=calc_width(x, y, g_buf+!modified, printed+modified, 0, 1);
+		msg_width=dx*idx2col(g_buf+!modified, printed+modified, 0);
+	//	msg_width=calc_width(x, y, g_buf+!modified, printed+modified, 0, 1);
 		if(pbuf)
 			*pbuf=g_buf+!modified;
 		if(len)
@@ -2213,12 +1983,6 @@ void				general_selection_erase()
 	}
 }
 
-//struct			GlyphCoordInfo//8 bytes
-//{
-//	unsigned short x0, y0;
-//	unsigned char w, h;
-//	char ofx, ofy;
-//};
 void				wnd_on_create(){}
 bool				wnd_on_init()
 {
@@ -2257,7 +2021,6 @@ bool				wnd_on_init()
 	glGenTextures(1, &font_txid);
 	send_texture_pot(font_txid, rgb, iw, ih);
 	stbi_image_free(rgb);
-	prof_add("Load font");
 	
 	auto bmp=(unsigned char*)stbi_load((exe_dir+"font_sdf.PNG").c_str(), &iw, &ih, &bytespp, 1);
 	if(bmp)
@@ -2276,47 +2039,17 @@ bool				wnd_on_init()
 			rect->y1=(float)py/ih;
 			rect->y2=(float)(py+sdf_dy)/ih;
 		}
-		//GlyphCoordInfo src;
-		//sdf_glyph_coords->tx1=(float)(iw-2)/iw;//bottom-right corner of SDF font texture should be black
-		//sdf_glyph_coords->tx2=(float)(iw-1)/iw;
-		//sdf_glyph_coords->ty1=(float)(ih-2)/ih;
-		//sdf_glyph_coords->ty2=(float)(ih-1)/ih;
-		//sdf_glyph_coords->sx1=0;
-		//sdf_glyph_coords->sx2=35;
-		//sdf_glyph_coords->sy1=0;
-		//sdf_glyph_coords->sy2=64;
-	/*	for(int c=32, p=0;c<127;++c, p+=sizeof(GlyphCoordInfo))
-		{
-			auto &dst=sdf_glyph_coords[c-32];
-			memcpy(&src, bmp+p, sizeof(GlyphCoordInfo));
-			if(c==32)
-			{
-				dst.tx1=(float)(iw-2)/iw;
-				dst.tx2=(float)(iw-1)/iw;
-				dst.ty1=(float)(ih-2)/ih;
-				dst.ty2=(float)(ih-1)/ih;
-			}
-			else
-			{
-				dst.tx1=(float)src.x0/iw;
-				dst.tx2=(float)(src.x0+src.w)/iw;
-				dst.ty1=(float)src.y0/ih;
-				dst.ty2=(float)(src.y0+src.h)/ih;
-			}
-			dst.sx1=src.ofx;
-			dst.sx2=src.ofx+src.w;
-			dst.sy1=src.h-src.ofy;
-			dst.sy2=-src.ofy;
-			if(c=='_')
-				int LOL_1=0;
-		}//*/
 		glGenTextures(1, &sdf_atlas_txid);
 		send_texture_pot_linear(sdf_atlas_txid, bmp, iw, ih);
 		stbi_image_free(bmp);
+		sdf_active=true;
+		set_text_colors(colors_text);
+		sdf_active=false;
 	}
+	prof_add("Load font");
 
 	set_text_colors(colors_text);
-	set_sdftext_colors(colors_text);
+	//set_sdftext_colors(colors_text);
 
 	openfiles.push_back(TextFile());
 	current_file=0;
@@ -2345,8 +2078,6 @@ void				print_text(float tab_origin, float x0, float x, float y, Text const &tex
 	float currentX=(float)x0, currentY=(float)y, nextY=(float)(y+dypx);
 	ndc[2]=CY1*currentY+CY0;
 	ndc[3]=CY1*nextY+CY0;
-	//ndc[2]=1-(y-ry1)*2.f/rdy;
-	//ndc[3]=1-(y+height-ry1)*2.f/rdy;
 	if(currentY>=ry1+rdy)//first line is below region bottom
 	{
 		if(final_x)
@@ -2456,107 +2187,6 @@ void				print_text(float tab_origin, float x0, float x, float y, Text const &tex
 	if(final_y)
 		*final_y=currentY;
 }
-#if 0
-void				print_text(int tab_origin, int x0, int x, int y, const char *msg, int msg_length, short zoom, int *final_x=nullptr, int *final_y=nullptr)
-{
-	if(msg_length<1)
-		return;
-	float ndc[4]={};//x1, x2, y1, y2
-	QuadCoords *txc=nullptr;
-	int width, idx, printable_count=0, tab_width=tab_count*dx*zoom, dxpx=dx*zoom, dypx=dy*zoom;
-	int rx1=0, ry1=0, rdx=0, rdy=0;
-	get_current_region(rx1, ry1, rdx, rdy);
-	float
-		CX1=2.f/rdx, CX0=-CX1*rx1-1,
-		CY1=-2.f/rdy, CY0=1-CY1*ry1;
-	float currentX=(float)x0, currentY=(float)y, nextY=(float)(y+dypx);
-	ndc[2]=CY1*currentY+CY0;
-	ndc[3]=CY1*nextY+CY0;
-	//ndc[2]=1-(y-ry1)*2.f/rdy;
-	//ndc[3]=1-(y+height-ry1)*2.f/rdy;
-	if(currentY>=ry1+rdy)//first line is below region bottom
-		return;
-	int k=0;
-	if(nextY<ry1)//first line is above region top
-	{
-		for(;k<msg_length;++k)
-		{
-			if(msg[k]=='\n')
-			{
-				currentY=nextY, nextY+=dypx;
-				if(nextY>=ry1)
-				{
-					currentX=(float)x;
-					ndc[2]=CY1*currentY+CY0;
-					ndc[3]=CY1*nextY+CY0;
-					++k;
-					break;
-				}
-			}
-		}
-		if(k>=msg_length)//nothing left to print
-			return;
-	}
-	vrtx.resize((w+dxpx)*(h+dypx)/(dxpx*dypx)<<4);//nchars in grid	*	{vx, vy, txx, txy		x4 vertices/char}	~= 5MB at FHD screen
-	for(;k<msg_length;++k)
-	{
-		char c=msg[k];
-		if(c>=32&&c<0xFF)
-			width=dxpx;
-		else if(c=='\t')
-			width=tab_width-mod((int)currentX-tab_origin, tab_width), c=' ';
-		else
-		{
-			if(c=='\n')
-			{
-				currentX=(float)x, currentY=nextY, nextY+=dypx;
-				if(currentY>=ry1+rdy)//following lines are below region bottom
-					break;
-				ndc[2]=CY1*currentY+CY0;
-				ndc[3]=CY1*nextY+CY0;
-			}
-			width=0;
-		}
-		if(width)
-		{
-			if(currentX+width>=0&&currentX<w)
-			{
-				ndc[0]=CX1*currentX+CX0;//xn1
-				currentX+=width;
-				ndc[1]=CX1*currentX+CX0;//xn2
-				idx=printable_count<<4;
-				if(idx>=(int)vrtx.size())
-					vrtx.resize(vrtx.size()+(vrtx.size()>>1));//grow by x1.5
-				txc=font_coords+c-32;
-				vrtx[idx   ]=ndc[0], vrtx[idx+ 1]=ndc[2],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
-				vrtx[idx+ 4]=ndc[0], vrtx[idx+ 5]=ndc[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
-				vrtx[idx+ 8]=ndc[1], vrtx[idx+ 9]=ndc[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
-				vrtx[idx+12]=ndc[1], vrtx[idx+13]=ndc[2],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
-
-				++printable_count;
-			}
-			else
-				currentX+=width;
-		}
-	}
-	if(printable_count)
-	{
-		setGLProgram(shader_text.program);
-		select_texture(font_txid, ns_text::u_atlas);
-		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
-		glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
-		glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);			GL_CHECK();
-
-		glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
-		glDrawArrays(GL_QUADS, 0, printable_count<<2);	GL_CHECK();//draw the quads: 4 vertices per character quad
-		glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
-	}
-	if(final_x)
-		*final_x=(int)currentX;
-	if(final_y)
-		*final_y=(int)currentY;
-}
-#endif
 void				tabbar_draw_horizontal(int ty1, int ty2, int wy1, int wy2)
 {
 	if(h>ty2-ty1)
@@ -2579,7 +2209,7 @@ void				tabbar_draw_horizontal(int ty1, int ty2, int wy1, int wy2)
 			//	draw_rectangle_i(x0, x, ty1+dy, ty1+(dy<<1), colors_selection.hi);
 			//}
 			draw_rectangle_i(x-10, x-1, ty1, ty1+dy, k==current_file?colors_selection.hi:colors_text.hi);
-			draw_rectangle_i(x0, x-1, ty1+dy, ty1+(dy<<1), k==current_file?colors_selection.hi:colors_text.hi);
+			draw_rectangle_i(x0, x-1, ty1+dy, ty1+dy*2, k==current_file?colors_selection.hi:colors_text.hi);
 		}
 		window_editor.set(0, w, wy1, wy2);
 		set_region_immediate(0, w, wy1, wy2);
@@ -2618,7 +2248,7 @@ int					tab_drag_get_h_idx()//duplicate!, see tabbar_get_horizontal_idx
 }
 int					tab_drag_get_v_idx()
 {
-	return clamp(0, (tabbar_wpy+my+(dy>>1))/dy, tabbar_tabs.size());
+	return clamp(0.f, (tabbar_wpy+my+dy*2)/dy, (float)tabbar_tabs.size());
 }
 void				wnd_on_render()
 {
@@ -2627,8 +2257,8 @@ void				wnd_on_render()
 
 	switch(tabbar_position)
 	{
-	case TABBAR_TOP:	tabbar_draw_horizontal	(0,				dy<<1,		dy<<1,		h);				break;
-	case TABBAR_BOTTOM:	tabbar_draw_horizontal	(h-(dy<<1),		h,			0,			h-(dy<<1));		break;
+	case TABBAR_TOP:	tabbar_draw_horizontal	(0,				dy*2,		dy*2,		h);				break;
+	case TABBAR_BOTTOM:	tabbar_draw_horizontal	(h-dy*2,		h,			0,			h-dy*2);		break;
 	case TABBAR_LEFT:	tabbar_draw_sidebar		(0,				tabbar_dx,	tabbar_dx,	w);				break;
 	case TABBAR_RIGHT:	tabbar_draw_sidebar		(w-tabbar_dx,	w,			0,			w-tabbar_dx);	break;
 	}
@@ -2645,8 +2275,8 @@ void				wnd_on_render()
 		dimensions_known=true;
 		text_width=calc_text_cols(*text);
 	}
-	int dxpx=dx*font_zoom, dypx=dy*font_zoom;//non-tab character dimensions in pixels
-	int iw=text_width*dxpx, ih=text_get_nlines(*text)*dypx;//text dimensions in pixels
+	float dxpx=dx*font_zoom, dypx=dy*font_zoom;//non-tab character dimensions in pixels
+	float iw=text_width*dxpx, ih=text_get_nlines(*text)*dypx;//text dimensions in pixels
 	
 	//decide if need scrollbars
 	hscroll.decide(iw+scrollbarwidth>w);
@@ -2656,7 +2286,8 @@ void				wnd_on_render()
 	if(wnd_to_cursor)
 	{
 		wnd_to_cursor=false;
-		int xpad=dxpx<<1&-(w>(dxpx<<2)), ypad=dypx<<1&-(h>(dypx<<2));
+		int xpad=dxpx*2*(w>dxpx*4), ypad=dypx*2*(h>dypx*4);
+	//	int xpad=dxpx<<1&-(w>(dxpx<<2)), ypad=dypx<<1&-(h>(dypx<<2));
 		if(wpx>cpx-xpad)
 			wpx=cpx-xpad;
 		if(wpx<cpx-w+xpad+vscroll.dwidth)
@@ -2699,7 +2330,6 @@ void				wnd_on_render()
 		{
 			size_t len=0;
 			auto line=text_get_line(*text, kl, &len);
-			//auto &line=text->operator[](kl);
 			if(kl>=ry1&&kl<=ry2)
 			{
 				int idx=0;
@@ -2786,9 +2416,9 @@ void				wnd_on_render()
 					int xmarker=k?tabbar_tabs[k-1].right:0;
 					int my1, my2;
 					if(tabbar_position==TABBAR_TOP)
-						my1=(dy<<1)+1, my2=my1+marker_size, xtip=mx, ytip=my+20;
+						my1=dy*2+1, my2=my1+marker_size, xtip=mx, ytip=my+20;
 					else
-						my1=h-(dy<<1)-1, my2=my1-marker_size, xtip=mx, ytip=my-dy-20;
+						my1=h-dy*2-1, my2=my1-marker_size, xtip=mx, ytip=my-dy-20;
 					draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx-marker_size, my2, color_cursor);
 					draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx+marker_size, my2, color_cursor);
 				}
@@ -2981,10 +2611,10 @@ bool				wnd_on_mousewheel(bool mw_forward)
 		float dzoom=sdf_active?sdf_dzoom:2;
 		if(mw_forward)
 		{
-			if(font_zoom<32)
+			if(font_zoom<zoom_max)
 				font_zoom*=dzoom, wpx*=dzoom, wpy*=dzoom;
 		}
-		else if(font_zoom>1)
+		else if(font_zoom>zoom_min)
 			font_zoom/=dzoom, wpx/=dzoom, wpy/=dzoom;
 	}
 	else//scroll
@@ -2992,23 +2622,23 @@ bool				wnd_on_mousewheel(bool mw_forward)
 		switch(tabbar_position)
 		{
 		case TABBAR_TOP:
-			if(h>(dy<<1)&&(my<(dy<<1)||drag==DRAG_TAB)&&tabbar_tabs.back().right>w)
+			if(h>dy*2&&(my<dy*2||drag==DRAG_TAB)&&tabbar_tabs.back().right>w)
 			{
 				//int k=tabbar_get_horizontal_idx(1);//npp: skip one tab
 				if(mw_forward)//predictable
-					tabbar_wpx-=dx<<3;
+					tabbar_wpx-=dx*8;
 				else
-					tabbar_wpx+=dx<<3;
+					tabbar_wpx+=dx*8;
 				return true;
 			}
 			break;
 		case TABBAR_BOTTOM:
-			if(h>(dy<<1)&&(my>h-(dy<<1)||drag==DRAG_TAB)&&tabbar_tabs.back().right>w)
+			if(h>dy*2&&(my>h-dy*2||drag==DRAG_TAB)&&tabbar_tabs.back().right>w)
 			{
 				if(mw_forward)
-					tabbar_wpx-=dx<<3;
+					tabbar_wpx-=dx*8;
 				else
-					tabbar_wpx+=dx<<3;
+					tabbar_wpx+=dx*8;
 			}
 			break;
 		case TABBAR_LEFT:
@@ -3039,7 +2669,7 @@ bool				wnd_on_mousewheel(bool mw_forward)
 }
 bool				wnd_on_zoomin()
 {
-	if(font_zoom<32)
+	if(font_zoom<zoom_max)
 	{
 		float dzoom=sdf_active?sdf_dzoom:2;
 		font_zoom*=dzoom, wpx*=dzoom, wpy*=dzoom;
@@ -3049,13 +2679,18 @@ bool				wnd_on_zoomin()
 }
 bool				wnd_on_zoomout()
 {
-	if(font_zoom>1)
+	if(font_zoom>zoom_min)
 	{
 		float dzoom=sdf_active?sdf_dzoom:2;
 		font_zoom/=dzoom, wpx/=dzoom, wpy/=dzoom;
 		return true;
 	}
 	return false;
+}
+bool				wnd_on_reset_zoom()
+{
+	font_zoom=1;
+	return true;
 }
 bool				drag_selection_click(DragType drag_type)//checks if you clicked on the selection to drag it
 {
@@ -3167,9 +2802,9 @@ bool				wnd_on_lbuttondown(bool doubleclick)
 	switch(tabbar_position)
 	{
 	case TABBAR_TOP:
-		if(h>(dy<<1))
+		if(h>dy*2)
 		{
-			if(my<(dy<<1))
+			if(my<dy*2)
 			{
 				int k=tabbar_get_horizontal_idx(mx);
 				if(k!=-1)
@@ -3181,13 +2816,13 @@ bool				wnd_on_lbuttondown(bool doubleclick)
 				}
 				return false;
 			}
-			x1=0, x2=w, y1=dy<<1, y2=h;
+			x1=0, x2=w, y1=dy*2, y2=h;
 		}
 		break;
 	case TABBAR_BOTTOM:
-		if(h>(dy<<1))
+		if(h>dy*2)
 		{
-			if(my>h-(dy<<1))
+			if(my>h-dy*2)
 			{
 				int k=tabbar_get_horizontal_idx(mx);
 				if(k!=-1)
@@ -3199,7 +2834,7 @@ bool				wnd_on_lbuttondown(bool doubleclick)
 				}
 				return false;
 			}
-			x1=0, x2=w, y1=0, y2=h-(dy<<1);
+			x1=0, x2=w, y1=0, y2=h-dy*2;
 		}
 		break;
 	case TABBAR_LEFT:
@@ -3395,7 +3030,7 @@ bool				wnd_on_mbuttondown(bool doubleclick)
 	switch(tabbar_position)//close tab
 	{
 	case TABBAR_TOP:
-		if(h>(dy<<1)&&my<(dy<<1))
+		if(h>dy*2&&my<dy*2)
 		{
 			k=tabbar_get_horizontal_idx(mx);
 			if(k!=-1)
@@ -3407,7 +3042,7 @@ bool				wnd_on_mbuttondown(bool doubleclick)
 		}
 		break;
 	case TABBAR_BOTTOM:
-		if(h>(dy<<1)&&my>h-(dy<<1))
+		if(h>dy*2&&my>h-dy*2)
 		{
 			k=tabbar_get_horizontal_idx(mx);
 			if(k!=-1)
@@ -3461,20 +3096,35 @@ bool				wnd_on_toggle_profiler()
 }
 bool				wnd_on_toggle_renderer()
 {
-	if(sdf_active)
+	static short dx0=0, dy0=0;
+	if(sdf_available)
 	{
-		sdf_active=false;
+		sdf_active=!sdf_active;
+		if(sdf_active)
+		{
+			dx0=dx, dx=sdf_dx*16/sdf_dy;
+			dy0=dy, dy=16;
+			zoom_min=0.25, zoom_max=64;
+		}
+		else
+		{
+			dx=dx0;
+			dy=dy0;
+			if(font_zoom<1)
+				font_zoom=1;
+			else
+				font_zoom=1<<floor_log2((int)font_zoom);
+			zoom_min=1, zoom_max=32;
+		}
 		return true;
 	}
-	sdf_active=sdf_available;
-	return sdf_active;
+	return false;
 }
 bool				wnd_on_select_all()
 {
 	cur->selcur.setzero(), cur->cursor.setend(*text), cur->rectsel=false;
 	text_push_checkpoint(*text, cur, sizeof(*cur));
 	wnd_to_cursor=true;
-	//hist_cont=false;
 	return true;
 }
 bool				wnd_on_deselect()
@@ -3949,7 +3599,6 @@ bool				wnd_on_newtab()
 			{
 				TextFile f;
 				str2text(str.c_str(), str.size(), f.m_text, TEXT_NORMAL, &f.m_cur, sizeof(f.m_cur));
-				//hist_cont=false;
 				dimensions_known=false;
 				f.m_filename=file.filename;
 				int idx=file.tab_idx;
@@ -3986,7 +3635,6 @@ bool				wnd_on_open()
 		text2str(of.m_text, str);
 		if(open_text_file(filename2, str))
 		{
-			//hist_cont=false;
 			dimensions_known=false;
 			of.m_filename=filename2;
 			tabbar_calc_positions();

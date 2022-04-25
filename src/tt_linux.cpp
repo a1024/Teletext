@@ -439,6 +439,9 @@ int					main(int argc, char **argv)
 						case SDL_SCANCODE_W:		redraw|=wnd_on_closetab();				break;
 						case SDL_SCANCODE_Y:		redraw|=wnd_on_redo();					break;
 						case SDL_SCANCODE_Z:		redraw|=wnd_on_undo();					break;
+						case SDL_SCANCODE_0:case SDL_SCANCODE_KP_0:
+							redraw|=wnd_on_reset_zoom();
+							break;
 						}
 					}
 					else

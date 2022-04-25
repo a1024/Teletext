@@ -22,7 +22,8 @@ extern char			g_buf[G_BUF_SIZE];
 extern wchar_t		g_wbuf[G_BUF_SIZE];
 
 extern int			w, h;
-extern short		mx, my, start_mx, start_my, dx, dy;
+extern short		mx, my, start_mx, start_my;
+extern float		dx, dy;//non-tab character dimensions
 extern int			*rgb, rgbn;
 extern char			keyboard[256];
 extern int			font_idx, font_size;
@@ -345,6 +346,7 @@ bool				wnd_on_mousemove();
 bool				wnd_on_mousewheel(bool mw_forward);
 bool				wnd_on_zoomin();
 bool				wnd_on_zoomout();
+bool				wnd_on_reset_zoom();
 bool				wnd_on_lbuttondown(bool doubleclick);//left mouse button
 bool				wnd_on_lbuttonup();
 bool				wnd_on_mbuttondown(bool doubleclick);//middle mouse button

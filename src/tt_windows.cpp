@@ -826,6 +826,9 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 				case 'W':			redraw|=wnd_on_closetab();					break;
 				case 'Y':			redraw|=wnd_on_redo();						break;
 				case 'Z':			redraw|=wnd_on_undo();						break;
+				case '0':case VK_NUMPAD0:
+					redraw|=wnd_on_reset_zoom();
+					break;
 				}
 			}
 			else
