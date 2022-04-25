@@ -297,12 +297,20 @@ void				send_color_rgb(unsigned location, int color)
 	GL_CHECK();
 }
 void				send_vec3(unsigned location, const float *v){glUniform3fv(location, 1, v);}
+//void				send_float(unsigned location, float val){glUniform1f(location, val);}
 void				send_texture_pot(unsigned gl_texture, int *rgba, int txw, int txh)
 {
 	glBindTexture(GL_TEXTURE_2D, gl_texture);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, txw, txh, 0, GL_RGBA,  GL_UNSIGNED_BYTE, rgba);
+}
+void				send_texture_pot_linear(unsigned gl_texture, unsigned char *bmp, int txw, int txh)
+{
+	glBindTexture(GL_TEXTURE_2D, gl_texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, txw, txh, 0, GL_RED,  GL_UNSIGNED_BYTE, bmp);
 }
 void				select_texture(unsigned tx_id, int u_location)
 {

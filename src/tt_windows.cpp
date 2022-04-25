@@ -846,6 +846,7 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 					else
 						redraw|=wnd_on_toggle_profiler();
 					break;
+				case VK_F6:		redraw|=wnd_on_toggle_renderer();	break;
 				case VK_PRIOR:	redraw|=wnd_on_pageup();			break;
 				case VK_NEXT:	redraw|=wnd_on_pagedown();			break;
 				case VK_UP:		redraw|=wnd_on_cursor_up();			break;

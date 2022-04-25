@@ -32,7 +32,6 @@ TODO:
 - Config file
 - Save on write
 - Hex mode
-- Signed Depth Field rendering
 
 DONE:
 - Rectangular selection
@@ -43,3 +42,4 @@ DONE:
 - Indentation with tab/shift tab
 - Drag selection
 - Reimplement with vector<string>
+- Signed Depth Field rendering

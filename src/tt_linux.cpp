@@ -460,6 +460,7 @@ int					main(int argc, char **argv)
 							else
 								redraw|=wnd_on_toggle_profiler();
 							break;
+						case SDL_SCANCODE_F6:		redraw|=wnd_on_toggle_renderer();	break;
 						case SDL_SCANCODE_PAGEUP:	redraw|=wnd_on_pageup();			break;
 						case SDL_SCANCODE_PAGEDOWN:	redraw|=wnd_on_pagedown();			break;
 						case SDL_SCANCODE_UP:		redraw|=wnd_on_cursor_up();			break;

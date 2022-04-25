@@ -85,6 +85,10 @@ inline int			mod(int x, int n)
 	x+=n&-(x<0);
 	return x;
 }
+inline float		mod(float x, float n)
+{
+	return x-floor(x/n)*n;
+}
 inline int			floor_log2(unsigned n)
 {
 	int logn=0;
@@ -291,6 +295,7 @@ void				send_color(unsigned location, int color);
 void				send_color_rgb(unsigned location, int color);
 void				send_vec3(unsigned location, const float *v);
 void				send_texture_pot(unsigned gl_texture, int *rgb, int txw, int txh);
+void				send_texture_pot_linear(unsigned gl_texture, unsigned char *bmp, int txw, int txh);
 void				select_texture(unsigned tx_id, int u_location);
 void				set_region_immediate(int x1, int x2, int y1, int y2);
 void				resize_gl();
@@ -323,7 +328,7 @@ union				U64
 void				set_text_colors(U64 const &colors);
 int					calc_width		(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom);
 void				inv_calc_width	(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom, int width, int *out_cols, int *out_k);//returns index to fit [msg, msg+index[ in width
-int					print_line		(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom, int req_cols=-1, int *ret_idx=nullptr);
+float				print_line		(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom, int req_cols=-1, int *ret_idx=nullptr);
 int					print(short zoom, int tab_origin, int x, int y, const char *format, ...);
 void				tabbar_calc_positions();
 
@@ -349,6 +354,7 @@ bool				wnd_on_rbuttonup();
 
 bool				wnd_on_display_help();
 bool				wnd_on_toggle_profiler();
+bool				wnd_on_toggle_renderer();
 bool				wnd_on_select_all();
 bool				wnd_on_deselect();
 bool				wnd_on_begin_rectsel();

@@ -336,7 +336,7 @@ static void lines_add(Text *text, size_t l1, size_t l2)//not history-tracked
 {
 	size_t kl;
 	ASSERT_P(text->lines);
-	ASSERT_IDX(l1, l2);
+	ASSERT_IDX(l1, l2+1);
 	ASSERT_IDX(l1, text->nlines+1);
 	
 	if(l1<l2)
