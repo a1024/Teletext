@@ -399,12 +399,6 @@ void				set_text_colors(U64 const &colors)
 		send_color(ns_text::u_bkColor, colors.hi);
 	}
 }
-//void				set_sdftext_colors(U64 const &colors)//temporary measure
-//{
-//	setGLProgram(shader_sdftext.program);
-//	send_color(ns_text::u_txtColor, colors.lo);
-//	send_color(ns_text::u_bkColor, colors.hi);
-//}
 bool				col2idx(const char *text, int text_length, int tab0_cols, int idx0, int col0, float req_col, int *ret_idx, int *ret_col)//returns true when runs out of characters (OOB)
 {
 	bool line_too_short=true;
@@ -443,67 +437,6 @@ int					idx2col(const char *text, int text_length, int tab0_cols)
 	}
 	return col;
 }
-#if 0
-int					calc_width		(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom)
-{
-	if(msg_length<1)
-		return 0;
-	int msg_width=0, width, tab_width=tab_count*dx*zoom, w2=dx*zoom;
-	for(int k=0;k<msg_length;++k)
-	{
-		char c=msg[k];
-		if(c=='\t')
-			width=tab_width-mod(x+msg_width-tab_origin, tab_width), c=' ';
-		else if(c>=32&&c<0xFF)
-			width=w2;
-		else
-			width=0;
-		msg_width+=width;
-	}
-	return msg_width;
-}
-void				inv_calc_width	(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom, int width, int *out_cols, int *out_k)//returns index to fit [msg, msg+index[ in width
-{
-	if(msg_length<1)
-	{
-		if(out_cols)
-			*out_cols=0;
-		if(out_k)
-			*out_k=0;
-		return;
-	}
-	int msg_width=0, temp_width, printable_count=0, tab_width=tab_count*dx*zoom, dxpx=dx*zoom, k=0;
-	for(;k<msg_length;++k)
-	{
-		char c=msg[k];
-		if(c=='\n')
-			break;
-		if(c=='\t')
-			temp_width=tab_width-mod(x+msg_width-tab_origin, tab_width), c=' ';
-		else if(c>=32&&c<0xFF)
-			temp_width=dxpx;
-		else
-			temp_width=0;
-		if(temp_width)
-		{
-			int sum=msg_width+temp_width;
-			if(sum>width)
-				break;
-			if(sum==width)
-			{
-				++k;
-				break;
-			}
-			msg_width=sum;
-			++printable_count;
-		}
-	}
-	if(out_cols)
-		*out_cols=msg_width/dxpx;
-	if(out_k)
-		*out_k=k;
-}
-#endif
 float				print_line		(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom, int req_cols, int *ret_idx)
 {
 	if(msg_length<1)
@@ -522,7 +455,6 @@ float				print_line		(float x, float y, const char *msg, int msg_length, float t
 	get_current_region(rx1, ry1, rdx, rdy);
 	if(y+height<ry1||y>=ry1+rdy)//off-screen optimization
 		return idx2col(msg, msg_length, (int)(tab_origin/width))*zoom*sdf_dy/16.f;
-	//	return calc_width(x, y, msg, msg_length, tab_origin, zoom);
 	float CX1=2.f/rdx, CX0=CX1*(x-rx1)-1;//delta optimization
 	rect[1]=1-(y-ry1)*2.f/rdy;
 	rect[3]=1-(y+height-ry1)*2.f/rdy;
@@ -536,7 +468,8 @@ float				print_line		(float x, float y, const char *msg, int msg_length, float t
 			if(c>=32&&c<0xFF)
 				advance=width;
 			else if(c=='\t')
-				advance=tab_width-mod(x+cursor-tab_origin, tab_width), c=' ';
+				advance=width*(tab_count-mod((int)((cursor-tab_origin+1e-4)/width), tab_count)), c=' ';
+				//advance=tab_width-mod(x+cursor-tab_origin, tab_width), c=' ';//X  tab bounces on continuous zoom
 			else
 				advance=0;
 			if(advance)
@@ -1897,7 +1830,6 @@ int					tabbar_printname(int x, int y, int tab_idx, bool test=false, bool qualif
 	if(test)
 	{
 		msg_width=dx*idx2col(g_buf+!modified, printed+modified, 0);
-	//	msg_width=calc_width(x, y, g_buf+!modified, printed+modified, 0, 1);
 		if(pbuf)
 			*pbuf=g_buf+!modified;
 		if(len)
@@ -2049,7 +1981,6 @@ bool				wnd_on_init()
 	prof_add("Load font");
 
 	set_text_colors(colors_text);
-	//set_sdftext_colors(colors_text);
 
 	openfiles.push_back(TextFile());
 	current_file=0;
@@ -2067,9 +1998,7 @@ void				print_text(float tab_origin, float x0, float x, float y, Text const &tex
 	if(sdf_active)
 		zoom*=16.f/sdf_dy;
 	int idx, printable_count=0;
-	float
-		dxpx=(sdf_active?sdf_dx:dx)*zoom, dypx=(sdf_active?sdf_dy:dy)*zoom,
-		tab_width=tab_count*dxpx, advance;
+	float dxpx=(sdf_active?sdf_dx:dx)*zoom, dypx=(sdf_active?sdf_dy:dy)*zoom, advance;
 	int rx1=0, ry1=0, rdx=0, rdy=0;
 	get_current_region(rx1, ry1, rdx, rdy);
 	float
@@ -2119,7 +2048,8 @@ void				print_text(float tab_origin, float x0, float x, float y, Text const &tex
 		if(c>=32&&c<0xFF)
 			advance=dxpx;
 		else if(c=='\t')
-			advance=tab_width-mod(currentX-tab_origin, tab_width), c=' ';
+			advance=dxpx*(tab_count-mod((int)((currentX-tab_origin+1e-4)/dxpx), tab_count)), c=' ';
+			//advance=dxpx*tab_count-mod(currentX-tab_origin+1e-4, dxpx*tab_count), c=' ';//X  tab bounces on continuous zoom
 		else
 		{
 			if(c=='\n')
