@@ -364,12 +364,11 @@ bool				wnd_on_begin_rectsel();
 bool				wnd_on_type(char character);
 bool				wnd_on_deletechar();
 bool				wnd_on_backspace();
+bool				wnd_on_copy(bool cut);
+bool				wnd_on_paste();
 bool				wnd_on_undo();
 bool				wnd_on_redo();
 bool				wnd_on_clear_hist();
-
-bool				wnd_on_copy(bool cut);
-bool				wnd_on_paste();
 
 bool				wnd_on_scroll_up_key();
 bool				wnd_on_scroll_down_key();
