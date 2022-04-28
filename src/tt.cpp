@@ -18,7 +18,7 @@
 #define				STB_IMAGE_IMPLEMENTATION
 #include			"stb_image.h"//https://github.com/nothings/stb
 
-//	#define			DEBUG_CURSOR
+	#define			DEBUG_CURSOR
 //	#define			HELP_SHOWALL
 
 //on: rectsel target horizontally starts at mouse
@@ -356,13 +356,12 @@ void				draw_rectangle(float x1, float x2, float y1, float y2, int color)
 	glDisableVertexAttribArray(ns_2d::a_coords);GL_CHECK();
 }
 void				draw_rectangle_i(int x1, int x2, int y1, int y2, int color){draw_rectangle((float)x1, (float)x2, (float)y1, (float)y2, color);}
-void				draw_rectangle_hollow(int x1, int x2, int y1, int y2, int color)
+void				draw_rectangle_hollow(float x1, float x2, float y1, float y2, int color)
 {
-	toNDC((float)x1, (float)y1, g_fbuf[0], g_fbuf[1]);
-	toNDC((float)x1, (float)y2, g_fbuf[2], g_fbuf[3]);
-	toNDC((float)x2, (float)y2, g_fbuf[4], g_fbuf[5]);
-	toNDC((float)x2, (float)y1, g_fbuf[6], g_fbuf[7]);
-	//toNDC(x1, y1, g_fbuf[8], g_fbuf[9]);
+	toNDC(x1, y1, g_fbuf[0], g_fbuf[1]);
+	toNDC(x1, y2, g_fbuf[2], g_fbuf[3]);
+	toNDC(x2, y2, g_fbuf[4], g_fbuf[5]);
+	toNDC(x2, y1, g_fbuf[6], g_fbuf[7]);
 	setGLProgram(shader_2d.program);			GL_CHECK();
 	send_color(ns_2d::u_color, color);			GL_CHECK();
 	glEnableVertexAttribArray(ns_2d::a_coords);	GL_CHECK();
@@ -689,7 +688,7 @@ void				set_text_colors(U64 const &colors)
 	}
 }
 std::vector<float>	vrtx;
-float				print_line		(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom, int req_cols_delta, int *ret_idx)
+float				print_line		(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom, int req_cols, int *ret_idx, int *ret_cols)
 {
 	if(msg_length<1)
 		return 0;
@@ -697,22 +696,21 @@ float				print_line		(float x, float y, const char *msg, int msg_length, float t
 	QuadCoords *txc=nullptr, *atlas=sdf_active?sdf_glyph_coords:font_coords;
 	if(sdf_active)
 		zoom*=16.f/sdf_dy;
-	float
-		width=(sdf_active?sdf_dx:dx)*zoom, height=(sdf_active?sdf_dy:dy)*zoom,
-		tab_width=tab_count*width;
+	float width=(sdf_active?sdf_dx:dx)*zoom, height=(sdf_active?sdf_dy:dy)*zoom;
+		//tab_width=tab_count*width;
 	//float req_width=req_cols*width;
-	int tab_origin_cols=(int)(tab_origin/width), idx, printable_count=0, cursor_cols=0, advance_cols;
+	int tab_origin_cols=(int)(tab_origin/width), idx, printable_count=0, cursor_cols=ret_cols?*ret_cols:0, advance_cols;
 	int rx1=0, ry1=0, rdx=0, rdy=0;
 	get_current_region(rx1, ry1, rdx, rdy);
 	if(y+height<ry1||y>=ry1+rdy)//off-screen optimization
-		return idx2col(msg, msg_length, (int)(tab_origin/width))*zoom*sdf_dy/16.f;
+		return idx2col(msg, msg_length, (int)(tab_origin/width))*width;
 	float CX1=2.f/rdx, CX0=CX1*(x-rx1)-1;//delta optimization
 	rect[1]=1-(y-ry1)*2.f/rdy;
 	rect[3]=1-(y+height-ry1)*2.f/rdy;
 	vrtx.resize(msg_length<<4);//vx, vy, txx, txy		x4 vertices/char
 	int k=ret_idx?*ret_idx:0;
 	//int x_cols=int(x/width);//X
-	if(req_cols_delta<0||cursor_cols<req_cols_delta)
+	if(req_cols<0||cursor_cols<req_cols)
 	{
 		CX1*=width;
 		for(;k<msg_length;++k)
@@ -753,7 +751,7 @@ float				print_line		(float x, float y, const char *msg, int msg_length, float t
 				}
 				else
 					cursor_cols+=advance_cols;
-				if(req_cols_delta>=0&&cursor_cols>=req_cols_delta)
+				if(req_cols>=0&&cursor_cols>=req_cols)
 				{
 					++k;
 					break;
@@ -791,6 +789,8 @@ float				print_line		(float x, float y, const char *msg, int msg_length, float t
 	}
 	if(ret_idx)
 		*ret_idx=k;
+	if(ret_cols)
+		*ret_cols=cursor_cols;
 	return cursor_cols*width;
 }
 void				print_text(float tab_origin, float x0, float x, float y, Text const &text, Bookmark const &i, Bookmark const &f, float zoom, float *final_x=nullptr, float *final_y=nullptr)
@@ -922,58 +922,12 @@ void				print_text(float tab_origin, float x0, float x, float y, Text const &tex
 		*final_y=currentY;
 }
 #ifdef DEBUG_CURSOR
-int					debug_print_cols(int x, int y, short zoom, int req_cols, int den)
+float				debug_print_cols(float x, float y, float zoom, int req_cols, int den)
 {
-	float rect[4]={};
-	QuadCoords *txc=nullptr;
-	int msg_width=0, width, idx, printable_count=0, tab_width=tab_count*dx*zoom, w2=dx*zoom, height=dy*zoom, req_width=req_cols*dx*zoom;
-	vrtx.resize(req_cols<<4);//vx, vy, txx, txy		x4 vertices/char
-	int rx1=0, ry1=0, rdx=0, rdy=0;
-	get_current_region(rx1, ry1, rdx, rdy);
-	float CX1=2.f/rdx, CX0=CX1*(x-rx1)-1;
-	rect[1]=1-(y-ry1)*2.f/rdy;
-	rect[3]=1-(y+height-ry1)*2.f/rdy;
-	int k=0;
-	for(;;++k)
-	{
-		char c='0'+k/den%10;
-		width=w2;
-		if(x+msg_width+width>=0&&x+msg_width<w)//off-screen optimization
-		{
-			rect[0]=CX1*msg_width+CX0;//xn1
-			msg_width+=width;
-			rect[2]=CX1*msg_width+CX0;//xn2
-
-			idx=printable_count<<4;
-			txc=font_coords+c-32;
-			vrtx[idx   ]=rect[0], vrtx[idx+ 1]=rect[1],		vrtx[idx+ 2]=txc->x1, vrtx[idx+ 3]=txc->y1;//top left
-			vrtx[idx+ 4]=rect[0], vrtx[idx+ 5]=rect[3],		vrtx[idx+ 6]=txc->x1, vrtx[idx+ 7]=txc->y2;//bottom left
-			vrtx[idx+ 8]=rect[2], vrtx[idx+ 9]=rect[3],		vrtx[idx+10]=txc->x2, vrtx[idx+11]=txc->y2;//bottom right
-			vrtx[idx+12]=rect[2], vrtx[idx+13]=rect[1],		vrtx[idx+14]=txc->x2, vrtx[idx+15]=txc->y1;//top right
-
-			++printable_count;
-		}
-		else
-			msg_width+=width;
-		if(req_width>=0&&x+msg_width>=req_width)
-		{
-			++k;
-			break;
-		}
-	}
-	if(printable_count)
-	{
-		setGLProgram(shader_text.program);
-		select_texture(font_txid, ns_text::u_atlas);
-		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);									GL_CHECK();
-		glBufferData(GL_ARRAY_BUFFER, printable_count<<6, vrtx.data(), GL_STATIC_DRAW);	GL_CHECK();//set vertices & texcoords
-		glVertexAttribPointer(ns_text::a_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);			GL_CHECK();
-
-		glEnableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
-		glDrawArrays(GL_QUADS, 0, printable_count<<2);	GL_CHECK();//draw the quads: 4 vertices per character quad
-		glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
-	}
-	return msg_width;
+	for(int k=0;k<1000;++k)
+		g_buf[k]='0'+k/den%10;
+	g_buf[1000]='\0';
+	return print_line(x, y, g_buf, 1000, 0, zoom);
 }
 #endif
 
@@ -1463,10 +1417,11 @@ int					tabbar_dx=150,//sidebar width		TODO: resizable
 					tabbar_wpx=0, tabbar_wpy;//scroll position
 struct				TabPosition
 {
-	float right, idx;
+	float right;
+	int idx;
 	TabPosition():right(0), idx(0){}
-	TabPosition(float right, float idx):right(right), idx(idx){}
-	void set(float right, float idx){this->right=right, this->idx=idx;}
+	TabPosition(float right, int idx):right(right), idx(idx){}
+	void set(float right, int idx){this->right=right, this->idx=idx;}
 };
 std::vector<TabPosition> tabbar_tabs;//TODO: merge TabPosition with TextFile
 
@@ -1979,20 +1934,20 @@ void				tabbar_calc_positions()
 		auto &of=openfiles[k];
 		float x0=x;
 		x+=10+tabbar_printname(x, 0, k, true);
-		tabbar_tabs[k].set(x, (float)k);
+		tabbar_tabs[k].set(x, k);
 	}
 }
-void				bring_object_to_view(int &winpos, int winsize, int objstart, int objend)
+void				bring_object_to_view(int &winpos, int winsize, float objstart, float objend)
 {
 	if(winsize>objend-objstart)
 	{
 		if(winpos+winsize<objend)
-			winpos=objend-winsize;
+			winpos=(int)floor(objend-winsize);
 		if(winpos>objstart)
-			winpos=objstart;
+			winpos=(int)floor(objstart);
 	}
 	else
-		winpos=objstart;
+		winpos=(int)floor(objstart);
 }
 void				tabbar_scroll_to(int tab_idx)
 {
@@ -2003,7 +1958,7 @@ void				tabbar_scroll_to(int tab_idx)
 	case TABBAR_TOP:
 	case TABBAR_BOTTOM:
 		if(tabbar_tabs.back().right>w)
-			bring_object_to_view(tabbar_wpx, w, tab_idx?(int)tabbar_tabs[tab_idx-1].right:0, (int)tabbar_tabs[tab_idx].right);
+			bring_object_to_view(tabbar_wpx, w, tab_idx?tabbar_tabs[tab_idx-1].right:0, tabbar_tabs[tab_idx].right);
 		break;
 	case TABBAR_LEFT:
 	case TABBAR_RIGHT:
@@ -2067,7 +2022,7 @@ bool				wnd_on_init()
 		messagebox("Error", "Font texture not found.\nPlace a \'font.PNG\' file with the program.\n");
 		return false;
 	}
-	dx=rgb[0]&0xFF, dy=rgb[1]&0xFF;
+	dx=(float)(rgb[0]&0xFF), dy=(float)(rgb[1]&0xFF);
 	//dx=iw/8, dy=ih/16;
 	if(!dx||!dy)
 	{
@@ -2096,7 +2051,7 @@ bool				wnd_on_init()
 		memcpy(&header, bmp, sizeof(header));
 		sdf_dx=header.csize_x;
 		sdf_dy=header.csize_y;
-		sdf_slope=header.slope;
+		sdf_slope=(float)header.slope;
 		for(int c=32;c<127;++c)
 		{
 			auto rect=sdf_glyph_coords+c-32;
@@ -2125,69 +2080,70 @@ bool				wnd_on_init()
 	return true;
 }
 void				wnd_on_resize(){}
-void				tabbar_draw_horizontal(int ty1, int ty2, int wy1, int wy2)
+void				tabbar_draw_horizontal(float ty1, float ty2, float wy1, float wy2)
 {
 	if(h>ty2-ty1)
 	{
 		if(tabbar_wpx>tabbar_tabs.back().right-(w>>1))
-			tabbar_wpx=tabbar_tabs.back().right-(w>>1);
+			tabbar_wpx=(int)tabbar_tabs.back().right-(w>>1);
 		if(tabbar_wpx<0)
 			tabbar_wpx=0;
-		window_tabbar.set(0, w, ty1, ty2);
-		set_region_immediate(0, w, ty1, ty2);
+		window_tabbar.set(0, w, (short)ty1, (short)ty2);
+		set_region_immediate(0, w, (short)ty1, (short)ty2);
 		tabbar_printnames_init();
-		float x=-tabbar_wpx;
+		float x=-(float)tabbar_wpx;
 		for(int k=0;k<(int)openfiles.size();++k)
 		{
 			auto &of=openfiles[k];
 			float x0=x;
-			x+=10+tabbar_printname(x, ty1, k);
+			x+=10+tabbar_printname(x, (float)ty1, k);
 			//if(k==current_file)
 			//{
 			//	draw_rectangle(x-10, x, ty1, ty1+dy, colors_selection.hi);
 			//	draw_rectangle(x0, x, ty1+dy, ty1+(dy<<1), colors_selection.hi);
 			//}
-			draw_rectangle(x-10, x-1, ty1, ty1+dy, k==current_file?colors_selection.hi:colors_text.hi);
+			draw_rectangle(x-10, x-1, (float)ty1, ty1+dy, k==current_file?colors_selection.hi:colors_text.hi);
 			draw_rectangle(x0, x-1, ty1+dy, ty1+dy*2, k==current_file?colors_selection.hi:colors_text.hi);
 		}
-		window_editor.set(0, w, wy1, wy2);
-		set_region_immediate(0, w, wy1, wy2);
+		window_editor.set(0, w, (short)wy1, (short)wy2);
+		set_region_immediate(0, w, (short)wy1, (short)wy2);
 	}
 }
-void				tabbar_draw_sidebar(int tx1, int tx2, int wx1, int wx2)
+void				tabbar_draw_sidebar(float tx1, float tx2, float wx1, float wx2)
 {
 	if(w>tx2-tx1)
 	{
-		if(tabbar_wpy>(int)openfiles.size()*dy-(h>>1))
-			tabbar_wpy=openfiles.size()*dy-(h>>1);
+		int ylimit=(int)(openfiles.size()*dy)-(h>>1);
+		if(tabbar_wpy>ylimit)
+			tabbar_wpy=ylimit;
 		if(tabbar_wpy<0)
 			tabbar_wpy=0;
-		window_tabbar.set(tx1, tx2, 0, h);
-		set_region_immediate(tx1, tx2, 0, h);
+		window_tabbar.set((short)tx1, (short)tx2, 0, h);
+		set_region_immediate((short)tx1, (short)tx2, 0, h);
 		tabbar_printnames_init();
 		for(int k=0;k<(int)openfiles.size();++k)
 		{
 			auto of=openfiles[k];
-			tabbar_printname(tx1, k*dy-tabbar_wpy, k);
+			tabbar_printname((float)tx1, k*dy-tabbar_wpy, k);
 		}
-		window_editor.set(wx1, wx2, 0, h);
-		set_region_immediate(wx1, wx2, 0, h);
+		window_editor.set((short)wx1, (short)wx2, 0, h);
+		set_region_immediate((short)wx1, (short)wx2, 0, h);
 	}
 }
 int					tab_drag_get_h_idx()//duplicate!, see tabbar_get_horizontal_idx
 {
 	int k=0;
-	for(int left=0, right=0;k<(int)tabbar_tabs.size();++k)
+	for(float left=0, right=0;k<(int)tabbar_tabs.size();++k)
 	{
 		left=right, right=tabbar_tabs[k].right;
-		if(tabbar_wpx+mx<((left+right)>>1))
+		if(tabbar_wpx+mx<(left+right)*0.5f)
 			break;
 	}
 	return k;
 }
 int					tab_drag_get_v_idx()
 {
-	return clamp(0.f, (tabbar_wpy+my+dy*2)/dy, (float)tabbar_tabs.size());
+	return clamp(0, (int)((tabbar_wpy+my+dy*2)/dy), tabbar_tabs.size());
 }
 void				wnd_on_render()
 {
@@ -2196,10 +2152,10 @@ void				wnd_on_render()
 
 	switch(tabbar_position)
 	{
-	case TABBAR_TOP:	tabbar_draw_horizontal	(0,				dy*2,		dy*2,		h);				break;
-	case TABBAR_BOTTOM:	tabbar_draw_horizontal	(h-dy*2,		h,			0,			h-dy*2);		break;
-	case TABBAR_LEFT:	tabbar_draw_sidebar		(0,				tabbar_dx,	tabbar_dx,	w);				break;
-	case TABBAR_RIGHT:	tabbar_draw_sidebar		(w-tabbar_dx,	w,			0,			w-tabbar_dx);	break;
+	case TABBAR_TOP:	tabbar_draw_horizontal	(0,						dy*2,				dy*2,				(float)h);				break;
+	case TABBAR_BOTTOM:	tabbar_draw_horizontal	(h-dy*2,				(float)h,			0,					h-dy*2);				break;
+	case TABBAR_LEFT:	tabbar_draw_sidebar		(0,						(float)tabbar_dx,	(float)tabbar_dx,	(float)w);				break;
+	case TABBAR_RIGHT:	tabbar_draw_sidebar		((float)(w-tabbar_dx),	(float)w,			0,					(float)(w-tabbar_dx));	break;
 	}
 	prof_add("tab bar");
 	
@@ -2221,11 +2177,11 @@ void				wnd_on_render()
 	hscroll.decide(iw+scrollbarwidth>w);
 	vscroll.decide(ih+scrollbarwidth>h);
 
-	int cpx=x1+cur->cursor.col*dxpx, cpy=y1+cur->cursor.line*dypx, cpy2=y1+cur->selcur.line*dypx;//cursor position in pixels
+	int cpx=x1+(int)(cur->cursor.col*dxpx), cpy=y1+(int)(cur->cursor.line*dypx), cpy2=y1+(int)(cur->selcur.line*dypx);//cursor position in pixels
 	if(wnd_to_cursor)
 	{
 		wnd_to_cursor=false;
-		int xpad=dxpx*2*(w>dxpx*4), ypad=dypx*2*(h>dypx*4);
+		int xpad=(int)(dxpx*2*(w>dxpx*4)), ypad=(int)(dypx*2*(h>dypx*4));
 	//	int xpad=dxpx<<1&-(w>(dxpx<<2)), ypad=dypx<<1&-(h>(dypx<<2));
 		if(wpx>cpx-xpad)
 			wpx=cpx-xpad;
@@ -2241,7 +2197,7 @@ void				wnd_on_render()
 		if(wpx<0)
 			wpx=0;
 		if(wpx>iw-dxpx)
-			wpx=iw-dxpx;
+			wpx=(int)(iw-dxpx);
 	}
 	else
 		wpx=0;
@@ -2250,7 +2206,7 @@ void				wnd_on_render()
 		if(wpy<0)
 			wpy=0;
 		if(wpy>ih-dypx)
-			wpy=ih-dypx;
+			wpy=(int)(ih-dypx);
 	}
 	else
 		wpy=0;
@@ -2259,53 +2215,55 @@ void				wnd_on_render()
 	//vscroll.decide_orwith(!vscroll.dwidth&&vscroll.dwidth&&yend>=h-74-scrollbarwidth);
 	
 	size_t nlines=text_get_nlines(*text);
+	float tab_origin=(float)(x1-wpx);
 	if(cur->rectsel)//rectangular selection
 	{
 		int rx1, rx2, ry1, ry2;//rect coordinates in characters
 		cur->get_rectsel(ry1, ry2, rx1, rx2);
 		if(ry1==ry2)
-			draw_rectangle_i(x1, x2, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
-		for(int kl=0, x=x1, y=y1;kl<(int)nlines;++kl, y+=dypx)
+			draw_rectangle((float)x1, (float)x2, (float)(cpy-wpy), cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
+		float x=(float)x1, y=(float)y1;
+		for(int kl=0;kl<(int)nlines;++kl, y+=dypx)
 		{
 			size_t len=0;
 			auto line=text_get_line(*text, kl, &len);
 			if(kl>=ry1&&kl<=ry2)
 			{
-				int idx=0;
-				x+=print_line(x-wpx, y-wpy, line, len, x1-wpx, font_zoom, rx1, &idx);
+				int printed_idx=0, printed_cols=0;
+				x+=print_line(tab_origin, y-wpy, line, len, tab_origin, font_zoom, rx1, &printed_idx, &printed_cols);
 				set_text_colors(colors_selection);
-				x+=print_line(x-wpx, y-wpy, line, len, x1-wpx, font_zoom, rx2-rx1, &idx);
+				x+=print_line(tab_origin, y-wpy, line, len, tab_origin, font_zoom, rx2, &printed_idx, &printed_cols);
 				set_text_colors(colors_text);
-				print_line(x-wpx, y-wpy, line+idx, len-idx, x1-wpx, font_zoom);//[sic]
-				x=x1;
+				print_line(tab_origin, y-wpy, line, len, tab_origin, font_zoom, -1, &printed_idx, &printed_cols);
+				x=(float)x1;
 			}
 			else
-				print_line(x-wpx, y-wpy, line, len, x1-wpx, font_zoom);
+				print_line(tab_origin, y-wpy, line, len, tab_origin, font_zoom);
 		}
 		if(cpy<cpy2)//draw cursor
-			draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy2-wpy+dypx, color_cursor);
+			draw_line((float)(cpx-wpx), (float)(cpy-wpy), (float)(cpx-wpx), cpy2-wpy+dypx, color_cursor);
 		else
-			draw_line_i(cpx-wpx, cpy2-wpy, cpx-wpx, cpy-wpy+dypx, color_cursor);
+			draw_line((float)(cpx-wpx), (float)(cpy2-wpy), (float)(cpx-wpx), cpy-wpy+dypx, color_cursor);
 	}
 	else
 	{
-		draw_rectangle_i(x1, x2, cpy-wpy, cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
+		draw_rectangle((float)x1, (float)x2, (float)(cpy-wpy), cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
 		Bookmark i(0, 0, 0), f((int)nlines-1, (int)text_get_len(*text, nlines-1), 0);
 		if(cur->selection_exists())//normal selection
 		{
 			Bookmark sel_i, sel_f;
 			cur->get_selection(sel_i, sel_f);
 		
-			float x=x1-wpx, y=y1-wpy;
-			print_text(x1-wpx, x, x1-wpx, y, *text, i, sel_i, font_zoom, &x, &y);
+			float x=tab_origin, y=(float)(y1-wpy);
+			print_text(tab_origin, x, tab_origin, y, *text, i, sel_i, font_zoom, &x, &y);
 			set_text_colors(colors_selection);
-			print_text(x1-wpx, x, x1-wpx, y, *text, sel_i, sel_f, font_zoom, &x, &y);
+			print_text(tab_origin, x, tab_origin, y, *text, sel_i, sel_f, font_zoom, &x, &y);
 			set_text_colors(colors_text);
-			print_text(x1-wpx, x, x1-wpx, y, *text, sel_f, f, font_zoom, &x, &y);
+			print_text(tab_origin, x, tab_origin, y, *text, sel_f, f, font_zoom, &x, &y);
 		}
 		else//no selection
-			print_text(x1-wpx, x1-wpx, x1-wpx, y1-wpy, *text, i, f, font_zoom);
-		draw_line_i(cpx-wpx, cpy-wpy, cpx-wpx, cpy-wpy+dypx, color_cursor);//draw cursor
+			print_text(tab_origin, tab_origin, tab_origin, (float)(y1-wpy), *text, i, f, font_zoom);
+		draw_line((float)(cpx-wpx), (float)(cpy-wpy), (float)(cpx-wpx), cpy-wpy+dypx, color_cursor);//draw cursor
 	}
 	prof_add("text");
 
@@ -2319,64 +2277,64 @@ void				wnd_on_render()
 		draw_rectangle_i(x1, x1+scrollbarwidth, y2-scrollbarwidth, y2, color_button);//left
 		draw_rectangle_i(x2-scrollbarwidth-vsbw, x2-vsbw, y2-scrollbarwidth, y2, color_button);//right
 		if(drag==DRAG_HSCROLL)
-			scrollbar_scroll(wpx, iw, x2-x1-vsbw, x2-x1-(scrollbarwidth<<1)-vsbw, hscroll.s0, hscroll.m_start, mx, font_zoom, hscroll.start, hscroll.size);
+			scrollbar_scroll(wpx, (int)iw, x2-x1-vsbw, x2-x1-(scrollbarwidth<<1)-vsbw, hscroll.s0, hscroll.m_start, mx, font_zoom, hscroll.start, hscroll.size);
 		else
-			scrollbar_slider(wpx, iw, x2-x1-vsbw, x2-x1-(scrollbarwidth<<1)-vsbw, font_zoom, hscroll.start, hscroll.size);
+			scrollbar_slider(wpx, (int)iw, x2-x1-vsbw, x2-x1-(scrollbarwidth<<1)-vsbw, font_zoom, hscroll.start, hscroll.size);
 		draw_rectangle_i(x1+scrollbarwidth+hscroll.start, x1+scrollbarwidth+hscroll.start+hscroll.size, y2-scrollbarwidth, y2, color_slider);//horizontal slider
 		y2-=scrollbarwidth;
 	}
 	if(vscroll.dwidth)
 	{
-		draw_vscrollbar(x2-scrollbarwidth, scrollbarwidth, y1, y2, wpy, ih, vscroll.s0, vscroll.m_start, font_zoom, vscroll.start, vscroll.size, DRAG_VSCROLL);
+		draw_vscrollbar(x2-scrollbarwidth, scrollbarwidth, y1, y2, wpy, (int)ih, vscroll.s0, vscroll.m_start, font_zoom, vscroll.start, vscroll.size, DRAG_VSCROLL);
 		x2-=scrollbarwidth;
 	}
 	prof_add("scrollbars");
 
 	set_region_immediate(0, w, 0, h);
 #ifdef DEBUG_CURSOR
-	debug_print_cols(x1-wpx, y1-(dypx<<1), font_zoom, w/dxpx, 10);//
-	debug_print_cols(x1-wpx, y1-dypx, font_zoom, w/dxpx, 1);//
+	debug_print_cols((float)(x1-wpx), y1-dypx*2, font_zoom, (int)(w/dxpx)+1, 10);//
+	debug_print_cols((float)(x1-wpx), y1-dypx, font_zoom, (int)(w/dxpx)+1, 1);//
 #endif
 	switch(drag)
 	{
 	case DRAG_TAB:
 		{
 			int marker_size=10;
-			int xtip=0, ytip=0;
+			float xtip=0, ytip=0;
 			const char *buf=nullptr;
 			int len=0;
-			int msg_width=tabbar_printname(0, 0, drag_tab_idx, true, true, &buf, &len);
+			float msg_width=tabbar_printname(0, 0, drag_tab_idx, true, true, &buf, &len);
 			switch(tabbar_position)
 			{
 			case TABBAR_TOP:
 			case TABBAR_BOTTOM:
 				{
 					int k=tab_drag_get_h_idx();
-					int xmarker=k?tabbar_tabs[k-1].right:0;
-					int my1, my2;
+					float xmarker=k?tabbar_tabs[k-1].right:0;
+					float my1, my2;
 					if(tabbar_position==TABBAR_TOP)
-						my1=dy*2+1, my2=my1+marker_size, xtip=mx, ytip=my+20;
+						my1=dy*2+1, my2=my1+marker_size, xtip=mx, ytip=(float)(my+20);
 					else
-						my1=h-dy*2-1, my2=my1-marker_size, xtip=mx, ytip=my-dy-20;
-					draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx-marker_size, my2, color_cursor);
-					draw_line_i(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx+marker_size, my2, color_cursor);
+						my1=h-dy*2-1, my2=my1-marker_size, xtip=mx, ytip=(float)(my-dy-20);
+					draw_line(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx-marker_size, my2, color_cursor);
+					draw_line(xmarker-tabbar_wpx, my1, xmarker-tabbar_wpx+marker_size, my2, color_cursor);
 				}
 				break;
 			case TABBAR_LEFT:
 			case TABBAR_RIGHT:
 				{
-					int ymarker=tab_drag_get_v_idx()*dy;
-					int mx1, mx2;
+					float ymarker=tab_drag_get_v_idx()*dy;
+					float mx1, mx2;
 					if(tabbar_position==TABBAR_LEFT)
-						mx1=tabbar_dx+1, mx2=mx1+marker_size, xtip=mx+20, ytip=my;
+						mx1=(float)(tabbar_dx+1), mx2=mx1+marker_size, xtip=(float)(mx+20), ytip=my;
 					else
-						mx1=w-tabbar_dx-1, mx2=mx1-marker_size, xtip=mx-msg_width-20, ytip=my;
-					draw_line_i(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy-marker_size, color_cursor);
-					draw_line_i(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy+marker_size, color_cursor);
+						mx1=(float)(w-tabbar_dx-1), mx2=mx1-marker_size, xtip=(float)(mx-msg_width-20), ytip=my;
+					draw_line(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy-marker_size, color_cursor);
+					draw_line(mx1, ymarker-tabbar_wpy, mx2, ymarker-tabbar_wpy+marker_size, color_cursor);
 				}
 				break;
 			}
-			draw_rectangle_i(xtip, xtip+msg_width+4, ytip, ytip+dy+4, 0x40FFFFFF);
+			draw_rectangle((float)xtip, xtip+msg_width+4, (float)ytip, ytip+dy+4, 0x40FFFFFF);
 			set_text_colors(colors_selection);
 			print_line(xtip+2, ytip+2, buf, len, 0, 1);
 			set_text_colors(colors_text);
@@ -2401,16 +2359,16 @@ void				wnd_on_render()
 					r.x2-=r.x1, r.x1=0;
 				if(r.y1<0)
 					r.y2-=r.y1, r.y1=0;
-				int Lx=x1+r.x1*dxpx-wpx, Ty=y1+r.y1*dypx-wpy,
+				float
+					Lx=x1+r.x1*dxpx-wpx, Ty=y1+r.y1*dypx-wpy,
 					Rx=x1+r.x2*dxpx-wpx, By=y1+r.y2*dypx-wpy;
 				draw_rectangle_hollow(Lx, Rx, Ty, By, 0xFF808080);
-				draw_line_i(Lx, Ty, Lx, By, color_cursor);
+				draw_line(Lx, Ty, Lx, By, color_cursor);
 			}
 			else
 			{
-				int dstpx=x1+cur->cursor.col*dxpx-wpx,
-					dstpy=y1+cur->cursor.line*dypx-wpy;
-				draw_line_i(dstpx, dstpy, dstpx, dstpy+dypx, color_cursor);
+				float dstpx=x1+cur->cursor.col*dxpx-wpx, dstpy=y1+cur->cursor.line*dypx-wpy;
+				draw_line(dstpx, dstpy, dstpx, dstpy+dypx, color_cursor);
 			}
 		}
 		break;
@@ -2442,12 +2400,12 @@ void				wnd_on_render()
 	print_sdf_line(x0, y0+font_height*5, "pqrstuvwxyz{|}~", 16, 0, sdf_zoom);
 #endif
 
-	//print(1, 0, 0, 0, "Hello. Sample Text. What\'s going on???");
 	//for(int k=0;k<1000;++k)
 	//{
 	//	int zoom=1+rand()%3;
 	//	print(zoom, 0, rand()%w, rand()%h, "Sample Text %d", zoom);
 	//}
+	//print(1, 0, 0, 0, "Hello. Sample Text. What\'s going on???");
 	//prof_add("Benchmark");
 
 	//memset(rgb, 0, rgbn*sizeof(int));
@@ -2558,10 +2516,10 @@ bool				wnd_on_mousewheel(bool mw_forward)
 		if(mw_forward)
 		{
 			if(font_zoom<zoom_max)
-				font_zoom*=dzoom, wpx*=dzoom, wpy*=dzoom;
+				font_zoom*=dzoom, wpx=(int)(wpx*dzoom), wpy=(int)(wpy*dzoom);
 		}
 		else if(font_zoom>zoom_min)
-			font_zoom/=dzoom, wpx/=dzoom, wpy/=dzoom;
+			font_zoom/=dzoom, wpx=(int)(wpx/dzoom), wpy=(int)(wpy/dzoom);
 	}
 	else//scroll
 	{
@@ -2572,9 +2530,9 @@ bool				wnd_on_mousewheel(bool mw_forward)
 			{
 				//int k=tabbar_get_horizontal_idx(1);//npp: skip one tab
 				if(mw_forward)//predictable
-					tabbar_wpx-=dx*8;
+					tabbar_wpx=(int)(tabbar_wpx-dx*8);
 				else
-					tabbar_wpx+=dx*8;
+					tabbar_wpx=(int)(tabbar_wpx+dx*8);
 				return true;
 			}
 			break;
@@ -2582,34 +2540,34 @@ bool				wnd_on_mousewheel(bool mw_forward)
 			if(h>dy*2&&(my>h-dy*2||drag==DRAG_TAB)&&tabbar_tabs.back().right>w)
 			{
 				if(mw_forward)
-					tabbar_wpx-=dx*8;
+					tabbar_wpx=(int)(tabbar_wpx-dx*8);
 				else
-					tabbar_wpx+=dx*8;
+					tabbar_wpx=(int)(tabbar_wpx+dx*8);
 			}
 			break;
 		case TABBAR_LEFT:
 			if(w>tabbar_dx&&(mx<tabbar_dx||drag==DRAG_TAB)&&(int)openfiles.size()*dy>h)
 			{
 				if(mw_forward)
-					tabbar_wpy-=dy*3;
+					tabbar_wpy=(int)(tabbar_wpy-dy*3);
 				else
-					tabbar_wpy+=dy*3;
+					tabbar_wpy=(int)(tabbar_wpy+dy*3);
 			}
 			break;
 		case TABBAR_RIGHT:
 			if(w>tabbar_dx&&(mx>w-tabbar_dx||drag==DRAG_TAB)&&(int)openfiles.size()*dy>h)
 			{
 				if(mw_forward)
-					tabbar_wpy-=dy*3;
+					tabbar_wpy=(int)(tabbar_wpy-dy*3);
 				else
-					tabbar_wpy+=dy*3;
+					tabbar_wpy=(int)(tabbar_wpy+dy*3);
 			}
 			break;
 		}
 		if(mw_forward)
-			wpy-=dy*font_zoom*3;
+			wpy=(int)(wpy-dy*font_zoom*3);
 		else
-			wpy+=dy*font_zoom*3;
+			wpy=(int)(wpy+dy*font_zoom*3);
 	}
 	return true;
 }
@@ -2618,7 +2576,7 @@ bool				wnd_on_zoomin()
 	if(font_zoom<zoom_max)
 	{
 		float dzoom=sdf_active?sdf_dzoom:2;
-		font_zoom*=dzoom, wpx*=dzoom, wpy*=dzoom;
+		font_zoom*=dzoom, wpx=(int)(wpx*dzoom), wpy=(int)(wpy*dzoom);
 		return true;
 	}
 	return false;
@@ -2628,14 +2586,14 @@ bool				wnd_on_zoomout()
 	if(font_zoom>zoom_min)
 	{
 		float dzoom=sdf_active?sdf_dzoom:2;
-		font_zoom/=dzoom, wpx/=dzoom, wpy/=dzoom;
+		font_zoom/=dzoom, wpx=(int)(wpx/dzoom), wpy=(int)(wpy/dzoom);
 		return true;
 	}
 	return false;
 }
 bool				wnd_on_reset_zoom()
 {
-	wpx/=font_zoom, wpy/=font_zoom, font_zoom=1;
+	wpx=(int)(wpx/font_zoom), wpy=(int)(wpy/font_zoom), font_zoom=1;
 	return true;
 }
 bool				drag_selection_click(DragType drag_type)//checks if you clicked on the selection to drag it
@@ -2765,7 +2723,7 @@ bool				wnd_on_lbuttondown(bool doubleclick)
 				}
 				return false;
 			}
-			x1=0, x2=w, y1=dy*2, y2=h;
+			x1=0, x2=w, y1=(int)(dy*2), y2=h;
 		}
 		break;
 	case TABBAR_BOTTOM:
@@ -2783,7 +2741,7 @@ bool				wnd_on_lbuttondown(bool doubleclick)
 				}
 				return false;
 			}
-			x1=0, x2=w, y1=0, y2=h-dy*2;
+			x1=0, x2=w, y1=0, y2=(int)(h-dy*2);
 		}
 		break;
 	case TABBAR_LEFT:
@@ -3048,7 +3006,7 @@ bool				wnd_on_toggle_profiler()
 }
 bool				wnd_on_toggle_renderer()
 {
-	static short dx0=0, dy0=0;
+	static float dx0=0, dy0=0;
 	if(sdf_available)
 	{
 		sdf_active=!sdf_active;
@@ -3065,7 +3023,7 @@ bool				wnd_on_toggle_renderer()
 			if(font_zoom<1)
 				font_zoom=1;
 			else
-				font_zoom=1<<floor_log2((int)font_zoom);
+				font_zoom=(float)(1<<floor_log2((int)font_zoom));
 			zoom_min=1, zoom_max=32;
 		}
 		return true;
@@ -3084,6 +3042,7 @@ bool				wnd_on_select_all()
 }
 bool				wnd_on_deselect()
 {
+	drag=DRAG_NONE;
 	cur->selcur=cur->cursor, cur->rectsel=false;
 	text_action_end(*text);
 	text_push_checkpoint(*text, ACT_RELOCATE_CURSOR, cur, sizeof(*cur));
@@ -3387,30 +3346,30 @@ bool				wnd_on_clear_hist()
 
 bool				wnd_on_scroll_up_key()
 {
-	wpy-=dy*font_zoom;
+	wpy=(int)(wpy-dy*font_zoom);
 	return true;
 }
 bool				wnd_on_scroll_down_key()
 {
-	wpy+=dy*font_zoom;
+	wpy=(int)(wpy+dy*font_zoom);
 	return true;
 }
 bool				wnd_on_pageup()
 {
-	int fontH=dy*font_zoom;
-	int delta=h-fontH*3;
+	float fontH=dy*font_zoom;//
+	float delta=h-fontH*4;
 	if(delta<fontH)
 		delta=fontH;
-	wpy-=delta;
+	wpy=(int)(wpy-delta);
 	return true;
 }
 bool				wnd_on_pagedown()
 {
-	int fontH=dy*font_zoom;
-	int delta=h-fontH*3;
+	float fontH=dy*font_zoom;//
+	float delta=h-fontH*3;
 	if(delta<fontH)
 		delta=fontH;
-	wpy+=delta;
+	wpy=(int)(wpy+delta);
 	return true;
 }
 bool				wnd_on_cursor_up()

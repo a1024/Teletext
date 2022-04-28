@@ -111,15 +111,25 @@ inline char			maximum(char x1, char x2, char x3, char x4, char x5, char x6)
 }
 inline int			clamp(int lo, int x, int hi)
 {
-	hi<<=1;
-	int temp=x+lo+abs(x-lo);
-	return (temp+hi-abs(temp-hi))>>2;
+	if(x<lo)
+		x=lo;
+	if(x>hi)
+		x=hi;
+	return x;
+	//hi<<=1;
+	//int temp=x+lo+abs(x-lo);
+	//return (temp+hi-abs(temp-hi))>>2;
 }
 inline float		clamp(float lo, float x, float hi)
 {
-	hi+=hi;
-	float temp=x+lo+abs(x-lo);
-	return (temp+hi-abs(temp-hi))*0.25f;
+	if(x<lo)
+		x=lo;
+	if(x>hi)
+		x=hi;
+	return x;
+	//hi+=hi;
+	//float temp=x+lo+abs(x-lo);
+	//return (temp+hi-abs(temp-hi))*0.25f;
 }
 #endif
 
@@ -329,7 +339,7 @@ union				U64
 void				set_text_colors(U64 const &colors);
 int					calc_width		(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom);
 void				inv_calc_width	(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom, int width, int *out_cols, int *out_k);//returns index to fit [msg, msg+index[ in width
-float				print_line		(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom, int req_cols=-1, int *ret_idx=nullptr);
+float				print_line		(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom, int req_cols=-1, int *ret_idx=nullptr, int *ret_cols=nullptr);//returns cols printed
 int					print(short zoom, int tab_origin, int x, int y, const char *format, ...);
 void				tabbar_calc_positions();
 
