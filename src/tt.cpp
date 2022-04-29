@@ -18,7 +18,7 @@
 #define				STB_IMAGE_IMPLEMENTATION
 #include			"stb_image.h"//https://github.com/nothings/stb
 
-	#define			DEBUG_CURSOR
+//	#define			DEBUG_CURSOR
 //	#define			HELP_SHOWALL
 
 //on: rectsel target horizontally starts at mouse
@@ -1986,8 +1986,6 @@ void				general_selection_erase(ActionType action)
 				if(colstart>cur->selcur.col)
 					colstart=cur->selcur.col;
 				cur->selcur.col=cur->cursor.col=colstart;
-				cur->cursor.update_idx(*text);
-				cur->selcur.update_idx(*text);
 			}
 			else
 				cur->selcur.col=cur->cursor.col;
