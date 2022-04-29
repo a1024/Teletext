@@ -28,23 +28,23 @@ b4, b5:	(x, y) character dimensions
 
 TODO:
 - Syntax highlighting for C/C++
+- Bracket matching: green: matched, red: unmatched
+- Region folding
+- Tab & space character marks
+- Non-printable characters & extended ASCII
 - Text wrap
 - Find & replace
 - Go to line number
-- Change case
-- Tab & space character marks
-- Non-printable characters & extended ASCII
 - Line operations: sort lines, ...etc
-- Bracket matching: green: matched, red: unmatched
 - Split view
 - Compare files
 - Status bar
 - Go to previous/next cursor location
-- Region folding
-- State file
-- Config file
+- State file to save session
+- Config file to save settings
 - Save on write
 - Hex mode
+- Change tracking
 
 DONE:
 - Rectangular selection
@@ -55,4 +55,6 @@ DONE:
 - Indentation with tab/shift tab
 - Drag selection
 - Reimplement with vector<string>
+- Reimplement text history in C
 - Signed Depth Field rendering
+- Change case
