@@ -345,7 +345,7 @@ void				hist_undo();//ctrl z
 void				hist_redo();//ctrl y
 
 void				wnd_on_create();
-bool				wnd_on_init();//return false for EXIT_FAILURE
+bool				wnd_on_init(int argc, char **argv);//program name is excluded, return false for EXIT_FAILURE
 void				wnd_on_resize();
 void				wnd_on_render();
 
@@ -374,6 +374,8 @@ bool				wnd_on_deletechar();
 bool				wnd_on_backspace();
 bool				wnd_on_copy(bool cut);
 bool				wnd_on_paste();
+bool				wnd_on_setcase(bool upper);
+
 bool				wnd_on_undo();
 bool				wnd_on_redo();
 bool				wnd_on_clear_hist();

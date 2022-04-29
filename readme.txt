@@ -27,13 +27,15 @@ b4, b5:	(x, y) character dimensions
 
 
 TODO:
+- Cursor should remember column value when changing line
 - Syntax highlighting for C/C++
-- Bracket matching: green: matched, red: unmatched
+- Bracket matching - green: matched, red: unmatched
 - Region folding
+- Find & replace
 - Tab & space character marks
 - Non-printable characters & extended ASCII
 - Text wrap
-- Find & replace
+- Toggle display line numbers
 - Go to line number
 - Line operations: sort lines, ...etc
 - Split view
@@ -54,7 +56,7 @@ DONE:
 - Drag tab to reorder
 - Indentation with tab/shift tab
 - Drag selection
-- Reimplement with vector<string>
-- Reimplement text history in C
+- Reimplement text as vector<string>
+- Reimplement text history
 - Signed Depth Field rendering
 - Change case

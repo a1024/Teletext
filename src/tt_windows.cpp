@@ -1,4 +1,4 @@
-//tt_system.cpp - Windows-dependent code
+//tt_system.cpp - Windows entry point and event handler
 //Copyright (C) 2021 Ayman Wagih
 //
 //This program is free software: you can redistribute it and/or modify
@@ -820,8 +820,9 @@ long				__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long 
 				case 'N':			redraw|=wnd_on_newtab();					break;
 				case 'O':			redraw|=wnd_on_open();						break;
 				case 'R':			redraw|=wnd_on_barorient();					break;
-				case 'S':			redraw|=wnd_on_save(keyboard[VK_SHIFT]!=0);	break;
+				case 'S':			redraw|=wnd_on_save(is_shift_down());		break;
 				case 'T':			redraw|=wnd_on_newtab();					break;
+				case 'U':			redraw|=wnd_on_setcase(is_shift_down());	break;
 				case 'V':			redraw|=wnd_on_paste();						break;
 				case 'W':			redraw|=wnd_on_closetab();					break;
 				case 'Y':			redraw|=wnd_on_redo();						break;
@@ -1009,12 +1010,13 @@ int					__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, ch
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);	GL_CHECK();
 		prof_add("enable blend");
 
-		if(!wnd_on_init())
-			return EXIT_FAILURE;
-
 		keyboard[VK_CONTROL]=is_ctrl_down();
 		keyboard[VK_SHIFT]=is_shift_down();
 		keyboard[VK_MENU]=is_alt_down();
+
+		if(!wnd_on_init(__argc-1, __argv+1))
+			return EXIT_FAILURE;
+
 
 	ShowWindow(ghWnd, nCmdShow);
 	

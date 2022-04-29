@@ -26,6 +26,7 @@ typedef enum ActionTypeEnum//must be in this order
 	ACT_MOVE_SELECTION,
 	ACT_CUT,
 	ACT_PASTE,
+	ACT_CHANGE_CASE,
 
 	ACT_COUNT,
 } ActionType;

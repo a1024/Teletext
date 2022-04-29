@@ -18,7 +18,7 @@
 #define				STB_IMAGE_IMPLEMENTATION
 #include			"stb_image.h"//https://github.com/nothings/stb
 
-//	#define			DEBUG_CURSOR
+	#define			DEBUG_CURSOR
 //	#define			HELP_SHOWALL
 
 //on: rectsel target horizontally starts at mouse
@@ -39,7 +39,7 @@ std::string			exe_dir;
 
 void				display_help()
 {
-#ifdef __linux__
+#ifdef __linux__//spaces for monospace font (SDL messagebox doesn't print tabs)
 	messagebox("Controls",
 		"Ctrl+O:         Open\n"//TODO: config file
 		"Ctrl+S:         Save\n"
@@ -47,6 +47,8 @@ void				display_help()
 		"Ctrl+Z/Y:       Undo/Redo\n"
 		"Ctrl+D:         Clear undo/redo history\n"
 		"Ctrl+X/C/V:     Cut/Copy/Paste\n"
+		"Ctrl+U:         To lower case\n"
+		"Ctrl+Shift+U:   To upper case\n"
 		"\n"
 		"Ctrl+N/T:       New tab\n"
 		"Ctrl+W:         Close tab\n"
@@ -58,8 +60,7 @@ void				display_help()
 		"Ctrl+Up/Down:           Scroll\n"
 		"Ctrl+Left/Right:        Skip word\n"
 #ifdef HELP_SHOWALL
-		"Alt+Left:               Previous location\n"
-		"Alt+Right:              Next location\n"
+		"Alt+Left/Right:         Previous/Next location\n"
 		"Ctrl+F:                 Find/Replace\n"
 		"F3:                     Find next\n"
 #endif
@@ -81,7 +82,7 @@ void				display_help()
 		"\n"
 		"OpenGL %s\n"
 		"Build: %s %s", GLversion, __DATE__, __TIME__);
-#else
+#else//tabs for proportional font
 	messagebox("Controls",
 		"Ctrl+O:\t\tOpen\n"//TODO: config file
 		"Ctrl+S:\t\tSave\n"
@@ -89,6 +90,8 @@ void				display_help()
 		"Ctrl+Z/Y:\t\tUndo/Redo\n"
 		"Ctrl+D:\t\tClear undo/redo history\n"
 		"Ctrl+X/C/V:\tCut/Copy/Paste\n"
+		"Ctrl+U:\t\tTo lower case\n"
+		"Ctrl+Shift+U:\tTo upper case\n"
 		"\n"
 		"Ctrl+N/T:\t\tNew tab\n"
 		"Ctrl+W:\t\tClose tab\n"
@@ -700,7 +703,8 @@ float				print_line(float x, float y, const char *msg, int msg_length, float tab
 	int rx1=0, ry1=0, rdx=0, rdy=0;
 	get_current_region(rx1, ry1, rdx, rdy);
 	if(y+height<ry1||y>=ry1+rdy)//off-screen optimization
-		return idx2col(msg, msg_length, (int)(tab_origin/width))*width;
+		return 0;//no need to do anything, this line is outside the screen
+	//	return idx2col(msg, msg_length, (int)(tab_origin/width))*width;
 	float CX1=2.f/rdx, CX0=CX1*(x-rx1)-1;//delta optimization
 	rect[1]=1-(y-ry1)*2.f/rdy;
 	rect[3]=1-(y+height-ry1)*2.f/rdy;
@@ -787,87 +791,67 @@ float				print_line(float x, float y, const char *msg, int msg_length, float tab
 		*ret_cols=cursor_cols;
 	return cursor_cols*width;
 }
-void				print_text(float tab_origin, float x0, float x, float y, Text const &text, Bookmark const &i, Bookmark const &f, float zoom, float *final_x=nullptr, float *final_y=nullptr)
+void				print_text(float tab_origin, float x, float y, Text const &text, Bookmark const &i, Bookmark const &f, float zoom, int *line=nullptr, int *col=nullptr)//returns vertical advance in pixels
 {
 	if(i>=f)
 		return;
-	float ndc[4]={};//x1, x2, y1, y2
+	float ndc[4];//x1, x2, y1, y2
 	QuadCoords *txc=nullptr, *atlas=sdf_active?sdf_glyph_coords:font_coords;
 	if(sdf_active)
 		zoom*=16.f/sdf_dy;
-	int idx, printable_count=0;
-	float dxpx=(sdf_active?sdf_dx:dx)*zoom, dypx=(sdf_active?sdf_dy:dy)*zoom, advance;
+	float width=(sdf_active?sdf_dx:dx)*zoom, height=(sdf_active?sdf_dy:dy)*zoom;
+	int tab_origin_cols=(int)(tab_origin/width), cursor_line=line?*line:0, cursor_col=col?*col:0, advance_cols, printable_count=0;
 	int rx1=0, ry1=0, rdx=0, rdy=0;
 	get_current_region(rx1, ry1, rdx, rdy);
 	float
-		CX1=2.f/rdx, CX0=-CX1*rx1-1,
-		CY1=-2.f/rdy, CY0=1-CY1*ry1;
-	float currentX=(float)x0, currentY=(float)y, nextY=(float)(y+dypx);
-	ndc[2]=CY1*currentY+CY0;
-	ndc[3]=CY1*nextY+CY0;
-	if(currentY>=ry1+rdy)//first line is below region bottom
-	{
-		if(final_x)
-			*final_x=currentX;
-		if(final_y)
-			*final_y=currentY;
-		return;
-	}
+		CX1=2.f/rdx, CX0=CX1*(x-rx1)-1,
+		CY1=-2.f/rdy, CY0=1+CY1*(y-ry1);
+	CX1*=width;
+	CY1*=height;
+	int view_l1=(int)((ry1-y    )/height)-1, view_c1=(int)((rx1-x    )/width)-1,
+		view_l2=(int)((ry1-y+rdy)/height)+1, view_c2=(int)((rx1-x+rdx)/width)+1;
+	if(cursor_line>=view_l2)//text is below region bottom
+		return;//nothing needs to be done
 	Bookmark k=i;
-	if(nextY<ry1)//first line is above region top
+	if(cursor_line<view_l1)//first line is above region top
 	{
-		++k.line, k.idx=0;
-		size_t nlines=text_get_nlines(text);
-		for(;k<f;++k.line)
-		{
-			currentY=nextY, nextY+=dypx;
-			if(nextY>=ry1)
-			{
-				currentX=x;
-				ndc[2]=CY1*currentY+CY0;
-				ndc[3]=CY1*nextY+CY0;
-				break;
-			}
-		}
+		k.idx=0, k.line+=view_l1-cursor_line;
 		if(k>=f)//nothing left to print
-		{
-			if(final_x)
-				*final_x=currentX;
-			if(final_y)
-				*final_y=currentY;
-			return;
-		}
+			return;//nothing needs to be done
+		cursor_col=0, cursor_line=view_l1;
 	}
-	vrtx.resize(int((rdx+dxpx)*(rdy+dypx)/(dxpx*dypx))<<4);//nchars in grid	*	{vx, vy, txx, txy		x4 vertices/char}	~= 5MB at FHD screen
-	for(;k<f;k.increment_idx(text))
+	ndc[2]=CY1*cursor_line+CY0, ndc[3]=ndc[2]+CY1;
+	vrtx.resize((view_c2-view_c1)*(view_l2-view_l1)<<4);//nchars in grid	*	{vx, vy, txx, txy		x4 vertices/char}	~= 5MB at FHD screen
+	size_t len=0;
+	char *_line=text_get_line(text, k.line, &len);
+	for(;k<f;)
 	{
-		char c=k.dereference_idx(text);
-		//char c=msg[k];
-		if(c>=32&&c<0xFF)
-			advance=dxpx;
-		else if(c=='\t')
-			advance=dxpx*(tab_count-mod((int)((currentX-tab_origin+1e-4)/dxpx), tab_count)), c=' ';
-			//advance=dxpx*tab_count-mod(currentX-tab_origin+1e-4, dxpx*tab_count), c=' ';//X  tab bounces on continuous zoom
-		else
+		if(k.idx>=len)
 		{
-			if(c=='\n')
-			{
-				currentX=(float)x, currentY=nextY, nextY+=dypx;
-				if(currentY>=ry1+rdy)//following lines are below region bottom
-					break;
-				ndc[2]=CY1*currentY+CY0;
-				ndc[3]=CY1*nextY+CY0;
-			}
-			advance=0;
+			cursor_col=0, ++cursor_line;
+			if(cursor_line>=view_l2)//following lines are below region bottom
+				break;
+			ndc[2]=CY1*cursor_line+CY0, ndc[3]=ndc[2]+CY1;
+			k.increment_idx(text);
+			_line=text_get_line(text, k.line, &len);
+			continue;
 		}
-		if(advance)
+		char c=_line[k.idx];
+		if(c>=32&&c<0xFF)
+			advance_cols=1;
+		else if(c=='\t')
+			advance_cols=tab_count-mod(cursor_col-tab_origin_cols, tab_count), c=' ';
+		else
+			advance_cols=0;
+		if(advance_cols)
 		{
-			if(currentX+advance>=0&&currentX<w)
+			if(cursor_col+advance_cols>=view_c1&&cursor_col<view_c2)
 			{
-				ndc[0]=CX1*currentX+CX0;//xn1
-				currentX+=advance;
-				ndc[1]=CX1*currentX+CX0;//xn2
-				idx=printable_count<<4;
+				ndc[0]=CX1*cursor_col+CX0;//xn1
+				cursor_col+=advance_cols;
+				ndc[1]=CX1*cursor_col+CX0;//xn2
+
+				int idx=printable_count<<4;
 				if(idx>=(int)vrtx.size())
 					vrtx.resize(vrtx.size()+(vrtx.size()>>1));//grow by x1.5
 				txc=atlas+c-32;
@@ -879,8 +863,9 @@ void				print_text(float tab_origin, float x0, float x, float y, Text const &tex
 				++printable_count;
 			}
 			else
-				currentX+=advance;
+				cursor_col+=advance_cols;
 		}
+		k.increment_idx(text);
 	}
 	if(printable_count)
 	{
@@ -910,10 +895,10 @@ void				print_text(float tab_origin, float x0, float x, float y, Text const &tex
 			glDisableVertexAttribArray(ns_text::a_coords);	GL_CHECK();
 		}
 	}
-	if(final_x)
-		*final_x=currentX;
-	if(final_y)
-		*final_y=currentY;
+	if(line)
+		*line=cursor_line;
+	if(col)
+		*col=cursor_col;
 }
 #ifdef DEBUG_CURSOR
 float				debug_print_cols(float x, float y, float zoom, int req_cols, int den)
@@ -1109,7 +1094,6 @@ void				str2text(const char *str, int len, Text &text, TextType type, void *payl
 void				rectsel_copy(Text const &src, Cursor const &cur, Text &dst)
 {
 	text_clear(&dst, TEXT_NO_HISTORY, 0, 0);
-//	dst.clear();
 	int l1, l2, col1, col2;
 	cur.get_rectsel(l1, l2, col1, col2);
 	std::string temp;
@@ -1419,11 +1403,7 @@ struct				TabPosition
 };
 std::vector<TabPosition> tabbar_tabs;//TODO: merge TabPosition with TextFile
 
-bool				tabs_ismodified(int tab_idx)
-{
-	auto &of=openfiles[tab_idx];
-	return text_is_modified(of.m_text)!=0;
-}
+bool				tabs_ismodified(int tab_idx){return text_is_modified(openfiles[tab_idx].m_text)!=0;}
 void				set_title()
 {
 	int printed=0;
@@ -2004,7 +1984,7 @@ struct				SDFTextureHeader
 		reserved[2];
 };
 void				wnd_on_create(){}
-bool				wnd_on_init()
+bool				wnd_on_init(int argc, char **argv)
 {
 	make_gl_program(shader_2d);
 	make_gl_program(shader_text);
@@ -2068,15 +2048,44 @@ bool				wnd_on_init()
 		set_text_colors(colors_text);
 		sdf_active=false;
 	}
-	prof_add("Load font");
-
 	set_text_colors(colors_text);
-
-	openfiles.push_back(TextFile());
-	current_file=0;
-	tabbar_calc_positions();
-	tabs_switchto(current_file);
 	wnd_on_toggle_renderer();
+	prof_add("Load font");
+	
+	int files_opened=0;
+	if(argc>0)
+	{
+		std::string str;
+		for(int k=0;k<argc;++k)
+		{
+			if(open_text_file(argv[k], str))
+			{
+				openfiles.push_back(TextFile());
+				auto &of=openfiles.back();
+				of.m_filename=argv[k];
+				str2text(str.c_str(), str.size(), of.m_text, TEXT_NORMAL, cur, sizeof(*cur));
+				text_mark_saved(of.m_text);
+				++files_opened;
+			}
+			else
+				messagebox("Error", "Failed to open:\n%s", argv[k]);
+		}
+	}
+	tabbar_calc_positions();
+	if(files_opened>0)
+	{
+		current_file=openfiles.size()-1;
+		tabs_switchto(current_file);
+		tabbar_scroll_to(current_file);
+		dimensions_known=false;
+	}
+	else
+	{
+		openfiles.push_back(TextFile());
+		current_file=0;
+		tabs_switchto(current_file);
+	}
+	prof_add("Open tabs");
 	return true;
 }
 void				wnd_on_resize(){}
@@ -2167,19 +2176,21 @@ void				wnd_on_render()
 		dimensions_known=true;
 		text_width=calc_text_cols(*text);
 	}
-	float dxpx=dx*font_zoom, dypx=dy*font_zoom;//non-tab character dimensions in pixels
-	float iw=text_width*dxpx, ih=text_get_nlines(*text)*dypx;//text dimensions in pixels
+	float
+		font_width=dx*font_zoom,
+		font_height=dy*font_zoom,//non-tab character dimensions in pixels
+		iw=text_width*font_width,
+		ih=text_get_nlines(*text)*font_height;//text dimensions in pixels
 	
 	//decide if need scrollbars
 	hscroll.decide(iw+scrollbarwidth>w);
 	vscroll.decide(ih+scrollbarwidth>h);
 
-	int cpx=x1+(int)(cur->cursor.col*dxpx), cpy=y1+(int)(cur->cursor.line*dypx), cpy2=y1+(int)(cur->selcur.line*dypx);//cursor position in pixels
+	float cpx=x1+cur->cursor.col*font_width, cpy=y1+cur->cursor.line*font_height, cpy2=y1+cur->selcur.line*font_height;//cursor position in pixels
 	if(wnd_to_cursor)
 	{
 		wnd_to_cursor=false;
-		int xpad=(int)(dxpx*2*(w>dxpx*4)), ypad=(int)(dypx*2*(h>dypx*4));
-	//	int xpad=dxpx<<1&-(w>(dxpx<<2)), ypad=dypx<<1&-(h>(dypx<<2));
+		int xpad=(int)(font_width*2*(w>font_width*4)), ypad=(int)(font_height*2*(h>font_height*4));
 		if(wpx>cpx-xpad)
 			wpx=cpx-xpad;
 		if(wpx<cpx-w+xpad+vscroll.dwidth)
@@ -2193,8 +2204,8 @@ void				wnd_on_render()
 	{
 		if(wpx<0)
 			wpx=0;
-		if(wpx>iw-dxpx)
-			wpx=(int)(iw-dxpx);
+		if(wpx>iw-font_width)
+			wpx=(int)(iw-font_width);
 	}
 	else
 		wpx=0;
@@ -2202,8 +2213,8 @@ void				wnd_on_render()
 	{
 		if(wpy<0)
 			wpy=0;
-		if(wpy>ih-dypx)
-			wpy=(int)(ih-dypx);
+		if(wpy>ih-font_height)
+			wpy=(int)(ih-font_height);
 	}
 	else
 		wpy=0;
@@ -2217,10 +2228,16 @@ void				wnd_on_render()
 	{
 		int rx1, rx2, ry1, ry2;//rect coordinates in characters
 		cur->get_rectsel(ry1, ry2, rx1, rx2);
+		draw_rectangle_i(//selection rectangle
+			x1+rx1*font_width-wpx,
+			x1+rx2*font_width-wpx,
+			y1+ry1*font_height-wpy,
+			y1+ry2*font_height+font_width-wpy,
+			colors_text.hi);
 		if(ry1==ry2)
-			draw_rectangle((float)x1, (float)x2, (float)(cpy-wpy), cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
+			draw_rectangle((float)x1, (float)x2, (float)(cpy-wpy), cpy+font_height-wpy, color_cursorlinebk);//highlight cursor line
 		float x=(float)x1, y=(float)y1;
-		for(int kl=0;kl<(int)nlines;++kl, y+=dypx)
+		for(int kl=0;kl<(int)nlines;++kl, y+=font_height)
 		{
 			size_t len=0;
 			auto line=text_get_line(*text, kl, &len);
@@ -2238,29 +2255,30 @@ void				wnd_on_render()
 				print_line(tab_origin, y-wpy, line, len, tab_origin, font_zoom);
 		}
 		if(cpy<cpy2)//draw cursor
-			draw_line((float)(cpx-wpx), (float)(cpy-wpy), (float)(cpx-wpx), cpy2-wpy+dypx, color_cursor);
+			draw_line((float)(cpx-wpx), (float)(cpy-wpy), (float)(cpx-wpx), cpy2-wpy+font_height, color_cursor);
 		else
-			draw_line((float)(cpx-wpx), (float)(cpy2-wpy), (float)(cpx-wpx), cpy-wpy+dypx, color_cursor);
+			draw_line((float)(cpx-wpx), (float)(cpy2-wpy), (float)(cpx-wpx), cpy-wpy+font_height, color_cursor);
 	}
 	else
 	{
-		draw_rectangle((float)x1, (float)x2, (float)(cpy-wpy), cpy+dypx-wpy, color_cursorlinebk);//highlight cursor line
+		draw_rectangle((float)x1, (float)x2, (float)(cpy-wpy), cpy+font_height-wpy, color_cursorlinebk);//highlight cursor line
 		Bookmark i(0, 0, 0), f((int)nlines-1, (int)text_get_len(*text, nlines-1), 0);
+		float x=tab_origin, y=(float)(y1-wpy);
 		if(cur->selection_exists())//normal selection
 		{
 			Bookmark sel_i, sel_f;
 			cur->get_selection(sel_i, sel_f);
-		
-			float x=tab_origin, y=(float)(y1-wpy);
-			print_text(tab_origin, x, tab_origin, y, *text, i, sel_i, font_zoom, &x, &y);
+
+			int line=0, col=0;//must be initialized
+			print_text(tab_origin, x, y, *text, i, sel_i, font_zoom, &line, &col);
 			set_text_colors(colors_selection);
-			print_text(tab_origin, x, tab_origin, y, *text, sel_i, sel_f, font_zoom, &x, &y);
+			print_text(tab_origin, x, y, *text, sel_i, sel_f, font_zoom, &line, &col);
 			set_text_colors(colors_text);
-			print_text(tab_origin, x, tab_origin, y, *text, sel_f, f, font_zoom, &x, &y);
+			print_text(tab_origin, x, y, *text, sel_f, f, font_zoom, &line, &col);
 		}
 		else//no selection
-			print_text(tab_origin, tab_origin, tab_origin, (float)(y1-wpy), *text, i, f, font_zoom);
-		draw_line((float)(cpx-wpx), (float)(cpy-wpy), (float)(cpx-wpx), cpy-wpy+dypx, color_cursor);//draw cursor
+			print_text(tab_origin, x, y, *text, i, f, font_zoom);
+		draw_line((float)(cpx-wpx), (float)(cpy-wpy), (float)(cpx-wpx), cpy-wpy+font_height, color_cursor);//draw cursor
 	}
 	prof_add("text");
 
@@ -2289,8 +2307,8 @@ void				wnd_on_render()
 
 	set_region_immediate(0, w, 0, h);
 #ifdef DEBUG_CURSOR
-	debug_print_cols((float)(x1-wpx), y1-dypx*2, font_zoom, (int)(w/dxpx)+1, 10);//
-	debug_print_cols((float)(x1-wpx), y1-dypx, font_zoom, (int)(w/dxpx)+1, 1);//
+	debug_print_cols((float)(x1-wpx), y1-font_height*2, font_zoom, (int)(w/font_width)+1, 10);//
+	debug_print_cols((float)(x1-wpx), y1-font_height, font_zoom, (int)(w/font_width)+1, 1);//
 #endif
 	switch(drag)
 	{
@@ -2357,15 +2375,15 @@ void				wnd_on_render()
 				if(r.y1<0)
 					r.y2-=r.y1, r.y1=0;
 				float
-					Lx=x1+r.x1*dxpx-wpx, Ty=y1+r.y1*dypx-wpy,
-					Rx=x1+r.x2*dxpx-wpx, By=y1+r.y2*dypx-wpy;
+					Lx=x1+r.x1*font_width-wpx, Ty=y1+r.y1*font_height-wpy,
+					Rx=x1+r.x2*font_width-wpx, By=y1+r.y2*font_height-wpy;
 				draw_rectangle_hollow(Lx, Rx, Ty, By, 0xFF808080);
 				draw_line(Lx, Ty, Lx, By, color_cursor);
 			}
 			else
 			{
-				float dstpx=x1+cur->cursor.col*dxpx-wpx, dstpy=y1+cur->cursor.line*dypx-wpy;
-				draw_line(dstpx, dstpy, dstpx, dstpy+dypx, color_cursor);
+				float dstpx=x1+cur->cursor.col*font_width-wpx, dstpy=y1+cur->cursor.line*font_height-wpy;
+				draw_line(dstpx, dstpy, dstpx, dstpy+font_height, color_cursor);
 			}
 		}
 		break;
@@ -2434,11 +2452,9 @@ bool				close_tab(int tab_idx)//returns true if tab got closed
 			{
 				auto filename=save_file_dialog();
 				std::string str;
+				text2str(*text, str);
 				if(filename&&save_text_file(filename, str))
-				{
-					str2text(str.c_str(), str.size(), openfiles[tab_idx].m_text, TEXT_NORMAL, &openfiles[tab_idx].m_cur, sizeof(openfiles[tab_idx].m_cur));
 					openfiles[tab_idx].m_filename=filename;
-				}
 			}
 			break;
 		case 1://no
@@ -2541,6 +2557,7 @@ bool				wnd_on_mousewheel(bool mw_forward)
 					tabbar_wpx=(int)(tabbar_wpx-dx*8);
 				else
 					tabbar_wpx=(int)(tabbar_wpx+dx*8);
+				return true;
 			}
 			break;
 		case TABBAR_LEFT:
@@ -2550,6 +2567,7 @@ bool				wnd_on_mousewheel(bool mw_forward)
 					tabbar_wpy=(int)(tabbar_wpy-dy*3);
 				else
 					tabbar_wpy=(int)(tabbar_wpy+dy*3);
+				return true;
 			}
 			break;
 		case TABBAR_RIGHT:
@@ -2559,13 +2577,25 @@ bool				wnd_on_mousewheel(bool mw_forward)
 					tabbar_wpy=(int)(tabbar_wpy-dy*3);
 				else
 					tabbar_wpy=(int)(tabbar_wpy+dy*3);
+				return true;
 			}
 			break;
 		}
-		if(mw_forward)
-			wpy=(int)(wpy-dy*font_zoom*3);
+
+		if(is_shift_down())
+		{
+			if(mw_forward)
+				wpx=(int)(wpx-dy*font_zoom*3);
+			else
+				wpx=(int)(wpx+dy*font_zoom*3);
+		}
 		else
-			wpy=(int)(wpy+dy*font_zoom*3);
+		{
+			if(mw_forward)
+				wpy=(int)(wpy-dy*font_zoom*3);
+			else
+				wpy=(int)(wpy+dy*font_zoom*3);
+		}
 	}
 	return true;
 }
@@ -3319,6 +3349,70 @@ bool				wnd_on_paste()
 	set_title();
 	return true;
 }
+void				line_setcase(Text &text, int l0, const char *line, int idx1, int idx2, std::string &temp, bool upper)
+{
+	temp.assign(line+idx1, line+idx2);
+	if(upper)
+	{
+		for(int k=0;k<(int)temp.size();++k)
+			temp[k]=toupper(temp[k]);
+	}
+	else
+	{
+		for(int k=0;k<(int)temp.size();++k)
+			temp[k]=tolower(temp[k]);
+	}
+	text_replace(text, l0, idx1, idx2, temp.c_str(), temp.size(), 1, ACT_CHANGE_CASE);
+}
+bool				wnd_on_setcase(bool upper)
+{
+	if(cur->selection_exists())
+	{
+		std::string temp;
+		bool modified=false;
+		if(cur->rectsel)
+		{
+			auto r=cur->get_rectsel();
+			for(int kl=r.y1;kl<=r.y2;++kl)
+			{
+				size_t len=0;
+				auto line=text_get_line(*text, kl, &len);
+				int idx1, c1, idx2, c2;
+				col2idx(line, len, 0, 0, 0, (float)r.x1, &idx1, &c1, 0.5f);
+				col2idx(line, len, 0, idx1, c1, (float)r.x2, &idx2, &c2, 0.5f);
+				if(idx1<idx2)
+				{
+					modified=true;
+					line_setcase(*text, kl, line, idx1, idx2, temp, upper);
+				}
+			}
+		}
+		else
+		{
+			Bookmark i, f;
+			cur->get_selection(i, f);
+			for(int kl=i.line;kl<=f.line;++kl)
+			{
+				size_t len=0;
+				auto line=text_get_line(*text, kl, &len);
+				int idx1=kl==i.line?i.idx:0, idx2=kl==f.line?f.idx:len;
+				if(idx1<idx2)
+				{
+					modified=true;
+					line_setcase(*text, kl, line, idx1, idx2, temp, upper);
+				}
+			}
+		}
+		if(modified)
+		{
+			text_action_end(*text);
+			set_title();
+			return true;
+		}
+	}
+	return false;
+}
+
 bool				wnd_on_undo()
 {
 	text_undo(*text, cur, 0);
@@ -3547,13 +3641,14 @@ bool				wnd_on_newtab()
 			if(open_text_file(file.filename.c_str(), str))
 			{
 				TextFile f;
-				str2text(str.c_str(), str.size(), f.m_text, TEXT_NORMAL, &f.m_cur, sizeof(f.m_cur));
-				dimensions_known=false;
 				f.m_filename=file.filename;
+				str2text(str.c_str(), str.size(), f.m_text, TEXT_NORMAL, &f.m_cur, sizeof(f.m_cur));
+				text_mark_saved(f.m_text);
 				int idx=file.tab_idx;
 				if(idx>(int)openfiles.size())//crash guard
 					idx=openfiles.size();
 				openfiles.insert(openfiles.begin()+idx, std::move(f));
+				dimensions_known=false;
 				tabbar_calc_positions();
 				tabs_switchto(idx);
 				tabbar_scroll_to(current_file);
@@ -3578,20 +3673,24 @@ bool				wnd_on_open()
 	auto filename2=open_file_dialog();
 	if(filename2)
 	{
-		openfiles.push_back(TextFile());
-		auto &of=openfiles.back();
 		std::string str;
-		text2str(of.m_text, str);
 		if(open_text_file(filename2, str))
 		{
-			dimensions_known=false;
+			openfiles.push_back(TextFile());
+			auto &of=openfiles.back();
 			of.m_filename=filename2;
+			str2text(str.c_str(), str.size(), of.m_text, TEXT_NORMAL, &of.m_cur, sizeof(of.m_cur));
+			text_mark_saved(of.m_text);
+			dimensions_known=false;
 			tabbar_calc_positions();
 			tabs_switchto(openfiles.size()-1);
 			tabbar_scroll_to(current_file);
+			return true;
 		}
+		else
+			messagebox("Error", "Failed to open:\n%s", filename2);
 	}
-	return true;
+	return false;
 }
 bool				wnd_on_closetab()
 {
@@ -3661,7 +3760,6 @@ bool				wnd_on_save(bool save_as)
 	}
 	set_title();
 	text_mark_saved(openfiles[current_file].m_text);
-//	openfiles[current_file].m_histpos_saved=openfiles[current_file].m_histpos;
 	return true;
 }
 bool				wnd_on_quit()//return false to deny exit

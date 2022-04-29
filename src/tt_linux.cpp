@@ -1,4 +1,4 @@
-//tt_system.cpp - Linux-dependent code
+//tt_system.cpp - Linux (SDL) entry point and event handler
 //Copyright (C) 2021 Ayman Wagih
 //
 //This program is free software: you can redistribute it and/or modify
@@ -347,7 +347,7 @@ int					main(int argc, char **argv)
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	if(!wnd_on_init())
+	if(!wnd_on_init(argc-1, argv+1))
 		goto quit;
 
 	for(;;)
@@ -435,6 +435,7 @@ int					main(int argc, char **argv)
 						case SDL_SCANCODE_R:		redraw|=wnd_on_barorient();				break;
 						case SDL_SCANCODE_S:		redraw|=wnd_on_save(is_shift_down());	break;
 						case SDL_SCANCODE_T:		redraw|=wnd_on_newtab();				break;
+						case SDL_SCANCODE_U:		redraw|=wnd_on_setcase(is_shift_down());break;
 						case SDL_SCANCODE_V:		redraw|=wnd_on_paste();					break;
 						case SDL_SCANCODE_W:		redraw|=wnd_on_closetab();				break;
 						case SDL_SCANCODE_Y:		redraw|=wnd_on_redo();					break;
