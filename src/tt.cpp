@@ -378,7 +378,7 @@ void				draw_rectangle_hollow(float x1, float x2, float y1, float y2, int color)
 	glDisableVertexAttribArray(ns_2d::a_coords);GL_CHECK();
 }
 
-bool				col2idx(const char *text, int text_length, int tab0_cols, int idx0, int col0, float req_col, int *ret_idx, int *ret_col)//returns true when runs out of characters (OOB)
+bool				col2idx(const char *text, int text_length, int tab0_cols, int idx0, int col0, float req_col, int *ret_idx, int *ret_col, float colroundbias)//returns true when runs out of characters (OOB)
 {
 	bool line_too_short=true;
 	int idx=idx0, col=col0;
@@ -390,7 +390,7 @@ bool				col2idx(const char *text, int text_length, int tab0_cols, int idx0, int 
 			dcol=tab_count-mod(col-tab0_cols, tab_count);
 		else if(c>=32&&c<0xFF)
 			dcol=1;
-		if(col+dcol*0.5f>=req_col)//dcol in [1 ~ tab_count]
+		if(col+dcol*colroundbias>=req_col)//dcol in [1 ~ tab_count]
 		{
 			line_too_short=false;
 			break;
@@ -423,7 +423,7 @@ struct				Bookmark
 		col;
 	Bookmark():line(0), idx(0), col(0){}
 	Bookmark(int line, int idx, int col):line(line), idx(idx), col(col){}
-	bool set_gui(Text const &text, int line, float col, bool clampcol)//returns true if text is hit
+	bool set_gui(Text const &text, int line, float col, bool clampcol, float colroundbias)//returns true if text is hit
 	{
 		bool hit=true;
 		size_t nlines=text_get_nlines(text);
@@ -435,10 +435,9 @@ struct				Bookmark
 
 		size_t len=0;
 		auto _line=text_get_line(text, line, &len);
-		//this->col=(int)col;
-		col2idx(_line, len, 0, 0, 0, col, &this->idx, clampcol?&this->col:nullptr);
+		col2idx(_line, len, 0, 0, 0, col, &this->idx, clampcol?&this->col:nullptr, 1-colroundbias);
 		if(!clampcol)
-			this->col=(int)(col+0.5f);
+			this->col=(int)(col+colroundbias);
 		return hit;
 	}
 	void set_text(Text const &text, int line, int idx)
@@ -571,7 +570,7 @@ struct				Bookmark
 	{
 		size_t len=0;
 		auto _line=text_get_line(text, line, &len);
-		col2idx(_line, len, 0, 0, 0, (float)col, &this->idx, &this->col);
+		col2idx(_line, len, 0, 0, 0, (float)col, &this->idx, &this->col, 0.5f);
 	}
 };
 bool				operator==(Bookmark const &left, Bookmark const &right){return left.line==right.line&&left.idx==right.idx;}
@@ -688,7 +687,7 @@ void				set_text_colors(U64 const &colors)
 	}
 }
 std::vector<float>	vrtx;
-float				print_line		(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom, int req_cols, int *ret_idx, int *ret_cols)
+float				print_line(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom, int req_cols, int *ret_idx, int *ret_cols)
 {
 	if(msg_length<1)
 		return 0;
@@ -697,8 +696,6 @@ float				print_line		(float x, float y, const char *msg, int msg_length, float t
 	if(sdf_active)
 		zoom*=16.f/sdf_dy;
 	float width=(sdf_active?sdf_dx:dx)*zoom, height=(sdf_active?sdf_dy:dy)*zoom;
-		//tab_width=tab_count*width;
-	//float req_width=req_cols*width;
 	int tab_origin_cols=(int)(tab_origin/width), idx, printable_count=0, cursor_cols=ret_cols?*ret_cols:0, advance_cols;
 	int rx1=0, ry1=0, rdx=0, rdy=0;
 	get_current_region(rx1, ry1, rdx, rdy);
@@ -709,7 +706,6 @@ float				print_line		(float x, float y, const char *msg, int msg_length, float t
 	rect[3]=1-(y+height-ry1)*2.f/rdy;
 	vrtx.resize(msg_length<<4);//vx, vy, txx, txy		x4 vertices/char
 	int k=ret_idx?*ret_idx:0;
-	//int x_cols=int(x/width);//X
 	if(req_cols<0||cursor_cols<req_cols)
 	{
 		CX1*=width;
@@ -720,8 +716,6 @@ float				print_line		(float x, float y, const char *msg, int msg_length, float t
 				advance_cols=1;
 			else if(c=='\t')
 				advance_cols=tab_count-mod(cursor_cols-tab_origin_cols, tab_count), c=' ';
-				//advance=width*(tab_count-mod((int)((cursor-tab_origin+1e-4)/width), tab_count)), c=' ';
-				//advance=tab_width-mod(x+cursor-tab_origin, tab_width), c=' ';//X  tab bounces on continuous zoom
 			else
 				advance_cols=0;
 			if(advance_cols)
@@ -1005,9 +999,9 @@ struct				Cursor
 			{
 				auto r=get_rectsel();
 				if(direction==-1)
-					cursor.set_gui(text, r.y1, (float)r.x1, true);
+					cursor.set_gui(text, r.y1, (float)r.x1, true, 0.5f);
 				else
-					cursor.set_gui(text, r.y2, (float)r.x2, true);
+					cursor.set_gui(text, r.y2, (float)r.x2, true, 0.5f);
 			}
 			else
 			{
@@ -1048,8 +1042,8 @@ struct				Cursor
 	}
 	void set_rectsel(Text const &text, int l1, int l2, int col1, int col2)
 	{
-		cursor.set_gui(text, l1, (float)col1, false);
-		selcur.set_gui(text, l2, (float)col2, false);
+		cursor.set_gui(text, l1, (float)col1, false, 0.5f);
+		selcur.set_gui(text, l2, (float)col2, false, 0.5f);
 	}
 	bool selection_exists()const
 	{
@@ -1130,7 +1124,7 @@ void				rectsel_copy(Text const &src, Cursor const &cur, Text &dst)
 			int idx1, c1, prepad=0,
 				idx2, c2;
 
-			col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1);
+			col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1, 0.5f);
 			if(c1<col1&&idx1<(int)len)
 			{
 				int c1_2=c1+tab_count-mod(c1, tab_count);
@@ -1140,7 +1134,7 @@ void				rectsel_copy(Text const &src, Cursor const &cur, Text &dst)
 			if(c1>col1)
 				prepad=c1-col1;
 
-			col2idx(line, len, 0, idx1, c1, (float)col2, &idx2, &c2);
+			col2idx(line, len, 0, idx1, c1, (float)col2, &idx2, &c2, 0.5f);
 			idx2-=c2>col2;
 
 			temp.clear();
@@ -1163,7 +1157,7 @@ void				rectsel_insert(Text const &src, int l1, int col1, Text &dst, ActionType 
 		auto srcline=text_get_line(src, kls, &srclen);
 		auto dstline=text_get_line(dst, kld, &dstlen);
 		int idx1, c1;
-		col2idx(dstline, dstlen, 0, 0, 0, (float)col1, &idx1, &c1);
+		col2idx(dstline, dstlen, 0, 0, 0, (float)col1, &idx1, &c1, 0.5f);
 		if(c1<col1)
 		{
 			int ntabs=col1/tab_count-c1/tab_count, nspaces=mod(col1, tab_count);
@@ -1583,7 +1577,7 @@ bool				text_erase_rect(Text &text, int l1, int l2, int col1, int col2, ActionTy
 		size_t len=0;
 		auto line=text_get_line(text, kl, &len);
 		int idx1=0, c1=0;
-		bool line_OOB=col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1);
+		bool line_OOB=col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1, 0.5f);
 		if(!line_OOB)
 		{
 			erased=true;
@@ -1592,18 +1586,18 @@ bool				text_erase_rect(Text &text, int l1, int l2, int col1, int col2, ActionTy
 				if(idx1<(int)len&&line[idx1]=='\t')
 				{
 					replace_tab_with_spaces(text, kl, idx1, action);
-					col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1);
+					col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1, 0.5f);
 				}
 				else if(idx1>0&&line[idx1-1]=='\t')
 				{
 					replace_tab_with_spaces(text, kl, idx1-1, action);
-					col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1);
+					col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1, 0.5f);
 				}
 			}
 			if(c1==col1)
 			{
 				int idx2=0, c2=0;
-				col2idx(line, len, 0, 0, 0, (float)col2, &idx2, &c2);
+				col2idx(line, len, 0, 0, 0, (float)col2, &idx2, &c2, 0.5f);
 				if(idx1<idx2)
 					text_replace(text, kl, idx1, idx2, 0, 0, 0, action);
 			}
@@ -1619,7 +1613,7 @@ void				text_insert_rect(Text &text, int l1, int l2, int col0, const char *a, in
 		size_t len2=0;
 		auto line=text_get_line(text, kl, &len2);
 		int idx1=0, c1=0;
-		col2idx(line, len2, 0, 0, 0, (float)col0, &idx1, &c1);
+		col2idx(line, len2, 0, 0, 0, (float)col0, &idx1, &c1, 0.5f);
 		if(c1<col0)
 		{
 			int ntabs=col0/tab_count-c1/tab_count, nspaces=mod(col0, tab_count);
@@ -1687,7 +1681,7 @@ void				indent_rectsel_back(Cursor &cur)
 		size_t len=0;
 		auto line=text_get_line(text, kl, &len);
 		int idx, c;
-		col2idx(line, len, 0, 0, 0, (float)col0, &idx, &c);
+		col2idx(line, len, 0, 0, 0, (float)col0, &idx, &c, 0.5f);
 		for(;idx<(int)len&&!isspace(line[idx]);++idx, ++c);
 		if(dst_col<c)
 		{
@@ -1706,8 +1700,8 @@ void				indent_rectsel_back(Cursor &cur)
 			size_t len=0;
 			auto line=text_get_line(text, kl, &len);
 			int idx1, c1, idx2, c2;
-			col2idx(line, len, 0, 0, 0, (float)dst_col, &idx1, &c1);
-			col2idx(line, len, 0, 0, 0, (float)col1, &idx2, &c2);
+			col2idx(line, len, 0, 0, 0, (float)dst_col, &idx1, &c1, 0.5f);
+			col2idx(line, len, 0, 0, 0, (float)col1, &idx2, &c2, 0.5f);
 			text_replace(text, kl, idx1, idx2, 0, 0, 0, ACT_INDENT);
 		}
 		int col_diff=col1-dst_col;
@@ -1726,7 +1720,7 @@ void				indent_rectsel_forward(Cursor &cur)
 		size_t len=0;
 		auto line=text_get_line(text, kl, &len);
 		int idx1, c1;
-		col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1);
+		col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1, 0.5f);
 		text_replace(text, kl, idx1, idx1, "\t", 1, 1, ACT_INDENT);
 	}
 	int col_diff=tab_count-mod(col1, tab_count);
@@ -1745,7 +1739,7 @@ void				indent_selection_back(Cursor &cur)
 		size_t len=0;
 		auto line=text_get_line(text, kl, &len);
 		int idx1, c1;
-		col2idx(line, len, 0, 0, 0, (float)tab_count, &idx1, &c1);
+		col2idx(line, len, 0, 0, 0, (float)tab_count, &idx1, &c1, 0.5f);
 		int kc=0;
 		for(;kc<idx1&&isspace(line[kc]);++kc);
 		if(kl==i.line)
@@ -1785,14 +1779,14 @@ void				line_insert(Text &text, int l0, int c1, int c2, const char *src, int len
 	{
 		auto line=text_get_line(text, l0, &len2);
 		int idx1, col1, idx2, col2;
-		col2idx(line, len2, 0, 0, 0, (float)c1, &idx1, &col1);
+		col2idx(line, len2, 0, 0, 0, (float)c1, &idx1, &col1, 0.5f);
 
 		if(col1>c1)//a tab caused misalign
 		{
 			--idx1;
 			col1=idx2col(line, idx1, 0);
 		}
-		col2idx(line, len2, 0, idx1, col1, (float)c2, &idx2, &col2);
+		col2idx(line, len2, 0, idx1, col1, (float)c2, &idx2, &col2, 0.5f);
 		if(col1<c1)//a tab caused misalign or line is not long enough
 		{
 			int ntabs=c1/tab_count-col1/tab_count, nspaces=mod(c1, tab_count);
@@ -1829,15 +1823,14 @@ char				group_char(char c)
 		return '\n';
 	return c;
 }
-bool				cursor_at_mouse(Text const &text, short mx, short my, Bookmark &cursor, bool clampcol)//sets the cursor to mouse coordinates, returns true if text was hit
+bool				cursor_at_mouse(Text const &text, short mx, short my, Bookmark &cursor, bool clampcol, float colroundbias)//sets the cursor to mouse coordinates, returns true if text was hit
 {
 	int mousex=mx-window_editor.x1, mousey=my-window_editor.y1;
 	float dypx=dy*font_zoom, dxpx=dx*font_zoom,
 		line=(wpy+mousey)/dypx, col=float(wpx+mousex)/dxpx;
+	mline=(int)line, mcol=(int)(col+colroundbias);
 
-	mline=(int)line, mcol=(int)(col+0.5f);
-	size_t nlines=text_get_nlines(text);
-	return cursor.set_gui(text, (int)line, col, clampcol);
+	return cursor.set_gui(text, (int)line, col, clampcol, colroundbias);
 }
 
 //scrollbar functions
@@ -2473,7 +2466,7 @@ bool				wnd_on_mousemove()
 			drag=DRAG_RECT;
 		else
 			drag=DRAG_SELECT;
-		cursor_at_mouse(*text, mx, my, cur->cursor, !cur->rectsel);
+		cursor_at_mouse(*text, mx, my, cur->cursor, !cur->rectsel, 0.5f);
 		text_push_checkpoint(*text, ACT_RELOCATE_CURSOR, cur, sizeof(*cur));
 #ifdef DEBUG_CURSOR
 		{
@@ -2504,10 +2497,10 @@ bool				wnd_on_mousemove()
 		//	auto r=drag_cursor.get_rectsel();
 		//	int rx=window_editor.x1+r.x2*dx*font_zoom-wpx,
 		//		by=window_editor.y1+r.y2*dy*font_zoom-wpy;
-		//	cursor_at_mouse(*text, mx-(start_mx-cpx), my-(start_my-cpy), cur->cursor);
+		//	cursor_at_mouse(*text, mx-(start_mx-cpx), my-(start_my-cpy), cur->cursor, 0.5f);
 		//}
 		//else
-			cursor_at_mouse(*text, mx, my, cur->cursor, !cur->rectsel);
+			cursor_at_mouse(*text, mx, my, cur->cursor, !cur->rectsel, 0.5f);
 		return true;
 	}
 	return false;
@@ -2605,7 +2598,7 @@ bool				drag_selection_click(DragType drag_type)//checks if you clicked on the s
 	if(cur->selection_exists())
 	{
 		Bookmark click;
-		bool hit=cursor_at_mouse(*text, mx, my, click, !cur->rectsel);
+		bool hit=cursor_at_mouse(*text, mx, my, click, !cur->rectsel, 0);
 		if(hit)
 		{
 			if(cur->rectsel)
@@ -2643,7 +2636,7 @@ void				lbutton_down_text(bool doubleclick)
 		return;
 	if(doubleclick||ctrldown)//select word
 	{
-		cursor_at_mouse(*text, mx, my, cur->cursor, true);
+		cursor_at_mouse(*text, mx, my, cur->cursor, true, 0.5f);
 		cur->selcur=cur->cursor;
 		char initial=group_char(cur->cursor.dereference_idx(*text));
 		int nlines=text_get_nlines(*text);
@@ -2673,7 +2666,7 @@ void				lbutton_down_text(bool doubleclick)
 		if(cur->rectsel=is_alt_down())//rectsel
 		{
 			Bookmark temp;
-			if(cursor_at_mouse(*text, mx, my, temp, false))
+			if(cursor_at_mouse(*text, mx, my, temp, false, 0.5f))
 				drag=DRAG_RECT, cur->cursor=temp;
 			if(!is_shift_down())
 				cur->selcur=cur->cursor;
@@ -2681,7 +2674,7 @@ void				lbutton_down_text(bool doubleclick)
 		else//place cursor / normal selection
 		{
 			drag=DRAG_SELECT;
-			cursor_at_mouse(*text, mx, my, cur->cursor, true);
+			cursor_at_mouse(*text, mx, my, cur->cursor, true, 0.5f);
 			if(!is_shift_down())
 				cur->selcur=cur->cursor, cur->selcur=cur->cursor;
 		}
@@ -2883,7 +2876,7 @@ bool				wnd_on_lbuttonup()
 #ifdef DRAG_RECTSEL_X_AT_MOUSE
 					dstcol=cur->cursor.col;
 #else
-					dstcol=r.x1+cur->cursor.col-cur->selcur.col;
+					dstcol=cur->cursor.col>=r.x1&&cur->cursor.col<r.x2 ? r.x1 : r.x1+cur->cursor.col-cur->selcur.col;//TODO: fix rectsel drag
 #endif
 				if(dstline<0)
 					dstline=0;
@@ -3047,6 +3040,7 @@ bool				wnd_on_select_all()
 bool				wnd_on_deselect()
 {
 	drag=DRAG_NONE;
+	cur->cursor.update_idx(*text);
 	cur->selcur=cur->cursor, cur->rectsel=false;
 	text_action_end(*text);
 	text_push_checkpoint(*text, ACT_RELOCATE_CURSOR, cur, sizeof(*cur));
@@ -3106,7 +3100,7 @@ bool				wnd_on_type(char character)
 		auto r=cur->get_rectsel();
 		if(character=='\n')//remove tall cursor, continue below to insert newline
 		{
-			cur->cursor.set_gui(*text, r.y2, (float)r.x2, true);
+			cur->cursor.set_gui(*text, r.y2, (float)r.x2, true, 0.5f);
 			cur->selcur=cur->cursor;
 		}
 		else//rectangular typing
@@ -3175,7 +3169,7 @@ bool				wnd_on_deletechar()
 			auto line=text_get_line(*text, kl, &len);
 			int idx1=0, c1=0;
 			//int c0=0;
-			bool line_OOB=col2idx(line, len, 0, 0, 0, (float)r.x1, &idx1, &c1);
+			bool line_OOB=col2idx(line, len, 0, 0, 0, (float)r.x1, &idx1, &c1, 0.5f);
 			if(!line_OOB&&idx1<(int)len)
 			{
 				//if(line[idx1]=='\t')//break tab into spaces
@@ -3217,7 +3211,7 @@ bool				wnd_on_backspace()
 			size_t len=0;
 			auto line=text_get_line(*text, kl, &len);
 			int idx1=0, c1=0, c0=0;
-			bool line_OOB=col2idx(line, len, 0, 0, 0, (float)r.x1, &idx1, &c1);
+			bool line_OOB=col2idx(line, len, 0, 0, 0, (float)r.x1, &idx1, &c1, 0.5f);
 			if(!line_OOB&&idx1>0)
 			{
 				--idx1;

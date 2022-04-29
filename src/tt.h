@@ -337,9 +337,7 @@ union				U64
 	}
 };
 void				set_text_colors(U64 const &colors);
-int					calc_width		(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom);
-void				inv_calc_width	(int x, int y, const char *msg, int msg_length, int tab_origin, short zoom, int width, int *out_cols, int *out_k);//returns index to fit [msg, msg+index[ in width
-float				print_line		(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom, int req_cols=-1, int *ret_idx=nullptr, int *ret_cols=nullptr);//returns cols printed
+float				print_line(float x, float y, const char *msg, int msg_length, float tab_origin, float zoom, int req_cols=-1, int *ret_idx=nullptr, int *ret_cols=nullptr);//returns cols printed
 int					print(short zoom, int tab_origin, int x, int y, const char *format, ...);
 void				tabbar_calc_positions();
 
