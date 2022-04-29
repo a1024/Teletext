@@ -2076,6 +2076,7 @@ bool				wnd_on_init()
 	current_file=0;
 	tabbar_calc_positions();
 	tabs_switchto(current_file);
+	wnd_on_toggle_renderer();
 	return true;
 }
 void				wnd_on_resize(){}
