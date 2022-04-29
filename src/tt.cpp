@@ -1570,8 +1570,9 @@ void				replace_tab_with_spaces(Text &text, int l0, int idx, ActionType action)
 	int nspaces=tab_count-mod(col0, tab_count);
 	text_replace(text, l0, idx, idx+1, " ", 1, nspaces, action);
 }
-void				text_erase_rect(Text &text, int l1, int l2, int col1, int col2, ActionType action)
+bool				text_erase_rect(Text &text, int l1, int l2, int col1, int col2, ActionType action)//returns true if any text was erased
 {
+	bool erased=false;
 	if(l2<l1)
 		std::swap(l1, l2);
 	if(col2<col1)
@@ -1585,6 +1586,7 @@ void				text_erase_rect(Text &text, int l1, int l2, int col1, int col2, ActionTy
 		bool line_OOB=col2idx(line, len, 0, 0, 0, (float)col1, &idx1, &c1);
 		if(!line_OOB)
 		{
+			erased=true;
 			if(c1!=col1)//tab caused misalign
 			{
 				if(idx1<(int)len&&line[idx1]=='\t')
@@ -1607,6 +1609,7 @@ void				text_erase_rect(Text &text, int l1, int l2, int col1, int col2, ActionTy
 			}
 		}
 	}
+	return erased;
 }
 #if 0
 void				text_insert_rect(Text &text, int l1, int l2, int col0, const char *a, int len, ActionType action)
@@ -1976,13 +1979,18 @@ void				general_selection_erase(ActionType action)
 	{
 		if(cur->rectsel)
 		{
-			text_erase_rect(*text, cur->cursor.line, cur->selcur.line, cur->cursor.col, cur->selcur.col, action);
-			int colstart=cur->cursor.col;
-			if(colstart>cur->selcur.col)
-				colstart=cur->selcur.col;
-			cur->selcur.col=cur->cursor.col=colstart;
-			cur->cursor.update_idx(*text);
-			cur->selcur.update_idx(*text);
+			bool erased=text_erase_rect(*text, cur->cursor.line, cur->selcur.line, cur->cursor.col, cur->selcur.col, action);
+			if(erased)
+			{
+				int colstart=cur->cursor.col;
+				if(colstart>cur->selcur.col)
+					colstart=cur->selcur.col;
+				cur->selcur.col=cur->cursor.col=colstart;
+				cur->cursor.update_idx(*text);
+				cur->selcur.update_idx(*text);
+			}
+			else
+				cur->selcur.col=cur->cursor.col;
 		}
 		else
 		{
@@ -2141,10 +2149,7 @@ int					tab_drag_get_h_idx()//duplicate!, see tabbar_get_horizontal_idx
 	}
 	return k;
 }
-int					tab_drag_get_v_idx()
-{
-	return clamp(0, (int)((tabbar_wpy+my+dy*2)/dy), tabbar_tabs.size());
-}
+int					tab_drag_get_v_idx(){return clamp(0, (int)((tabbar_wpy+my+dy*2)/dy), tabbar_tabs.size());}
 void				wnd_on_render()
 {
 	prof_add("Render entry");
@@ -2471,6 +2476,7 @@ bool				wnd_on_mousemove()
 		else
 			drag=DRAG_SELECT;
 		cursor_at_mouse(*text, mx, my, cur->cursor, !cur->rectsel);
+		text_push_checkpoint(*text, ACT_RELOCATE_CURSOR, cur, sizeof(*cur));
 #ifdef DEBUG_CURSOR
 		{
 			const char *selectiontype=nullptr;

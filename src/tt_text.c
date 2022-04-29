@@ -189,6 +189,7 @@ static HistoryNode* hist_node_alloc(ChangeType change_type, char action_type, ch
 	}
 	p->prev=p->next=0;
 	p->change_type=change_type;
+	p->actinfo.action_id=0;
 	p->actinfo.action_type=action_type;
 	p->actinfo.action_ctr=action_ctr;
 	p->line=line;
@@ -448,20 +449,22 @@ static void	lines_erase(Text *text, size_t l1, size_t l2)//not history-tracked
 			ASSERT_R(text->lines);
 	}
 }
-static void	line_insert(Line **line, size_t idx, const char *str, size_t len)//not history-tracked
+static void	line_insert(Line **line, size_t idx, const char *str, size_t len, size_t rep)//not history-tracked
 {
+	int inslen;
 	ASSERT_P(*line);
 	ASSERT_IDX(idx, line[0]->len+1);
-
-	if(len)
+	
+	inslen=len*rep;
+	if(inslen)
 	{
 		ASSERT_P(str);
 
-		line[0]->len+=len;
+		line[0]->len+=inslen;
 		*line=(Line*)realloc(*line, sizeof(Line)+line[0]->len+1);
 		ASSERT_R(*line);
-		memmove(line[0]->data+idx+len, line[0]->data+idx, line[0]->len+1-len-idx);
-		memcpy(line[0]->data+idx, str, len);
+		memmove(line[0]->data+idx+inslen, line[0]->data+idx, line[0]->len+1-inslen-idx);
+		memfill(line[0]->data+idx, str, inslen, len);
 	}
 }
 static void	line_erase(Line **line, size_t idx1, size_t idx2)//not history-tracked
@@ -494,63 +497,6 @@ static int	related(HistoryNode *node, HistoryNode *next)//O(n)
 	if(next->actinfo.action_type==ACT_RELOCATE_CURSOR)
 		return 1;
 	return node->actinfo.action_id==next->actinfo.action_id;
-}
-
-
-//API
-size_t		text_get_nlines(const void *hText)
-{
-	Text const *text=(Text const*)hText;
-	ASSERT_P(text);
-	ASSERT_P(text->lines);
-
-	return text->nlines;
-}
-size_t		text_get_len(const void *hText, size_t line)
-{
-	Text const *text=(Text const*)hText;
-	ASSERT_P(text);
-	ASSERT_P(text->lines);
-	ASSERT_IDX(line, text->nlines);
-
-	return text->lines[line]->len;
-}
-char*		text_get_line(const void *hText, size_t line, size_t *ret_len)
-{
-	Text const *text=(Text const*)hText;
-	ASSERT_P(text);
-	ASSERT_P(text->lines);
-	ASSERT_IDX(line, text->nlines);
-
-	if(ret_len)
-		*ret_len=text->lines[line]->len;
-	return text->lines[line]->data;
-}
-void		text_insert_lines(void *hText, size_t l0, size_t nlines, char action_type, char action_id)
-{
-	Text *text=(Text*)hText;
-	ASSERT_P(text);
-	ASSERT_P(text->lines);
-	ASSERT_IDX(l0, text->nlines+1);
-
-	if(text->type!=TEXT_NO_HISTORY)
-		hist_insert(&text->hist, CHANGE_INSERT_LINES, action_type, action_id, l0, 0, 0, 0, nlines);
-	lines_add(text, l0, l0+nlines);
-}
-void		text_erase_lines(void *hText, size_t l0, size_t nlines, char action_type, char action_id)
-{
-	Text *text=(Text*)hText;
-	size_t kl;
-	ASSERT_P(text);
-
-	if(text->type!=TEXT_NO_HISTORY)
-	{
-		ASSERT_P(text->hist);
-
-		for(kl=l0+nlines-1;kl>=l0;--kl)
-			hist_insert(&text->hist, CHANGE_REMOVE_LINE, action_type, action_id, kl, 0, text->lines[kl]->data, text->lines[kl]->len, 1);
-	}
-	lines_erase(text, l0, l0+nlines);
 }
 void		text_init(void *hText, TextType type, const void *payload, size_t p_bytes)
 {
@@ -588,6 +534,63 @@ void		text_init(void *hText, TextType type, const void *payload, size_t p_bytes)
 	ASSERT_A(*line);
 	line[0]->len=0;
 	line[0]->data[0]='\0';
+}
+
+
+//API
+size_t		text_get_nlines(const void *hText)
+{
+	Text const *text=(Text const*)hText;
+	ASSERT_P(text);
+	ASSERT_P(text->lines);
+
+	return text->nlines;
+}
+size_t		text_get_len(const void *hText, size_t line)
+{
+	Text const *text=(Text const*)hText;
+	ASSERT_P(text);
+	ASSERT_P(text->lines);
+	ASSERT_IDX(line, text->nlines);
+
+	return text->lines[line]->len;
+}
+char*		text_get_line(const void *hText, size_t line, size_t *ret_len)
+{
+	Text const *text=(Text const*)hText;
+	ASSERT_P(text);
+	ASSERT_P(text->lines);
+	ASSERT_IDX(line, text->nlines);
+
+	if(ret_len)
+		*ret_len=text->lines[line]->len;
+	return text->lines[line]->data;
+}
+void		text_insert_lines(void *hText, size_t l0, size_t nlines, ActionType action)
+{
+	Text *text=(Text*)hText;
+	ASSERT_P(text);
+	ASSERT_P(text->lines);
+	ASSERT_IDX(l0, text->nlines+1);
+
+	if(text->type!=TEXT_NO_HISTORY)
+		hist_insert(&text->hist, CHANGE_INSERT_LINES, action, text->action_histogram[action], l0, 0, 0, 0, nlines);
+	lines_add(text, l0, l0+nlines);
+}
+void		text_erase_lines(void *hText, size_t l0, size_t nlines, ActionType action)
+{
+	Text *text=(Text*)hText;
+	size_t kl;
+	ASSERT_P(text);
+
+	if(text->type!=TEXT_NO_HISTORY)
+	{
+		ASSERT_P(text->hist);
+
+		for(kl=l0+nlines-1;kl>=l0;--kl)
+			hist_insert(&text->hist, CHANGE_REMOVE_LINE, action, text->action_histogram[action], kl, 0, text->lines[kl]->data, text->lines[kl]->len, 1);
+	}
+	lines_erase(text, l0, l0+nlines);
 }
 void*		text_create(TextType type, const void *payload, size_t p_bytes)
 {
@@ -731,7 +734,6 @@ void		text_push_checkpoint(void *hText, ActionType action_type, const void *payl
 		}
 		memcpy(text->hist->data, payload, p_bytes);
 	}
-	//++*act_number;
 }
 void		text_pop_checkpoint(void *hText)
 {
@@ -771,17 +773,17 @@ int			text_undo(void *hText, void *payload, size_t *p_bytes)
 			switch(hist->change_type)
 			{
 			case CHANGE_INSERT:
-				line_erase(text->lines+hist->line, hist->idx, hist->idx+hist->len);
+				line_erase(text->lines+hist->line, hist->idx, hist->idx+hist->len*hist->rep);
 				break;
 			case CHANGE_REMOVE:
-				line_insert(text->lines+hist->line, hist->idx, hist->data, hist->len);
+				line_insert(text->lines+hist->line, hist->idx, hist->data, hist->len, hist->rep);
 				break;
 			case CHANGE_INSERT_LINES:
 				lines_erase(text, hist->line, hist->line+hist->rep);
 				break;
 			case CHANGE_REMOVE_LINE:
 				lines_add(text, hist->line, hist->line+1);
-				line_insert(text->lines+hist->line, hist->idx, hist->data, hist->len);
+				line_insert(text->lines+hist->line, hist->idx, hist->data, hist->len, hist->rep);
 				break;
 			}
 			if(!related(ph[0]->prev, ph[0]))
@@ -826,10 +828,10 @@ int			text_redo(void *hText, void *payload, size_t *p_bytes)
 			switch(hist->change_type)
 			{
 			case CHANGE_INSERT:
-				line_insert(text->lines+hist->line, hist->idx, hist->data, hist->len);
+				line_insert(text->lines+hist->line, hist->idx, hist->data, hist->len, hist->rep);
 				break;
 			case CHANGE_REMOVE:
-				line_erase(text->lines+hist->line, hist->idx, hist->idx+hist->len);
+				line_erase(text->lines+hist->line, hist->idx, hist->idx+hist->len*hist->rep);
 				break;
 			case CHANGE_INSERT_LINES:
 				lines_add(text, hist->line, hist->line+hist->rep);

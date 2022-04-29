@@ -19,12 +19,10 @@ typedef enum ActionTypeEnum//must be in this order
 	//ignored actions
 	ACT_RELOCATE_CURSOR,
 	
-	ACT_BEGIN_SOFT,//soft actions: undone/redone in burst manner unless cursor is relocated in the middle or action type changes
-	ACT_TYPE=ACT_BEGIN_SOFT,
+	ACT_TYPE, ACT_BEGIN_SOFT=ACT_TYPE,//soft actions: undone/redone in burst manner unless cursor is relocated in the middle or action type changes
 	ACT_ERASE,
 	
-	ACT_BEGIN_HARD,//hard actions: undone one at a time
-	ACT_INDENT=ACT_BEGIN_HARD,
+	ACT_INDENT, ACT_BEGIN_HARD=ACT_INDENT,//hard actions: undone one at a time
 	ACT_MOVE_SELECTION,
 	ACT_CUT,
 	ACT_PASTE,
