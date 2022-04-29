@@ -22,8 +22,8 @@ using sdf_generator.cpp:
 
 SDF_slope: An 8 byte double precision slope of the signed distance field
 b0, b1:	(x, y) grid start
-b2, b3:	(x, y) cell size
-b4, b5:	(x, y) character size
+b2, b3:	(x, y) grid stride
+b4, b5:	(x, y) character dimensions
 
 
 TODO:
