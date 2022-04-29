@@ -14,11 +14,13 @@ r	g	b	r	g	b
 8	8	8	12	12	12
 
 
-An optional Signed Distance Field (SDF) font texture may be provided:
+An optional Signed Distance Field (SDF) font texture can be generated
+using sdf_generator.cpp:
 	- Texture name should be 'font_sdf.PNG'
 	- It should be a single-channel texture
-	- The first 6 bytes are:
+	- The first 14 bytes are:
 
+SDF_slope: An 8 byte double precision slope of the signed distance field
 b0, b1:	(x, y) grid start
 b2, b3:	(x, y) cell size
 b4, b5:	(x, y) character size
