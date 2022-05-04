@@ -28,6 +28,7 @@ b4, b5:	(x, y) character dimensions
 
 TODO:
 - Cursor should remember column value when changing line
+- Auto-indentation
 - Syntax highlighting for C/C++
 - Bracket matching - green: matched, red: unmatched
 - Region folding
