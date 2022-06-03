@@ -157,9 +157,9 @@ void		scan_bitmap(unsigned char *bmp, int bw, int bh, int bearx, int beary, int 
 	update_min(ymin, beary+y1);
 	update_max(ymax, beary+y2);
 }
-float		estimate_slope(unsigned char *bmp, int argmax, int coeff)
+double		estimate_slope(unsigned char *bmp, int argmax, int coeff)
 {
-	float slope=0;
+	double slope=0;
 	int count=0;
 	for(int k=3;bmp[argmax+coeff*k];++k, ++count)
 	{
@@ -170,6 +170,50 @@ float		estimate_slope(unsigned char *bmp, int argmax, int coeff)
 	slope/=count;
 	return slope;
 }
+void		dec2frac(double x, double error, int *i, int *num, int *den)//https://stackoverflow.com/questions/5124743/algorithm-for-simplifying-decimal-to-fractions
+{
+	int lower_n, upper_n, middle_n,
+		lower_d, upper_d, middle_d;
+	int n=(int)floor(x);
+	x-=n;
+	if(x<error)
+	{
+		*i=n, *num=0, *den=1;
+		return;
+	}
+	if(1-error<x)
+	{
+		*i=n+1, *num=0, *den=1;
+		return;
+	}
+	lower_n=0, upper_n=1;
+	lower_d=1, upper_d=1;
+	for(;;)
+	{
+		middle_n=lower_n+upper_n;//The middle fraction is (lower_n + upper_n) / (lower_d + upper_d)
+		middle_d=lower_d+upper_d;
+		if(middle_d*(x+error)<middle_n)//If x + error < middle
+			upper_n=middle_n, upper_d=middle_d;
+		else if(middle_n<(x-error)*middle_d)//Else If middle < x - error
+			lower_n=middle_n, lower_d=middle_d;
+		else
+			break;
+	}
+	*i=n, *num=middle_n, *den=middle_d;
+}
+struct		SDFTextureHeader
+{
+	double slope;
+	char
+		grid_start_x, grid_start_y,
+		cell_size_x, cell_size_y,
+		csize_x, csize_y,
+		reserved[2];
+	//unsigned short
+	//	slope_i;
+	//unsigned
+	//	slope_num, slope_den;
+};
 int			main(int argc, char **argv)
 {
 	int font_size=64;//hadvance=35
@@ -260,10 +304,12 @@ int			main(int argc, char **argv)
 		if(bmp[argmax]<bmp[k])
 			argmax=k;
 	int amx=argmax%iw, amy=argmax/iw;
-	estimate_slope(bmp, argmax, 1);
-	estimate_slope(bmp, argmax, -1);
-	estimate_slope(bmp, argmax, iw);
-	estimate_slope(bmp, argmax, -iw);
+	double slope=0;
+	slope+=estimate_slope(bmp, argmax, 1);		//!!! this assumes that argmax is at a period which is a circular hill
+	slope+=estimate_slope(bmp, argmax, -1);		//    therefore going away from center in the 4 directions calculates the SDF slope
+	slope+=estimate_slope(bmp, argmax, iw);
+	slope+=estimate_slope(bmp, argmax, -iw);
+	slope*=0.25/255;
 /*	float slope=0;
 	int count=0;
 	for(int k=3;bmp[argmax+k];++k, ++count)
@@ -289,15 +335,24 @@ int			main(int argc, char **argv)
 	//	bmp[k]=255*(bmp[k]>=128);//
 	printf("bitmaps  X %d~%d\tY %d~%d\t%dx%d\n", min_bx, max_bx, min_by, max_by, max_bx-min_bx, max_by-min_by);
 	printf("content  X %d~%d\tY %d~%d\t%dx%d\n", min_cx, max_cx, min_cy, max_cy, max_cx-min_cx, max_cy-min_cy);
-
-	bmp[0]=xoffset+min_cx;//grid start
-	bmp[1]=yoffset+min_cy;
-	
-	bmp[2]=cell_width;//cell size
-	bmp[3]=cell_height;
-
-	bmp[4]=max_cx-min_cx;//character size
-	bmp[5]=max_cy-min_cy;
+	printf("Estimated SDF slope: %lf\n", slope);
+	//int slope_i, slope_num, slope_den;
+	//dec2frac(slope, 1e-10, &slope_i, &slope_num, &slope_den);//float gives 7 digits, double gives 15
+	SDFTextureHeader header=
+	{
+		slope,							//SDF slope
+		xoffset+min_cx, yoffset+min_cy,	//grid start
+		cell_width, cell_height,		//cell size
+		max_cx-min_cx, max_cy-min_cy,	//character size
+		{0, 0},
+	};
+	memcpy(bmp, &header, sizeof(SDFTextureHeader));
+	//bmp[0]=xoffset+min_cx;//grid start
+	//bmp[1]=yoffset+min_cy;
+	//bmp[2]=cell_width;//cell size
+	//bmp[3]=cell_height;
+	//bmp[4]=max_cx-min_cx;//character size
+	//bmp[5]=max_cy-min_cy;
 	
 #if 0
 	printf("Packing...\n");
