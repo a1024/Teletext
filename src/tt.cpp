@@ -18,7 +18,7 @@
 #define				STB_IMAGE_IMPLEMENTATION
 #include			"stb_image.h"//https://github.com/nothings/stb
 
-	#define			DEBUG_CURSOR
+//	#define			DEBUG_CURSOR
 //	#define			HELP_SHOWALL
 
 //on: rectsel target horizontally starts at mouse
@@ -2002,7 +2002,6 @@ bool				wnd_on_init(int argc, char **argv)
 		return false;
 	}
 	dx=(float)(rgb[0]&0xFF), dy=(float)(rgb[1]&0xFF);
-	//dx=iw/8, dy=ih/16;
 	if(!dx||!dy)
 	{
 		messagebox("Error", "Invalid font texture character dimensions: dx=%d, dy=%d", dx, dy);
