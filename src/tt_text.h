@@ -34,14 +34,14 @@ typedef union ActionInfoStruct
 {
 	struct
 	{
-#ifdef _DEBUG
+#if defined _MSC_VER && defined _DEBUG
 		ActionType action_type;
 #else
 		char action_type;
 #endif
 		char action_ctr;
 	};
-#ifdef _DEBUG
+#if defined _MSC_VER && defined _DEBUG
 	unsigned long long action_id;
 #else
 	unsigned short action_id;
