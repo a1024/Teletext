@@ -20,6 +20,7 @@ extern RECT R;
 extern wchar_t g_wbuf[G_BUF_SIZE];
 extern ArrayHandle exedir;
 
+extern const char *GLversion;
 extern float
 	SN_x0, SN_x1, SN_y0, SN_y1,//screen-NDC conversion
 	NS_x0, NS_x1, NS_y0, NS_y1;
@@ -605,6 +606,7 @@ void draw_contour3d_rect(Camera const *cam, unsigned vbuf, int nvertices, unsign
 void draw_contour3d(Camera const *cam, float x1, float x2, float y1, float y2, float z1, float z2, unsigned *textures, int count, float alpha);
 
 void depth_test(int enable);
+
 
 //teletext
 typedef struct BookmarkStruct

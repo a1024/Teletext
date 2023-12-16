@@ -428,7 +428,7 @@ static void lines_add(Text *text, size_t l1, size_t l2)//not history-tracked
 
 	ASSERT_IDX(l2, text->nlines+1);
 }
-static void	lines_erase(Text *text, size_t l1, size_t l2)//not history-tracked
+static void lines_erase(Text *text, size_t l1, size_t l2)//not history-tracked
 {
 	void *p;
 	size_t kl;
@@ -451,7 +451,7 @@ static void	lines_erase(Text *text, size_t l1, size_t l2)//not history-tracked
 			ASSERT_R(text->lines);
 	}
 }
-static void	line_insert(Line **line, size_t idx, const char *str, size_t len, size_t rep)//not history-tracked
+static void line_insert(Line **line, size_t idx, const char *str, size_t len, size_t rep)//not history-tracked
 {
 	void *p;
 	int inslen;
@@ -472,7 +472,7 @@ static void	line_insert(Line **line, size_t idx, const char *str, size_t len, si
 		memfill(line[0]->data+idx, str, inslen, len);
 	}
 }
-static void	line_erase(Line **line, size_t idx1, size_t idx2)//not history-tracked
+static void line_erase(Line **line, size_t idx1, size_t idx2)//not history-tracked
 {
 	void *p;
 	ASSERT_P(*line);
@@ -492,7 +492,7 @@ static void	line_erase(Line **line, size_t idx1, size_t idx2)//not history-track
 	}
 }
 
-static int	related(HistoryNode *node, HistoryNode *next)//O(n)
+static int related(HistoryNode *node, HistoryNode *next)//O(n)
 {
 	if(!node||!next)
 		return 0;
@@ -506,7 +506,7 @@ static int	related(HistoryNode *node, HistoryNode *next)//O(n)
 		return 1;
 	return node->actinfo.action_id==next->actinfo.action_id;
 }
-void		text_init(void *hText, TextType type, const void *payload, size_t p_bytes)
+void text_init(void *hText, TextType type, const void *payload, size_t p_bytes)
 {
 	Text *text=(Text*)hText;
 	Line **line;
@@ -545,7 +545,7 @@ void		text_init(void *hText, TextType type, const void *payload, size_t p_bytes)
 
 
 //API
-size_t		text_get_nlines(const void *hText)
+size_t text_get_nlines(const void *hText)
 {
 	Text const *text=(Text const*)hText;
 	ASSERT_P(text);
@@ -553,7 +553,7 @@ size_t		text_get_nlines(const void *hText)
 
 	return text->nlines;
 }
-size_t		text_get_len(const void *hText, size_t line)
+size_t text_get_len(const void *hText, size_t line)
 {
 	Text const *text=(Text const*)hText;
 	ASSERT_P(text);
@@ -562,7 +562,7 @@ size_t		text_get_len(const void *hText, size_t line)
 
 	return text->lines[line]->len;
 }
-char*		text_get_line(const void *hText, size_t line, size_t *ret_len)
+char* text_get_line(const void *hText, size_t line, size_t *ret_len)
 {
 	Text const *text=(Text const*)hText;
 	ASSERT_P(text);
@@ -573,7 +573,7 @@ char*		text_get_line(const void *hText, size_t line, size_t *ret_len)
 		*ret_len=text->lines[line]->len;
 	return text->lines[line]->data;
 }
-void		text_insert_lines(void *hText, size_t l0, size_t nlines, ActionType action)
+void text_insert_lines(void *hText, size_t l0, size_t nlines, ActionType action)
 {
 	Text *text=(Text*)hText;
 	ASSERT_P(text);
@@ -584,7 +584,7 @@ void		text_insert_lines(void *hText, size_t l0, size_t nlines, ActionType action
 		hist_insert(&text->hist, CHANGE_INSERT_LINES, action, text->action_histogram[action], l0, 0, 0, 0, nlines);
 	lines_add(text, l0, l0+nlines);
 }
-void		text_erase_lines(void *hText, size_t l0, size_t nlines, ActionType action)
+void text_erase_lines(void *hText, size_t l0, size_t nlines, ActionType action)
 {
 	Text *text=(Text*)hText;
 	size_t kl;
@@ -599,7 +599,7 @@ void		text_erase_lines(void *hText, size_t l0, size_t nlines, ActionType action)
 	}
 	lines_erase(text, l0, l0+nlines);
 }
-void*		text_create(TextType type, const void *payload, size_t p_bytes)
+void* text_create(TextType type, const void *payload, size_t p_bytes)
 {
 	Text *text=(Text*)malloc(sizeof(Text));
 	ASSERT_A(text);
@@ -607,7 +607,7 @@ void*		text_create(TextType type, const void *payload, size_t p_bytes)
 	text_init(text, type, payload, p_bytes);
 	return text;
 }
-void*		text_deepcopy(const void *hText)
+void* text_deepcopy(const void *hText)
 {
 	Text const *src=(Text const*)hText;
 	Text *dst;
@@ -628,7 +628,7 @@ void*		text_deepcopy(const void *hText)
 	dst->lines=lines_deepcopy((Line const**)src->lines, src->nlines);
 	return dst;
 }
-void		text_destroy(void *hText)
+void text_destroy(void *hText)
 {
 	Text *text=(Text*)hText;
 	//if(text)
@@ -644,7 +644,7 @@ void		text_destroy(void *hText)
 		free(text);
 	//}
 }
-void		text_clear(void **hText, TextType type, const void *payload, size_t p_bytes)
+void text_clear(void **hText, TextType type, const void *payload, size_t p_bytes)
 {
 	Text **text=(Text**)hText;
 	if(*text)
@@ -659,7 +659,7 @@ void		text_clear(void **hText, TextType type, const void *payload, size_t p_byte
 	}
 	text_init(*text, type, payload, p_bytes);
 }
-void		text_replace(void *hText, size_t l0, size_t idx1, size_t idx2, const char *str, size_t len, size_t repeat, ActionType action_type)
+void text_replace(void *hText, size_t l0, size_t idx1, size_t idx2, const char *str, size_t len, size_t repeat, ActionType action_type)
 {
 	void *p;
 	Line **line;
@@ -695,7 +695,7 @@ void		text_replace(void *hText, size_t l0, size_t idx1, size_t idx2, const char 
 	}
 	//++*act_number;
 }
-void		text_action_end(void *hText)
+void text_action_end(void *hText)
 {
 	Text *text=(Text*)hText;
 	char acttype;
@@ -708,7 +708,7 @@ void		text_action_end(void *hText)
 	++text->action_histogram[acttype];
 }
 #if 1
-ActionInfo	text_get_last_action(const void *hText)
+ActionInfo text_get_last_action(const void *hText)
 {
 	ActionInfo action_error={-1, -1};
 	Text const *text=(Text const*)hText;
@@ -721,7 +721,7 @@ ActionInfo	text_get_last_action(const void *hText)
 		return action_error;
 	return text->hist->prev->actinfo;
 }
-void		text_push_checkpoint(void *hText, ActionType action_type, const void *payload, size_t p_bytes)
+void text_push_checkpoint(void *hText, ActionType action_type, const void *payload, size_t p_bytes)
 {
 	void *p;
 	HistoryNode *p0;
@@ -750,7 +750,7 @@ void		text_push_checkpoint(void *hText, ActionType action_type, const void *payl
 		memcpy(text->hist->data, payload, p_bytes);
 	}
 }
-void		text_pop_checkpoint(void *hText)
+void text_pop_checkpoint(void *hText)
 {
 	Text *text=(Text*)hText;
 	ASSERT_P(text);
@@ -764,7 +764,7 @@ void		text_pop_checkpoint(void *hText)
 		text->hist=text->hist->prev;
 }
 #endif
-int			text_undo(void *hText, void *payload, size_t *p_bytes)
+int text_undo(void *hText, void *payload, size_t *p_bytes)
 {
 	Text *text=(Text*)hText;
 	int modified=0;
@@ -820,7 +820,7 @@ int			text_undo(void *hText, void *payload, size_t *p_bytes)
 	}
 	return modified;
 }
-int			text_redo(void *hText, void *payload, size_t *p_bytes)
+int text_redo(void *hText, void *payload, size_t *p_bytes)
 {
 	Text *text=(Text*)hText;
 	int modified=0;
@@ -874,21 +874,21 @@ int			text_redo(void *hText, void *payload, size_t *p_bytes)
 	}
 	return modified;
 }
-void		text_mark_saved(void *hText)
+void text_mark_saved(void *hText)
 {
 	Text *text=(Text*)hText;
 	ASSERT_P(text);
 
 	text->checkpoint=text->hist;
 }
-int			text_is_modified(void *hText)
+int text_is_modified(void *hText)
 {
 	Text *text=(Text*)hText;
 	ASSERT_P(text);
 
 	return text->checkpoint!=text->hist;
 }
-void		text_clear_history(void *hText)
+void text_clear_history(void *hText)
 {
 	Text *text=(Text*)hText;
 	ASSERT_P(text);
